@@ -1,0 +1,2 @@
+/usr/bin/llvm-ar qc libglm.a CMakeFiles/glm.dir/detail/glm.cpp.o
+/usr/bin/llvm-ranlib libglm.a
