@@ -1,9 +1,0 @@
-/home/jarusll/source/cppengine/CMakeFiles/playground.dir
-/home/jarusll/source/cppengine/CMakeFiles/shaders.dir
-/home/jarusll/source/cppengine/CMakeFiles/edit_cache.dir
-/home/jarusll/source/cppengine/CMakeFiles/rebuild_cache.dir
-/home/jarusll/source/cppengine/_deps/glm-build/CMakeFiles/edit_cache.dir
-/home/jarusll/source/cppengine/_deps/glm-build/CMakeFiles/rebuild_cache.dir
-/home/jarusll/source/cppengine/_deps/glm-build/glm/CMakeFiles/glm.dir
-/home/jarusll/source/cppengine/_deps/glm-build/glm/CMakeFiles/edit_cache.dir
-/home/jarusll/source/cppengine/_deps/glm-build/glm/CMakeFiles/rebuild_cache.dir

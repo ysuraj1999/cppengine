@@ -1,3 +1,0 @@
-# Hashes of file build rules.
-7404a418c3e4f3bcf26d960d3c62bcc1 CMakeFiles/shaders
-38cf1fa8d4f9f631da27ee4ca8e1265e shaders/shader.vertex.spv

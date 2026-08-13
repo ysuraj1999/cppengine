@@ -1,1 +1,0 @@
-/usr/local/bin/clang++-icecc -g -Xlinker --dependency-file=CMakeFiles/playground.dir/link.d CMakeFiles/playground.dir/playground.cpp.o CMakeFiles/playground.dir/types.cpp.o -o playground  /usr/lib/x86_64-linux-gnu/libSDL3.so.0.2.10 _deps/glm-build/glm/libglm.a
