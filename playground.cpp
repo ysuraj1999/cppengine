@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
   vertexShaderInfo.num_samplers = 0;
   vertexShaderInfo.num_storage_textures = 0;
   vertexShaderInfo.num_storage_buffers = 0;
-  vertexShaderInfo.num_uniform_buffers = 0;
+  vertexShaderInfo.num_uniform_buffers = 1;
 
   SDL_GPUShader* vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
   sdlAssert(vertexShader != nullptr);
