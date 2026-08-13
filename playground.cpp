@@ -61,7 +61,7 @@ int main(int argc, char* argv[]) {
 
   sdlAssert(SDL_Init(SDL_INIT_VIDEO));
 
-  SDL_Window* window = SDL_CreateWindow("Window", 800, 800, 0);
+  SDL_Window* window = SDL_CreateWindow("Lens", 800, 800, 0);
   sdlAssert(window != nullptr);
 
   sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
@@ -215,7 +215,7 @@ int main(int argc, char* argv[]) {
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
   const f32 keyboard_sensitivity = 5.0f;
-  const f32 mouse_sensitivity = 0.025f;
+  const f32 mouse_sensitivity = 0.05f;
   float delta_x, delta_y;
   while (running) {
     const u64 now = SDL_GetPerformanceCounter();
@@ -286,7 +286,7 @@ int main(int argc, char* argv[]) {
 						    &height));
 
     SDL_GPUColorTargetInfo colorTargetInfo = {};
-    colorTargetInfo.clear_color = SDL_FColor{0.50f, 0.0f, 0.0f, 1.0f};
+    colorTargetInfo.clear_color = SDL_FColor{13.0f/255.0f, 115.0f/255.0f, 89.0f/255.0f, 1.0f};
     colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
     colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
     colorTargetInfo.texture = swapchainTexture;
