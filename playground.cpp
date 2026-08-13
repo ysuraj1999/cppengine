@@ -1,5 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_scancode.h>
 #include <glm/glm.hpp>
 
 #include <cassert>
@@ -10,6 +12,10 @@
 #include <iostream>
 #include <vector>
 
+#include "glm/ext/matrix_clip_space.hpp"
+#include "glm/ext/matrix_transform.hpp"
+#include "glm/geometric.hpp"
+#include "glm/trigonometric.hpp"
 #include "types.hpp"
 
 #define sdlAssert(cond)					\
@@ -43,11 +49,13 @@ static const Vertex vertices[3] = {
   { {0.0f, -0.5f, 0.5f},  {1.0f, 0.0f, 1.0f, 1.0f}, {} },
 };
 
+auto WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
-  camera.position = glm::vec3{-10.0f, 0.0f, 0.0f};
+  camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
   camera.pitch = 0.0f;
 
@@ -203,15 +211,52 @@ int main(int argc, char* argv[]) {
   SDL_GPURenderPass* renderPass = nullptr;
 
   while (running) {
+    float dt = 0.1f;
+
+    glm::vec3 forward{
+      cos(glm::radians(camera.pitch)) * cos(glm::radians(camera.yaw)),
+      sin(glm::radians(camera.pitch)),
+      cos(glm::radians(camera.pitch)) * sin(glm::radians(camera.yaw))};
+
+    forward = glm::normalize(forward);
+    glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
 	running = false;
       }
+      if (event.type == SDL_EVENT_KEY_DOWN) {
+        if (event.key.scancode == SDL_SCANCODE_W) {
+	  camera.position += forward * dt;
+        }
+	if (event.key.scancode == SDL_SCANCODE_S) {
+	  camera.position -= forward * dt;
+        }
+	if (event.key.scancode == SDL_SCANCODE_A) {
+	  camera.position -= right * dt;
+	}
+	if (event.key.scancode == SDL_SCANCODE_D) {
+	  camera.position += right * dt;
+        }
+	if (event.key.scancode == SDL_SCANCODE_SPACE) {
+	  camera.position += WORLD_UP * dt;
+	}
+	if (event.key.scancode == SDL_SCANCODE_LCTRL) {
+	  camera.position -= WORLD_UP * dt;
+	}
+      }
     }
 
-    Mat4 viewMat = translateMatrix(camera.position);
-
+    glm::mat4 view =
+      glm::lookAtLH(camera.position, camera.position + forward, WORLD_UP);
+    glm::mat4 projection = glm::perspectiveLH_ZO(
+					    glm::radians(60.0f),
+					    800.0f / 800.0f,
+					    0.1f,
+					    100.0f
+					    );
+    glm::mat4 viewProjection = projection * view;
     commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
 
     sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
@@ -230,7 +275,7 @@ int main(int argc, char* argv[]) {
     renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
     sdlAssert(renderPass != nullptr);
 
-    SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewMat, (u32)sizeof(viewMat));
+    SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 1);
