@@ -21,7 +21,7 @@ Mat4 translateMatrix(const f32 v[4]) {
     return result;
 }
 
-Mat4 translateMatrix(const Vec3& v) {
+Mat4 translateMatrix(const glm::vec3& v) {
     Mat4 result;
     result.m0 = 1.0f;
     result.m1 = 0.0f;
