@@ -210,9 +210,16 @@ int main(int argc, char* argv[]) {
   bool running = true;
   SDL_GPURenderPass* renderPass = nullptr;
 
+  u64 previous = SDL_GetPerformanceCounter();
+  const u64 freq = SDL_GetPerformanceFrequency();
+  const f32 sensitivity = 5.0f;
   while (running) {
-    float dt = 0.1f;
+    const u64 now = SDL_GetPerformanceCounter();
+    const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(freq);
+    previous = now;
 
+    const bool* keys =  SDL_GetKeyboardState(nullptr);
+    
     glm::vec3 forward{
       cos(glm::radians(camera.pitch)) * cos(glm::radians(camera.yaw)),
       sin(glm::radians(camera.pitch)),
@@ -226,27 +233,28 @@ int main(int argc, char* argv[]) {
       if (event.type == SDL_EVENT_QUIT) {
 	running = false;
       }
-      if (event.type == SDL_EVENT_KEY_DOWN) {
-        if (event.key.scancode == SDL_SCANCODE_W) {
-	  camera.position += forward * dt;
-        }
-	if (event.key.scancode == SDL_SCANCODE_S) {
-	  camera.position -= forward * dt;
-        }
-	if (event.key.scancode == SDL_SCANCODE_A) {
-	  camera.position -= right * dt;
-	}
-	if (event.key.scancode == SDL_SCANCODE_D) {
-	  camera.position += right * dt;
-        }
-	if (event.key.scancode == SDL_SCANCODE_SPACE) {
-	  camera.position += WORLD_UP * dt;
-	}
-	if (event.key.scancode == SDL_SCANCODE_LCTRL) {
-	  camera.position -= WORLD_UP * dt;
-	}
-      }
     }
+    
+    if (keys[SDL_SCANCODE_W]) {
+      camera.position += forward * dt * sensitivity;
+    }
+    if (keys[SDL_SCANCODE_S]) {
+      camera.position -= forward * dt * sensitivity;
+    }
+    if (keys[SDL_SCANCODE_A]) {
+      camera.position -= right * dt * sensitivity;
+    }
+    if (keys[SDL_SCANCODE_D]) {
+      camera.position += right * dt * sensitivity;
+    }
+    if (keys[SDL_SCANCODE_SPACE]) {
+      camera.position += WORLD_UP * dt * sensitivity;
+    }
+    if (keys[SDL_SCANCODE_LCTRL]) {
+      camera.position -= WORLD_UP * dt * sensitivity;
+    }
+
+    std::cout << "Y " << camera.position.y << '\n';
 
     glm::mat4 view =
       glm::lookAtLH(camera.position, camera.position + forward, WORLD_UP);
