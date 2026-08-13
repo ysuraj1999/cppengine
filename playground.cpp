@@ -1,31 +1,32 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#include <cassert>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <fstream>
 #include <vector>
 
 #include "types.hpp"
 
-#define sdlAssert(cond)                                                        \
-    do {                                                                       \
-        if (!(cond)) {                                                         \
-            std::fprintf(stderr, "SDL error: %s\n", SDL_GetError());           \
-            assert(cond);                                                      \
-        }                                                                      \
+#define sdlAssert(cond)                                                     \
+    do {                                                                    \
+        if (!(cond)) {                                                      \
+            std::fprintf(stderr, "%s:%d: SDL error: %s\n",                  \
+                         __FILE__, __LINE__, SDL_GetError());               \
+            std::abort();                                                   \
+        }                                                                   \
     } while (0)
 
-static std::vector<uint8_t> readFile(const char* path) {
+static std::vector<u8> readFile(const char* path) {
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file) {
         return {};
     }
     std::streamsize size = file.tellg();
     file.seekg(0, std::ios::beg);
-    std::vector<uint8_t> buffer(static_cast<size_t>(size));
+    std::vector<u8> buffer(static_cast<size_t>(size));
     if (size > 0) {
         file.read(reinterpret_cast<char*>(buffer.data()), size);
     }
@@ -41,27 +42,24 @@ static const Vertex vertices[3] = {
 };
 
 int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
+    // (void)argc;
+    // (void)argv;
 
     camera.position = Vec3{-10.0f, 0.0f, 0.0f};
     camera.yaw = 0.0f;
     camera.pitch = 0.0f;
 
-    assert(SDL_Init(SDL_INIT_VIDEO));
-    // defer: SDL_Quit();
+    sdlAssert(SDL_Init(SDL_INIT_VIDEO));
 
     SDL_Window* window = SDL_CreateWindow("Window", 800, 800, 0);
     sdlAssert(window != nullptr);
-    // defer: SDL_DestroyWindow(window);
 
     SDL_GPUTexture* swapchainTexture = nullptr;
-    Uint32 width = 0;
-    Uint32 height = 0;
+    u32 width = 0;
+    u32 height = 0;
 
     SDL_GPUDevice* gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
     sdlAssert(gpuDevice != nullptr);
-    // defer: SDL_DestroyGPUDevice(gpuDevice);
 
     sdlAssert(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
 
@@ -78,14 +76,13 @@ int main(int argc, char* argv[]) {
     sdlAssert(commandBuffer != nullptr);
 
     SDL_GPUBufferCreateInfo gpuBufferInfo = {};
-    gpuBufferInfo.size = (Uint32)sizeof(vertices);
+    gpuBufferInfo.size = (u32)sizeof(vertices);
     gpuBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
     SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &gpuBufferInfo);
     sdlAssert(vertexBuffer != nullptr);
-    // defer: SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
 
     SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
-    transferBufferInfo.size = (Uint32)sizeof(vertices);
+    transferBufferInfo.size = (u32)sizeof(vertices);
     transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferBufferInfo);
     sdlAssert(transferBuffer != nullptr);
@@ -93,7 +90,7 @@ int main(int argc, char* argv[]) {
     SDL_GPUBufferRegion gpuBufferRegion = {};
     gpuBufferRegion.offset = 0;
     gpuBufferRegion.buffer = vertexBuffer;
-    gpuBufferRegion.size = (Uint32)sizeof(vertices);
+    gpuBufferRegion.size = (u32)sizeof(vertices);
 
     // block copy:
     {
@@ -104,7 +101,7 @@ int main(int argc, char* argv[]) {
 
         SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
         sdlAssert(copyPass != nullptr);
-        // defer: SDL_EndGPUCopyPass(copyPass);
+
 
         SDL_GPUTransferBufferLocation transferBufferLocation = {};
         transferBufferLocation.offset = 0;
@@ -116,10 +113,11 @@ int main(int argc, char* argv[]) {
         // Unmap and release transfer buffer once uploaded
         SDL_UnmapGPUTransferBuffer(gpuDevice, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
+	SDL_EndGPUCopyPass(copyPass);
     }
 
-    std::vector<uint8_t> vertexShaderContents = readFile("./shaders/shader.vertex.spv");
-    // echo "Vertex", vertexShaderContents
+
+    std::vector<u8> vertexShaderContents = readFile("./shaders/shader.vertex.spv");
 
     SDL_GPUShaderCreateInfo vertexShaderInfo = {};
     vertexShaderInfo.entrypoint = "main";
@@ -134,10 +132,8 @@ int main(int argc, char* argv[]) {
 
     SDL_GPUShader* vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
     sdlAssert(vertexShader != nullptr);
-    // defer: SDL_ReleaseGPUShader(gpuDevice, vertexShader);
 
-    std::vector<uint8_t> fragmentShaderContents = readFile("./shaders/shader.fragment.spv");
-    // echo "Fragment", fragmentShaderContents
+    std::vector<u8> fragmentShaderContents = readFile("./shaders/shader.fragment.spv");
 
     SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
     fragmentShaderInfo.entrypoint = "main";
@@ -152,7 +148,6 @@ int main(int argc, char* argv[]) {
 
     SDL_GPUShader* fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
     sdlAssert(fragmentShader != nullptr);
-    // defer: SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
 
     SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
     pipelineInfo.vertex_shader = vertexShader;
@@ -160,13 +155,12 @@ int main(int argc, char* argv[]) {
     pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
     SDL_GPUVertexBufferDescription bufferDescription[1] = {};
-    // echo "Buffer length ", bufferDescription.len
 
     // How each vertex is defined
     bufferDescription[0].slot = 0;
     bufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
     bufferDescription[0].instance_step_rate = 0;
-    bufferDescription[0].pitch = (Uint32)sizeof(Vertex);
+    bufferDescription[0].pitch = (u32)sizeof(Vertex);
 
     pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
     pipelineInfo.vertex_input_state.vertex_buffer_descriptions = bufferDescription;
@@ -181,7 +175,7 @@ int main(int argc, char* argv[]) {
     vertexAttributes[1].buffer_slot = 0;
     vertexAttributes[1].location = 1;
     vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-    vertexAttributes[1].offset = (Uint32)(sizeof(float) * 3);
+    vertexAttributes[1].offset = (u32)(sizeof(float) * 3);
 
     pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
     pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
@@ -194,7 +188,6 @@ int main(int argc, char* argv[]) {
 
     SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
     sdlAssert(pipeline != nullptr);
-    // defer: SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
 
     SDL_GPUBufferBinding bufferBindings[1] = {};
     bufferBindings[0].buffer = vertexBuffer;
@@ -216,11 +209,11 @@ int main(int argc, char* argv[]) {
         commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
 
         sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
-            commandBuffer,
-            window,
-            &swapchainTexture,
-            &width,
-            &height));
+						     commandBuffer,
+						     window,
+						     &swapchainTexture,
+						     &width,
+						     &height));
 
         SDL_GPUColorTargetInfo colorTargetInfo = {};
         colorTargetInfo.clear_color = SDL_FColor{0.25f, 0.0f, 0.0f, 1.0f};
@@ -231,7 +224,7 @@ int main(int argc, char* argv[]) {
         renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
         sdlAssert(renderPass != nullptr);
 
-        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewMat, (Uint32)sizeof(viewMat));
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewMat, (u32)sizeof(viewMat));
 
         SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
         SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 1);
@@ -240,5 +233,12 @@ int main(int argc, char* argv[]) {
         sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
     }
 
+    SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
+    SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
+    SDL_ReleaseGPUShader(gpuDevice, vertexShader);
+    SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+    SDL_DestroyGPUDevice(gpuDevice);    
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }
