@@ -64,6 +64,8 @@ int main(int argc, char* argv[]) {
   SDL_Window* window = SDL_CreateWindow("Window", 800, 800, 0);
   sdlAssert(window != nullptr);
 
+  sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
+
   SDL_GPUTexture* swapchainTexture = nullptr;
   u32 width = 0;
   u32 height = 0;
@@ -212,7 +214,9 @@ int main(int argc, char* argv[]) {
 
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 sensitivity = 5.0f;
+  const f32 keyboard_sensitivity = 5.0f;
+  const f32 mouse_sensitivity = 0.025f;
+  float delta_x, delta_y;
   while (running) {
     const u64 now = SDL_GetPerformanceCounter();
     const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(freq);
@@ -228,33 +232,40 @@ int main(int argc, char* argv[]) {
     forward = glm::normalize(forward);
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
 
+    u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
+    camera.yaw -= delta_x * mouse_sensitivity;
+    camera.yaw = std::fmod(camera.yaw, 360.0f);
+    camera.pitch -= delta_y * mouse_sensitivity;
+    camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
+
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
 	running = false;
       }
     }
-    
+
+    if (keys[SDL_SCANCODE_ESCAPE]) {
+      running = false;
+    }
     if (keys[SDL_SCANCODE_W]) {
-      camera.position += forward * dt * sensitivity;
+      camera.position += forward * dt * keyboard_sensitivity;
     }
     if (keys[SDL_SCANCODE_S]) {
-      camera.position -= forward * dt * sensitivity;
+      camera.position -= forward * dt * keyboard_sensitivity;
     }
     if (keys[SDL_SCANCODE_A]) {
-      camera.position -= right * dt * sensitivity;
+      camera.position -= right * dt * keyboard_sensitivity;
     }
     if (keys[SDL_SCANCODE_D]) {
-      camera.position += right * dt * sensitivity;
+      camera.position += right * dt * keyboard_sensitivity;
     }
     if (keys[SDL_SCANCODE_SPACE]) {
-      camera.position += WORLD_UP * dt * sensitivity;
+      camera.position += WORLD_UP * dt * keyboard_sensitivity;
     }
     if (keys[SDL_SCANCODE_LCTRL]) {
-      camera.position -= WORLD_UP * dt * sensitivity;
+      camera.position -= WORLD_UP * dt * keyboard_sensitivity;
     }
-
-    std::cout << "Y " << camera.position.y << '\n';
 
     glm::mat4 view =
       glm::lookAtLH(camera.position, camera.position + forward, WORLD_UP);
