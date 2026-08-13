@@ -1,11 +1,12 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
 
-#include <cstdint>
+#include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <iostream>
 #include <vector>
 
 #include "types.hpp"
@@ -63,14 +64,12 @@ int main(int argc, char* argv[]) {
 
     sdlAssert(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
 
-    bool setSwapchainParams = SDL_SetGPUSwapchainParameters(
-        gpuDevice,
-        window,
-        SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        SDL_GPU_PRESENTMODE_VSYNC
-    );
-
-    sdlAssert(setSwapchainParams);
+    sdlAssert(SDL_SetGPUSwapchainParameters(
+					    gpuDevice,
+					    window,
+					    SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+					    SDL_GPU_PRESENTMODE_VSYNC
+					    ));
 
     SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
     sdlAssert(commandBuffer != nullptr);
@@ -107,17 +106,21 @@ int main(int argc, char* argv[]) {
         transferBufferLocation.offset = 0;
         transferBufferLocation.transfer_buffer = transferBuffer;
 
-        SDL_UploadToGPUBuffer(copyPass, &transferBufferLocation, &gpuBufferRegion, false);
+        SDL_UploadToGPUBuffer(copyPass, &transferBufferLocation,
+                              &gpuBufferRegion, false);
+	SDL_EndGPUCopyPass(copyPass);
         sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 
         // Unmap and release transfer buffer once uploaded
         SDL_UnmapGPUTransferBuffer(gpuDevice, transferBuffer);
         SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
-	SDL_EndGPUCopyPass(copyPass);
+
     }
 
 
-    std::vector<u8> vertexShaderContents = readFile("./shaders/shader.vertex.spv");
+    std::vector<u8> vertexShaderContents =
+        readFile(SHADER_BIN_DIR "/shader.vertex.spv");
+    assert(!vertexShaderContents.empty());
 
     SDL_GPUShaderCreateInfo vertexShaderInfo = {};
     vertexShaderInfo.entrypoint = "main";
@@ -133,7 +136,9 @@ int main(int argc, char* argv[]) {
     SDL_GPUShader* vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
     sdlAssert(vertexShader != nullptr);
 
-    std::vector<u8> fragmentShaderContents = readFile("./shaders/shader.fragment.spv");
+    std::vector<u8> fragmentShaderContents =
+        readFile(SHADER_BIN_DIR "/shader.fragment.spv");
+    assert(!fragmentShaderContents.empty());
 
     SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
     fragmentShaderInfo.entrypoint = "main";
@@ -216,7 +221,7 @@ int main(int argc, char* argv[]) {
 						     &height));
 
         SDL_GPUColorTargetInfo colorTargetInfo = {};
-        colorTargetInfo.clear_color = SDL_FColor{0.25f, 0.0f, 0.0f, 1.0f};
+        colorTargetInfo.clear_color = SDL_FColor{0.50f, 0.0f, 0.0f, 1.0f};
         colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
         colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
         colorTargetInfo.texture = swapchainTexture;
@@ -224,7 +229,7 @@ int main(int argc, char* argv[]) {
         renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
         sdlAssert(renderPass != nullptr);
 
-        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewMat, (u32)sizeof(viewMat));
+        // SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewMat, (u32)sizeof(viewMat));
 
         SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
         SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 1);

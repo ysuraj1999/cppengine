@@ -9,6 +9,6 @@ layout(set = 0, binding = 0) uniform Camera {
 
 void main()
 {
-    gl_Position = camera.viewProjection * vec4(a_position.z, a_position.y, a_position.x , 1.0f);
+    gl_Position = vec4(a_position.z, a_position.y, a_position.x , 1.0f);
     v_color = a_color;
 }

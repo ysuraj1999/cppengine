@@ -11,3 +11,4 @@
 
 *.spv
 *~
+.gdb_history
