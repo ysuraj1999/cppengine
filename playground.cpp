@@ -3,6 +3,7 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_scancode.h>
+#include <cstddef>
 #include <glm/glm.hpp>
 
 #include <cassert>
@@ -54,18 +55,41 @@ static const Vertex vertices[3] = {
 
 auto WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
 
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+    os << "[";
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (i > 0)
+            os << ",\n";
+        os << vec[i];
+    }
+    os << "]";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const Vertex& v) {
+  return os << "Vertex{"
+	    << "position=(" << v.position.x << ", " << v.position.y << ", " << v.position.z << "), "
+	    << "color=(" << v.color.r << ", " << v.color.g << ", " << v.color.b << ", " << v.color.a << "), "
+	    << "normal=(" << v.normal.x << ", " << v.normal.y << ", " << v.normal.z << "), "
+	    << "uv=(" << v.uv.x << ", " << v.uv.y << ")"
+	    << "}";
+}
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
-
 
   std::vector<Mesh> meshContainer;
   loadObj("models/cube.obj", meshContainer);
 
   auto vertices = meshContainer[0].vertices;
   auto indices = meshContainer[0].indices;
-    
-  camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
+
+  std::cout << vertices << '\n';
+  std::cout << indices << '\n';
+  
+  camera.position = glm::vec3{-10.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
   camera.pitch = 0.0f;
 
@@ -225,24 +249,24 @@ int main(int argc, char* argv[]) {
   // Vertex attributes
   SDL_GPUVertexAttribute vertexAttributes[4] = {};
   vertexAttributes[0].buffer_slot = 0;
-  vertexAttributes[0].location = 0;
+  vertexAttributes[0].location = offsetof(Vertex, position);
   vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
   vertexAttributes[0].offset = 0;
 
   vertexAttributes[1].buffer_slot = 0;
   vertexAttributes[1].location = 1;
   vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  vertexAttributes[1].offset = (u32)(sizeof(f32) * 3);
+  vertexAttributes[1].offset = offsetof(Vertex, color);
 
   vertexAttributes[2].buffer_slot = 0;
   vertexAttributes[2].location = 2;
-  vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  vertexAttributes[2].offset = (u32)(sizeof(f32) * (3 + 4));
+  vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  vertexAttributes[2].offset = offsetof(Vertex, normal);
 
   vertexAttributes[3].buffer_slot = 0;
   vertexAttributes[3].location = 3;
   vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
-  vertexAttributes[3].offset = (u32)(sizeof(f32) * (3 + 4 + 4));
+  vertexAttributes[3].offset = offsetof(Vertex, uv);
 
   pipelineInfo.vertex_input_state.num_vertex_attributes = 4;
   pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
