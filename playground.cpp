@@ -19,6 +19,9 @@
 #include "glm/ext/matrix_transform.hpp"
 #include "glm/geometric.hpp"
 #include "glm/trigonometric.hpp"
+
+#include "stb_image.h"
+
 #include "types.hpp"
 
 #include "obj.hpp"
@@ -101,7 +104,7 @@ int main(int argc, char* argv[]) {
   // std::cout << vertices << '\n';
   // std::cout << indices << '\n';
   
-  camera.position = glm::vec3{-10.0f, 0.0f, 0.0f};
+  camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
   camera.pitch = 0.0f;
 
@@ -145,8 +148,29 @@ int main(int argc, char* argv[]) {
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
 
+  SDL_GPUTextureCreateInfo textureInfo = {};
+  textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+  textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+  textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+  textureInfo.num_levels = 1;
+  textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  textureInfo.layer_count_or_depth = 1;
+  
   // COPY:
   {
+    // LOAD TEXTURE
+    int w, h, channels;
+    u8 *pixels =
+        stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
+    assert(pixels != nullptr);
+    u32 tWidth = static_cast<u32>(w);
+    u32 tHeight = static_cast<u32>(h);
+    textureInfo.width = tWidth;
+    textureInfo.height = tHeight;
+    
+    // std::cout << "width " << tWidth << " height " << tHeight << '\n';
+    stbi_image_free(pixels);
+    
     // VERTEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {};
     transferToVertexBufferInfo.size = VERTEX_BUFFER_SIZE;
@@ -189,6 +213,8 @@ int main(int argc, char* argv[]) {
     indexBufferRegion.buffer = indexBuffer;
     indexBufferRegion.size = INDEX_BUFFER_SIZE;
 
+    // TEXTURE
+    
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
     sdlAssert(copyPass != nullptr);
 
