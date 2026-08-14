@@ -148,29 +148,11 @@ int main(int argc, char* argv[]) {
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
 
-  SDL_GPUTextureCreateInfo textureInfo = {};
-  textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-  textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-  textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-  textureInfo.num_levels = 1;
-  textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-  textureInfo.layer_count_or_depth = 1;
+  SDL_GPUTexture *checkTexture;
+  
   
   // COPY:
   {
-    // LOAD TEXTURE
-    int w, h, channels;
-    u8 *pixels =
-        stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
-    assert(pixels != nullptr);
-    u32 tWidth = static_cast<u32>(w);
-    u32 tHeight = static_cast<u32>(h);
-    textureInfo.width = tWidth;
-    textureInfo.height = tHeight;
-    
-    // std::cout << "width " << tWidth << " height " << tHeight << '\n';
-    stbi_image_free(pixels);
-    
     // VERTEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {};
     transferToVertexBufferInfo.size = VERTEX_BUFFER_SIZE;
@@ -213,11 +195,70 @@ int main(int argc, char* argv[]) {
     indexBufferRegion.buffer = indexBuffer;
     indexBufferRegion.size = INDEX_BUFFER_SIZE;
 
-    // TEXTURE
-    
+
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
     sdlAssert(copyPass != nullptr);
 
+    {
+      SDL_GPUTextureCreateInfo textureInfo = {};
+      textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+      textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+      textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+      textureInfo.num_levels = 1;
+      textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+      textureInfo.layer_count_or_depth = 1;
+
+      // LOAD TEXTURE
+      int w, h, channels;
+      u8 *pixels =
+        stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
+      assert(pixels != nullptr);
+      
+      u32 tWidth = static_cast<u32>(w);
+      u32 tHeight = static_cast<u32>(h);
+      textureInfo.width = tWidth;
+      textureInfo.height = tHeight;
+      const u32 TEXTURE_SIZE = tWidth * tHeight * sizeof(u8);
+
+      checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
+      sdlAssert(checkTexture != nullptr);
+
+    
+      SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {};
+      transferToTextureInfo.size = TEXTURE_SIZE;
+      transferToTextureInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+      SDL_GPUTransferBuffer* transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
+      sdlAssert(transferToTexture != nullptr);
+
+      u8* mappedTransferToBytes = reinterpret_cast<u8*>(
+							SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
+      sdlAssert(mappedTransferToBytes != nullptr);
+      std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
+
+      SDL_GPUTextureTransferInfo textureTransferInfo = {};
+      textureTransferInfo.transfer_buffer = transferToTexture;
+      textureTransferInfo.offset = 0;
+      textureTransferInfo.pixels_per_row = tWidth;
+      textureTransferInfo.rows_per_layer = tHeight;
+
+      SDL_GPUTextureRegion textureRegion = {};
+      textureRegion.texture = checkTexture;
+      textureRegion.mip_level = 0;
+      textureRegion.layer = 0;
+      textureRegion.x = 0;
+      textureRegion.y = 0;
+      textureRegion.z = 0;
+      textureRegion.w = 512;
+      textureRegion.h = 512;
+      textureRegion.d = 1;
+
+      SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
+				
+      // std::cout << "width " << tWidth << " height " << tHeight << '\n';
+      stbi_image_free(pixels);
+    }
+
+    
     SDL_UploadToGPUBuffer(copyPass, &transferToVertexBufferLocation,
                           &vertexBufferRegion, false);
     SDL_UploadToGPUBuffer(copyPass, &transferToIndexBufferLocation,
