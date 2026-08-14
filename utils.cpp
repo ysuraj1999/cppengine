@@ -52,3 +52,36 @@ std::ostream& operator<<(std::ostream& os, const Vertex& v) {
 std::random_device rd;
 std::mt19937 gen(rd());
 std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
+
+// DEFER
+template <typename F>
+class ScopeGuard {
+  F f;
+  bool active = true;
+
+public:
+  explicit ScopeGuard(F&& f) : f(std::forward<F>(f)) {}
+
+  ScopeGuard(ScopeGuard&& other)
+    : f(std::move(other.f)), active(other.active) {
+    other.active = false;
+  }
+
+  ~ScopeGuard() {
+    if (active)
+      f();
+  }
+
+  ScopeGuard(const ScopeGuard&) = delete;
+  ScopeGuard& operator=(const ScopeGuard&) = delete;
+};
+
+template <typename F>
+ScopeGuard(F&&) -> ScopeGuard<F>;
+
+#define DEFER_IMPL(x, y) x##y
+#define DEFER(x, y) DEFER_IMPL(x, y)
+
+#define defer(code)						\
+  auto DEFER(_defer_, __COUNTER__) = ScopeGuard([&] { code; })

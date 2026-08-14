@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
   // (void)argv;
 
   std::vector<Mesh> meshContainer;
-  loadObj("models/sponza.obj", meshContainer);
+  loadObj("models/bedroom.obj", meshContainer);
 
   const u32 modelIndex = 1;
   std::vector<Vertex> worldVertices = {};
@@ -99,7 +99,7 @@ int main(int argc, char* argv[]) {
   sdlAssert(indexBuffer != nullptr);
 
   SDL_GPUTexture *checkTexture;
-  
+  defer(SDL_ReleaseGPUTexture(gpuDevice, checkTexture));
   
   // COPY:
   {
@@ -163,6 +163,7 @@ int main(int argc, char* argv[]) {
       u8 *pixels =
         stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
       assert(pixels != nullptr);
+      defer(stbi_image_free(pixels));
       
       u32 tWidth = static_cast<u32>(w);
       u32 tHeight = static_cast<u32>(h);
@@ -203,9 +204,8 @@ int main(int argc, char* argv[]) {
       textureRegion.d = 1;
 
       SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
-				
+
       // std::cout << "width " << tWidth << " height " << tHeight << '\n';
-      stbi_image_free(pixels);
     }
 
     
@@ -343,7 +343,7 @@ int main(int argc, char* argv[]) {
 
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 keyboard_sensitivity = 200.0f;
+  const f32 keyboard_sensitivity = 20.0f;
   const f32 mouse_sensitivity = 0.1f;
   float delta_x, delta_y;
   while (running) {
@@ -420,6 +420,9 @@ int main(int argc, char* argv[]) {
     colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
     colorTargetInfo.texture = swapchainTexture;
 
+    SDL_GPUDepthStencilTargetInfo depthTargetInfo = {};
+
+    
     renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
     sdlAssert(renderPass != nullptr);
 
