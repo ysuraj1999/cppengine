@@ -31,9 +31,11 @@ target_link_libraries(playground PRIVATE SDL3::SDL3 glm::glm)
 # SHADERS
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
+set(TEXTURE_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/textures)
 
 target_compile_definitions(playground PRIVATE
-    SHADER_BIN_DIR="${SHADER_BIN_DIR}"
+  SHADER_BIN_DIR="${SHADER_BIN_DIR}"
+  TEXTURE_BIN_DIR="${TEXTURE_BIN_DIR}"
 )
 
 find_program(GLSLANG_VALIDATOR glslangValidator)
