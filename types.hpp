@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <vector>
 
 typedef int8_t i8;
 typedef int16_t i16;
@@ -21,6 +22,7 @@ typedef std::size_t usize;
 struct Vertex {
   glm::vec3 position;
   glm::vec4 color;
+  glm::vec3 normal;
   glm::vec2 uv;
 };
 
@@ -47,6 +49,11 @@ struct Mat4 {
   f32 m13 = 0.0f;
   f32 m14 = 0.0f;
   f32 m15 = 0.0f;
+};
+
+struct Mesh {
+  std::vector<Vertex> vertices;
+  std::vector<u32> indices;
 };
 
 Mat4 translateMatrix(const f32 v[4]);
