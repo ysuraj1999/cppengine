@@ -63,3 +63,15 @@ add_custom_target(shaders ALL
 )
 
 add_dependencies(playground shaders)
+
+# TEXTURES
+set(TEXTURE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/textures)
+set(TEXTURE_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/textures)
+
+add_custom_target(textures ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory ${TEXTURE_SRC_DIR} ${TEXTURE_BIN_DIR}
+    COMMENT "Copying textures to build directory"
+    VERBATIM
+)
+
+add_dependencies(playground textures)
