@@ -36,8 +36,20 @@ int main(int argc, char* argv[]) {
   loadObj("models/sponza.obj", meshContainer);
 
   const u32 modelIndex = 1;
-  auto vertices = meshContainer[modelIndex].vertices;
-  auto indices = meshContainer[modelIndex].indices;
+  std::vector<Vertex> worldVertices = {};
+  std::vector<u32> worldIndices = {};
+
+  u32 indexOffset = 0;
+  for (auto &mesh : meshContainer) {
+    for (auto &vertex : mesh.vertices) {
+      worldVertices.push_back(vertex);
+    }
+    for (auto &index : mesh.indices) {
+      worldIndices.push_back(index + indexOffset);
+    }
+
+    indexOffset += mesh.vertices.size();
+  }
 
   // std::cout << vertices << '\n';
   // std::cout << indices << '\n';
@@ -73,14 +85,14 @@ int main(int argc, char* argv[]) {
   sdlAssert(commandBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  const u32 VERTEX_BUFFER_SIZE = vertices.size() * sizeof(Vertex);
+  const u32 VERTEX_BUFFER_SIZE = worldVertices.size() * sizeof(Vertex);
   vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  const u32 INDEX_BUFFER_SIZE = indices.size() * sizeof(u32);
+  const u32 INDEX_BUFFER_SIZE = worldIndices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
@@ -101,7 +113,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, vertices.data(), VERTEX_BUFFER_SIZE);
+    std::memcpy(mappedVertexInTransfer, worldVertices.data(), VERTEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
     transferToVertexBufferLocation.offset = 0;
@@ -122,7 +134,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedIndicesInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, indices.data(), INDEX_BUFFER_SIZE);
+    std::memcpy(mappedIndicesInTransfer, worldIndices.data(), INDEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
     transferToIndexBufferLocation.offset = 0;
@@ -331,7 +343,7 @@ int main(int argc, char* argv[]) {
 
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 keyboard_sensitivity = 10.0f;
+  const f32 keyboard_sensitivity = 200.0f;
   const f32 mouse_sensitivity = 0.1f;
   float delta_x, delta_y;
   while (running) {
@@ -420,7 +432,7 @@ int main(int argc, char* argv[]) {
     SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass,
-				 indices.size(),
+				 worldIndices.size(),
 				 1,
 				 0,
 				 0,
