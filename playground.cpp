@@ -12,6 +12,7 @@
 #include <cstring>
 #include <fstream>
 #include <iostream>
+#include <random>
 #include <vector>
 
 #include "glm/ext/matrix_clip_space.hpp"
@@ -76,6 +77,10 @@ std::ostream& operator<<(std::ostream& os, const Vertex& v) {
 	    << "}";
 }
 
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
@@ -83,11 +88,18 @@ int main(int argc, char* argv[]) {
   std::vector<Mesh> meshContainer;
   loadObj("models/cube.obj", meshContainer);
 
-  auto vertices = meshContainer[0].vertices;
-  auto indices = meshContainer[0].indices;
+  const u32 modelIndex = 0;
+  auto vertices = meshContainer[modelIndex].vertices;
+  auto indices = meshContainer[modelIndex].indices;
 
-  std::cout << vertices << '\n';
-  std::cout << indices << '\n';
+  for (auto &v : vertices) {
+    v.color.r = dist(gen);
+    v.color.g = dist(gen);
+    v.color.b = dist(gen);
+  }
+  
+  // std::cout << vertices << '\n';
+  // std::cout << indices << '\n';
   
   camera.position = glm::vec3{-10.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
@@ -295,8 +307,8 @@ int main(int argc, char* argv[]) {
 
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 keyboard_sensitivity = 5.0f;
-  const f32 mouse_sensitivity = 0.05f;
+  const f32 keyboard_sensitivity = 10.0f;
+  const f32 mouse_sensitivity = 0.1f;
   float delta_x, delta_y;
   while (running) {
     const u64 now = SDL_GetPerformanceCounter();
