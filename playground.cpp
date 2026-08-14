@@ -210,19 +210,19 @@ int main(int argc, char* argv[]) {
   pipelineInfo.fragment_shader = fragmentShader;
   pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
-  SDL_GPUVertexBufferDescription bufferDescription[1] = {};
+  SDL_GPUVertexBufferDescription vertexBufferDescription[1] = {};
 
   // How each vertex is defined
-  bufferDescription[0].slot = 0;
-  bufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-  bufferDescription[0].instance_step_rate = 0;
-  bufferDescription[0].pitch = (u32)sizeof(Vertex);
+  vertexBufferDescription[0].slot = 0;
+  vertexBufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+  vertexBufferDescription[0].instance_step_rate = 0;
+  vertexBufferDescription[0].pitch = (u32)sizeof(Vertex);
 
   pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
-  pipelineInfo.vertex_input_state.vertex_buffer_descriptions = bufferDescription;
+  pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
 
   // Vertex attributes
-  SDL_GPUVertexAttribute vertexAttributes[2] = {};
+  SDL_GPUVertexAttribute vertexAttributes[4] = {};
   vertexAttributes[0].buffer_slot = 0;
   vertexAttributes[0].location = 0;
   vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
@@ -231,11 +231,21 @@ int main(int argc, char* argv[]) {
   vertexAttributes[1].buffer_slot = 0;
   vertexAttributes[1].location = 1;
   vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  vertexAttributes[1].offset = (u32)(sizeof(float) * 3);
+  vertexAttributes[1].offset = (u32)(sizeof(f32) * 3);
 
-  pipelineInfo.vertex_input_state.num_vertex_attributes = 2;
+  vertexAttributes[2].buffer_slot = 0;
+  vertexAttributes[2].location = 2;
+  vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+  vertexAttributes[2].offset = (u32)(sizeof(f32) * (3 + 4));
+
+  vertexAttributes[3].buffer_slot = 0;
+  vertexAttributes[3].location = 3;
+  vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+  vertexAttributes[3].offset = (u32)(sizeof(f32) * (3 + 4 + 4));
+
+  pipelineInfo.vertex_input_state.num_vertex_attributes = 4;
   pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
-
+  
   SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
   colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
 
