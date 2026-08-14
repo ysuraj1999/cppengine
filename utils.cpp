@@ -1,0 +1,54 @@
+#include <fstream>
+#include <random>
+#include <vector>
+
+#include "types.hpp"
+
+#define sdlAssert(cond)					\
+  do {							\
+    if (!(cond)) {					\
+      std::fprintf(stderr, "%s:%d: SDL error: %s\n",	\
+		   __FILE__, __LINE__, SDL_GetError());	\
+      std::abort();					\
+    }							\
+  } while (0)
+
+static std::vector<u8> readFile(const char* path) {
+  std::ifstream file(path, std::ios::binary | std::ios::ate);
+  if (!file) {
+    return {};
+  }
+  std::streamsize size = file.tellg();
+  file.seekg(0, std::ios::beg);
+  std::vector<u8> buffer(static_cast<size_t>(size));
+  if (size > 0) {
+    file.read(reinterpret_cast<char*>(buffer.data()), size);
+  }
+  return buffer;
+}
+
+template <typename T>
+std::ostream& operator<<(std::ostream& os, const std::vector<T>& vec) {
+    os << "[";
+    for (size_t i = 0; i < vec.size(); ++i) {
+        if (i > 0)
+            os << ",\n";
+        os << vec[i];
+    }
+    os << "]";
+    return os;
+}
+
+std::ostream& operator<<(std::ostream& os, const Vertex& v) {
+  return os << "Vertex{"
+	    << "position=(" << v.position.x << ", " << v.position.y << ", " << v.position.z << "), "
+	    << "color=(" << v.color.r << ", " << v.color.g << ", " << v.color.b << ", " << v.color.a << "), "
+	    << "normal=(" << v.normal.x << ", " << v.normal.y << ", " << v.normal.z << "), "
+	    << "uv=(" << v.uv.x << ", " << v.uv.y << ")"
+	    << "}";
+}
+
+// RANDOM shit
+std::random_device rd;
+std::mt19937 gen(rd());
+std::uniform_real_distribution<float> dist(0.0f, 1.0f);

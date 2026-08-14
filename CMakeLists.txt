@@ -18,9 +18,9 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(glm)
 
 add_executable(playground
-    playground.cpp
-    types.cpp
-    stb_image.cpp
+  playground.cpp
+  types.cpp
+  stb_image.cpp
 )
 
 target_include_directories(playground PRIVATE
