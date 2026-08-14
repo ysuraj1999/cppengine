@@ -291,6 +291,9 @@ int main(int argc, char* argv[]) {
   pipelineInfo.target_info.num_color_targets = 1;
   pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
 
+  pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
+      
   SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
 
