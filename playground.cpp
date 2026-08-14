@@ -18,6 +18,8 @@
 #include "glm/trigonometric.hpp"
 #include "types.hpp"
 
+#include "obj.hpp"
+
 #define sdlAssert(cond)					\
   do {							\
     if (!(cond)) {					\
@@ -55,6 +57,13 @@ int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
+
+  std::vector<Mesh> meshContainer;
+  loadObj("models/cube.obj", meshContainer);
+
+  auto vertices = meshContainer[0].vertices;
+  auto indices = meshContainer[0].indices;
+    
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
   camera.pitch = 0.0f;
@@ -85,47 +94,78 @@ int main(int argc, char* argv[]) {
   SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
   sdlAssert(commandBuffer != nullptr);
 
-  SDL_GPUBufferCreateInfo gpuBufferInfo = {};
-  gpuBufferInfo.size = (u32)sizeof(vertices);
-  gpuBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-  SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &gpuBufferInfo);
+  SDL_GPUBufferCreateInfo vertexBufferInfo = {};
+  vertexBufferInfo.size = (u32)sizeof(vertices);
+  vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+  SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
+    
+  SDL_GPUBufferCreateInfo indexBufferInfo = {};
+  indexBufferInfo.size = (u32)sizeof(indices);
+  indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+  SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
+  sdlAssert(indexBuffer != nullptr);
 
-  SDL_GPUTransferBufferCreateInfo transferBufferInfo = {};
-  transferBufferInfo.size = (u32)sizeof(vertices);
-  transferBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  SDL_GPUTransferBuffer* transferBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferBufferInfo);
-  sdlAssert(transferBuffer != nullptr);
-
-  SDL_GPUBufferRegion gpuBufferRegion = {};
-  gpuBufferRegion.offset = 0;
-  gpuBufferRegion.buffer = vertexBuffer;
-  gpuBufferRegion.size = (u32)sizeof(vertices);
-
-  // block copy:
+  // COPY:
   {
+    // VERTEX BUFFER
+    SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {};
+    transferToVertexBufferInfo.size = (u32)sizeof(vertices);
+    transferToVertexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBuffer* transferToVertexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToVertexBufferInfo);
+    sdlAssert(transferToVertexBuffer != nullptr);
+
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
-							       SDL_MapGPUTransferBuffer(gpuDevice, transferBuffer, false));
+							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, vertices, sizeof(vertices));
+    std::memcpy(mappedVertexInTransfer, vertices.data(), vertices.size() * sizeof(Vertex));
+
+    SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
+    transferToVertexBufferLocation.offset = 0;
+    transferToVertexBufferLocation.transfer_buffer = transferToVertexBuffer;
+
+    SDL_GPUBufferRegion vertexBufferRegion = {};
+    vertexBufferRegion.offset = 0;
+    vertexBufferRegion.buffer = vertexBuffer;
+    vertexBufferRegion.size = (u32)sizeof(vertices);
+
+    // INDEX BUFFER
+    SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {};
+    transferToIndexBufferInfo.size = (u32)sizeof(indices);
+    transferToIndexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBuffer* transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
+    sdlAssert(transferToIndexBuffer != nullptr);
+
+    Vertex* mappedIndicesInTransfer = reinterpret_cast<Vertex*>(
+							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
+    sdlAssert(mappedIndicesInTransfer != nullptr);
+    std::memcpy(mappedIndicesInTransfer, indices.data(), indices.size() * sizeof(u32));
+
+    SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
+    transferToIndexBufferLocation.offset = 0;
+    transferToIndexBufferLocation.transfer_buffer = transferToIndexBuffer;
+
+    SDL_GPUBufferRegion indexBufferRegion = {};
+    indexBufferRegion.offset = 0;
+    indexBufferRegion.buffer = indexBuffer;
+    indexBufferRegion.size = (u32)sizeof(u32);
 
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
     sdlAssert(copyPass != nullptr);
 
-
-    SDL_GPUTransferBufferLocation transferBufferLocation = {};
-    transferBufferLocation.offset = 0;
-    transferBufferLocation.transfer_buffer = transferBuffer;
-
-    SDL_UploadToGPUBuffer(copyPass, &transferBufferLocation,
-			  &gpuBufferRegion, false);
+    SDL_UploadToGPUBuffer(copyPass, &transferToVertexBufferLocation,
+                          &vertexBufferRegion, false);
+    SDL_UploadToGPUBuffer(copyPass, &transferToIndexBufferLocation,
+			      &indexBufferRegion, false);
     SDL_EndGPUCopyPass(copyPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 
     // Unmap and release transfer buffer once uploaded
-    SDL_UnmapGPUTransferBuffer(gpuDevice, transferBuffer);
-    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferBuffer);
+    SDL_UnmapGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
+    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
 
+    SDL_UnmapGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
+    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
   }
 
 
