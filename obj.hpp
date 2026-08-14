@@ -3,7 +3,7 @@
 #include "types.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION // needed for tinyobj
-#include "includes/tiny_obj_loader.h"
+#include "tiny_obj_loader.h"
 
 #define TINYOBJLOADER_USE_MULTITHREADING  // multi-threaded parsing
 #define TINYOBJLOADER_USE_SIMD            // SIMD (SSE2/AVX2/NEON) newline scan
