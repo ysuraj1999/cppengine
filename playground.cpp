@@ -3,6 +3,7 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_scancode.h>
+#include <cfloat>
 #include <cstddef>
 #include <glm/glm.hpp>
 
@@ -218,7 +219,7 @@ int main(int argc, char* argv[]) {
       u32 tHeight = static_cast<u32>(h);
       textureInfo.width = tWidth;
       textureInfo.height = tHeight;
-      const u32 TEXTURE_SIZE = tWidth * tHeight * sizeof(u8);
+      const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
 
       checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
       sdlAssert(checkTexture != nullptr);
@@ -303,7 +304,7 @@ int main(int argc, char* argv[]) {
   fragmentShaderInfo.code_size = fragmentShaderContents.size();
   fragmentShaderInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
   fragmentShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-  fragmentShaderInfo.num_samplers = 0;
+  fragmentShaderInfo.num_samplers = 1;
   fragmentShaderInfo.num_storage_textures = 0;
   fragmentShaderInfo.num_storage_buffers = 0;
   fragmentShaderInfo.num_uniform_buffers = 0;
@@ -371,6 +372,22 @@ int main(int argc, char* argv[]) {
   SDL_GPUBufferBinding indexBufferBinding[1] = {};
   indexBufferBinding[0].buffer = indexBuffer;
   indexBufferBinding[0].offset = 0;
+
+  // make the sampler here
+  SDL_GPUSamplerCreateInfo samplerInfo = {};
+  samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+  samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
+  samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
+  samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+  samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+  SDL_GPUSampler *sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
+  sdlAssert(sampler != nullptr);
+    
+  // bind texture and sampler here
+  SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
+  textureSamplerBindings[0].sampler = sampler;
+  textureSamplerBindings[0].texture = checkTexture;
 
   bool running = true;
   SDL_GPURenderPass* renderPass = nullptr;
@@ -461,7 +478,9 @@ int main(int argc, char* argv[]) {
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-    SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
+                           SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass,
 				 indices.size(),
