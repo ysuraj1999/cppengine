@@ -120,13 +120,15 @@ int main(int argc, char* argv[]) {
   sdlAssert(commandBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  vertexBufferInfo.size = (u32)(vertices.size() * sizeof(Vertex));
+  const u32 VERTEX_BUFFER_SIZE = vertices.size() * sizeof(Vertex);
+  vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
-    
+
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  indexBufferInfo.size = (u32)(indices.size() * sizeof(u32));
+  const u32 INDEX_BUFFER_SIZE = indices.size() * sizeof(u32);
+  indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
@@ -135,7 +137,7 @@ int main(int argc, char* argv[]) {
   {
     // VERTEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {};
-    transferToVertexBufferInfo.size = (u32)sizeof(vertices);
+    transferToVertexBufferInfo.size = VERTEX_BUFFER_SIZE;
     transferToVertexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     SDL_GPUTransferBuffer* transferToVertexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToVertexBufferInfo);
     sdlAssert(transferToVertexBuffer != nullptr);
@@ -143,7 +145,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, vertices.data(), vertices.size() * sizeof(Vertex));
+    std::memcpy(mappedVertexInTransfer, vertices.data(), VERTEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
     transferToVertexBufferLocation.offset = 0;
@@ -152,11 +154,11 @@ int main(int argc, char* argv[]) {
     SDL_GPUBufferRegion vertexBufferRegion = {};
     vertexBufferRegion.offset = 0;
     vertexBufferRegion.buffer = vertexBuffer;
-    vertexBufferRegion.size = (u32)sizeof(vertices);
+    vertexBufferRegion.size = VERTEX_BUFFER_SIZE;
 
     // INDEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {};
-    transferToIndexBufferInfo.size = (u32)sizeof(indices);
+    transferToIndexBufferInfo.size = INDEX_BUFFER_SIZE;
     transferToIndexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     SDL_GPUTransferBuffer* transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
     sdlAssert(transferToIndexBuffer != nullptr);
@@ -164,7 +166,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedIndicesInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, indices.data(), indices.size() * sizeof(u32));
+    std::memcpy(mappedIndicesInTransfer, indices.data(), INDEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
     transferToIndexBufferLocation.offset = 0;
@@ -173,7 +175,7 @@ int main(int argc, char* argv[]) {
     SDL_GPUBufferRegion indexBufferRegion = {};
     indexBufferRegion.offset = 0;
     indexBufferRegion.buffer = indexBuffer;
-    indexBufferRegion.size = (u32)sizeof(u32);
+    indexBufferRegion.size = INDEX_BUFFER_SIZE;
 
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
     sdlAssert(copyPass != nullptr);
@@ -249,9 +251,9 @@ int main(int argc, char* argv[]) {
   // Vertex attributes
   SDL_GPUVertexAttribute vertexAttributes[4] = {};
   vertexAttributes[0].buffer_slot = 0;
-  vertexAttributes[0].location = offsetof(Vertex, position);
+  vertexAttributes[0].location = 0;
   vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  vertexAttributes[0].offset = 0;
+  vertexAttributes[0].offset = offsetof(Vertex, position);
 
   vertexAttributes[1].buffer_slot = 0;
   vertexAttributes[1].location = 1;
@@ -378,7 +380,6 @@ int main(int argc, char* argv[]) {
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
     SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    // SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass,
 				 indices.size(),
