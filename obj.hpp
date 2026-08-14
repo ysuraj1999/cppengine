@@ -36,7 +36,7 @@ void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
   for (u32 shapeIndex = 0; shapeIndex < shapes.size(); shapeIndex++) {
     auto &shape = shapes[shapeIndex];
 
-    Mesh mesh;
+    Mesh mesh{};
     u32 indexOffset = 0;
     for (u32 faceIndex = 0; faceIndex < shape.mesh.num_face_vertices.size();
          faceIndex++) {
@@ -44,7 +44,7 @@ void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
       // Always 3 since triangulation enabled
       // const u32 vertCountForFace = u32(shape.mesh.num_face_vertices[faceIndex]);
 
-      Vertex vertexStorage;
+      Vertex vertexStorage{};
       for (u32 vertIndex = 0; vertIndex < 3; vertIndex++) {
         auto idx = shape.mesh.indices[indexOffset + vertIndex];
         tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
