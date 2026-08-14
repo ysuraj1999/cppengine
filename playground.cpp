@@ -1,4 +1,5 @@
 #include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
 #include <SDL3/SDL_main.h>
 #include <SDL3/SDL_events.h>
 #include <SDL3/SDL_scancode.h>
@@ -95,13 +96,13 @@ int main(int argc, char* argv[]) {
   sdlAssert(commandBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  vertexBufferInfo.size = (u32)sizeof(vertices);
+  vertexBufferInfo.size = (u32)(vertices.size() * sizeof(Vertex));
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
     
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  indexBufferInfo.size = (u32)sizeof(indices);
+  indexBufferInfo.size = (u32)(indices.size() * sizeof(u32));
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
@@ -255,9 +256,13 @@ int main(int argc, char* argv[]) {
   SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
 
-  SDL_GPUBufferBinding bufferBindings[1] = {};
-  bufferBindings[0].buffer = vertexBuffer;
-  bufferBindings[0].offset = 0;
+  SDL_GPUBufferBinding vertexBufferBinding[1] = {};
+  vertexBufferBinding[0].buffer = vertexBuffer;
+  vertexBufferBinding[0].offset = 0;
+
+  SDL_GPUBufferBinding indexBufferBinding[1] = {};
+  indexBufferBinding[0].buffer = indexBuffer;
+  indexBufferBinding[0].offset = 0;
 
   bool running = true;
   SDL_GPURenderPass* renderPass = nullptr;
@@ -347,8 +352,16 @@ int main(int argc, char* argv[]) {
     SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
 
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-    SDL_BindGPUVertexBuffers(renderPass, 0, bufferBindings, 1);
-    SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+    SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
+    SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+    // SDL_DrawGPUPrimitives(renderPass, 3, 1, 0, 0);
+    SDL_DrawGPUIndexedPrimitives(
+				 renderPass,
+				 indices.size(),
+				 1,
+				 0,
+				 0,
+				 0);
     SDL_EndGPURenderPass(renderPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
