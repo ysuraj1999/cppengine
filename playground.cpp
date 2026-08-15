@@ -438,7 +438,7 @@ int main(int argc, char* argv[]) {
 					    glm::radians(60.0f),
 					    800.0f / 800.0f,
 					    0.1f,
-					    100.0f
+					    10000.0f
 					    );
     glm::mat4 viewProjection = projection * view;
     commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
