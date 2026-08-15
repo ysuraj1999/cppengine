@@ -25,10 +25,13 @@
 #include "utils.cpp"
 
 static Camera camera;
-const auto WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
-const f32 KEYBOARD_SENSITIVITY = 10.0f;
+const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
+const f32 KEYBOARD_SENSITIVITY = 1.0f;
 const f32 MOUSE_SENSITIVITY = 0.1f;
-const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f};
+const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
+                           1.0f};
+const glm::vec2 resolution = {800.0f, 800.0f};
+bool cameraEnabled = false;
 
 int main(int argc, char* argv[]) {
   // (void)argc;
@@ -42,9 +45,9 @@ int main(int argc, char* argv[]) {
   std::vector<u32> worldIndices = {};
 
   Vertex unitVertices[3] = {
-    { .position = {-1.0f, -1.0f, 0.0f} },
-    { .position = { 3.0f, -1.0f, 0.0f} },
-    { .position = {-1.0f,  3.0f, 0.0f} },
+    { .position = {0.0f, -100.0f, -100.0f} }, // bottom-left
+    { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
+    { .position = {0.0f,  300.0f, -100.0f} }, // top-left
   };
   u32 unitIndices[3] = { 0, 1, 2 };
 
@@ -67,8 +70,8 @@ int main(int argc, char* argv[]) {
   //   indexOffset += mesh.vertices.size();
   // }
 
-  // std::cout << vertices << '\n';
-  // std::cout << indices << '\n';
+  // std::cout << worldVertices << '\n';
+  // std::cout << worldIndices << '\n';
   
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
@@ -76,10 +79,11 @@ int main(int argc, char* argv[]) {
 
   sdlAssert(SDL_Init(SDL_INIT_VIDEO));
 
-  SDL_Window* window = SDL_CreateWindow("Lens", 800, 800, 0);
+  SDL_Window* window = SDL_CreateWindow("Lens", (u32)resolution.x, (u32)resolution.y, 0);
   sdlAssert(window != nullptr);
 
-  sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
+  if (cameraEnabled)
+    sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
 
   SDL_GPUTexture* swapchainTexture = nullptr;
   u32 width = 0;
@@ -326,7 +330,7 @@ int main(int argc, char* argv[]) {
 
   // Culling
   pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
-  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
 
   // Depth test
   SDL_GPUDepthStencilState depthStencilState = {};
@@ -381,8 +385,8 @@ int main(int argc, char* argv[]) {
   depthTextureInfo.num_levels = 1;
   depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
   depthTextureInfo.layer_count_or_depth = 1;
-  depthTextureInfo.width = 800;
-  depthTextureInfo.height = 800;
+  depthTextureInfo.width = (u32)resolution.x;
+  depthTextureInfo.height = (u32)resolution.y;
 
   SDL_GPUTexture *depthTexture =
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
@@ -412,12 +416,6 @@ int main(int argc, char* argv[]) {
     forward = glm::normalize(forward);
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
 
-    u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
-    camera.yaw -= delta_x * MOUSE_SENSITIVITY;
-    camera.yaw = std::fmod(camera.yaw, 360.0f);
-    camera.pitch -= delta_y * MOUSE_SENSITIVITY;
-    camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
-
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
@@ -428,30 +426,39 @@ int main(int argc, char* argv[]) {
     if (keys[SDL_SCANCODE_ESCAPE]) {
       running = false;
     }
-    if (keys[SDL_SCANCODE_W]) {
-      camera.position += forward * dt * KEYBOARD_SENSITIVITY;
-    }
-    if (keys[SDL_SCANCODE_S]) {
-      camera.position -= forward * dt * KEYBOARD_SENSITIVITY;
-    }
-    if (keys[SDL_SCANCODE_A]) {
-      camera.position -= right * dt * KEYBOARD_SENSITIVITY;
-    }
-    if (keys[SDL_SCANCODE_D]) {
-      camera.position += right * dt * KEYBOARD_SENSITIVITY;
-    }
-    if (keys[SDL_SCANCODE_SPACE]) {
-      camera.position += WORLD_UP * dt * KEYBOARD_SENSITIVITY;
-    }
-    if (keys[SDL_SCANCODE_LCTRL]) {
-      camera.position -= WORLD_UP * dt * KEYBOARD_SENSITIVITY;
+
+    if (cameraEnabled){
+      u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
+      camera.yaw -= delta_x * MOUSE_SENSITIVITY;
+      camera.yaw = std::fmod(camera.yaw, 360.0f);
+      camera.pitch -= delta_y * MOUSE_SENSITIVITY;
+      camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
+
+      if (keys[SDL_SCANCODE_W]) {
+	camera.position += forward * dt * KEYBOARD_SENSITIVITY;
+      }
+      if (keys[SDL_SCANCODE_S]) {
+	camera.position -= forward * dt * KEYBOARD_SENSITIVITY;
+      }
+      if (keys[SDL_SCANCODE_A]) {
+	camera.position -= right * dt * KEYBOARD_SENSITIVITY;
+      }
+      if (keys[SDL_SCANCODE_D]) {
+	camera.position += right * dt * KEYBOARD_SENSITIVITY;
+      }
+      if (keys[SDL_SCANCODE_SPACE]) {
+	camera.position += WORLD_UP * dt * KEYBOARD_SENSITIVITY;
+      }
+      if (keys[SDL_SCANCODE_LCTRL]) {
+	camera.position -= WORLD_UP * dt * KEYBOARD_SENSITIVITY;
+      }
     }
 
     glm::mat4 view =
       glm::lookAtLH(camera.position, camera.position + forward, WORLD_UP);
     glm::mat4 projection = glm::perspectiveLH_ZO(
 					    glm::radians(60.0f),
-					    800.0f / 800.0f,
+					    resolution.x / resolution.y,
 					    0.1f,
 					    10000.0f
 					    );
