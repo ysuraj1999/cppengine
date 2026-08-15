@@ -46,11 +46,11 @@ if(GLSLANG_VALIDATOR)
             ${SHADER_BIN_DIR}/shader.vertex.spv
             ${SHADER_BIN_DIR}/shader.fragment.spv
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_BIN_DIR}
-        COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_SRC_DIR}/shader.vert -o ${SHADER_BIN_DIR}/shader.vertex.spv
-        COMMAND ${GLSLANG_VALIDATOR} -V ${SHADER_SRC_DIR}/shader.frag -o ${SHADER_BIN_DIR}/shader.fragment.spv
+        COMMAND ${GLSLANG_VALIDATOR} -V -S vert ${SHADER_SRC_DIR}/shader.vert.glsl -o ${SHADER_BIN_DIR}/shader.vertex.spv
+        COMMAND ${GLSLANG_VALIDATOR} -V -S frag ${SHADER_SRC_DIR}/shader.frag.glsl -o ${SHADER_BIN_DIR}/shader.fragment.spv
         DEPENDS
-            ${SHADER_SRC_DIR}/shader.vert
-            ${SHADER_SRC_DIR}/shader.frag
+            ${SHADER_SRC_DIR}/shader.vert.glsl
+            ${SHADER_SRC_DIR}/shader.frag.glsl
         COMMENT "Compiling shaders with glslangValidator"
         VERBATIM
     )
