@@ -277,7 +277,7 @@ int main(int argc, char* argv[]) {
   fragmentShaderInfo.num_samplers = 1;
   fragmentShaderInfo.num_storage_textures = 0;
   fragmentShaderInfo.num_storage_buffers = 0;
-  fragmentShaderInfo.num_uniform_buffers = 0;
+  fragmentShaderInfo.num_uniform_buffers = 1;
 
   SDL_GPUShader* fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
   sdlAssert(fragmentShader != nullptr);
@@ -478,8 +478,10 @@ int main(int argc, char* argv[]) {
     renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
     sdlAssert(renderPass != nullptr);
 
-    SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
-
+    SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection,
+                                 (u32)sizeof(viewProjection));
+    SDL_PushGPUFragmentUniformData(commandBuffer, 0, &resolution, (u32)sizeof(resolution));
+				   
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
     SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
