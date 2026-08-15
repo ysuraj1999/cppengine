@@ -33,7 +33,7 @@ int main(int argc, char* argv[]) {
   // (void)argv;
 
   std::vector<Mesh> meshContainer;
-  loadObj("models/bedroom.obj", meshContainer);
+  loadObj("models/breakfast_room.obj", meshContainer);
 
   const u32 modelIndex = 1;
   std::vector<Vertex> worldVertices = {};
@@ -341,9 +341,35 @@ int main(int argc, char* argv[]) {
   bool running = true;
   SDL_GPURenderPass* renderPass = nullptr;
 
+  SDL_GPUColorTargetInfo colorTargetInfo = {};
+  colorTargetInfo.clear_color = SDL_FColor{13.0f/255.0f, 115.0f/255.0f, 89.0f/255.0f, 1.0f};
+  colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+  colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+
+  // make a depth texture here
+  SDL_GPUTextureCreateInfo depthTextureInfo = {};
+  depthTextureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+  depthTextureInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+  depthTextureInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+  depthTextureInfo.num_levels = 1;
+  depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+  depthTextureInfo.layer_count_or_depth = 1;
+  depthTextureInfo.width = 800;
+  depthTextureInfo.height = 800;
+
+  SDL_GPUTexture *depthTexture =
+      SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
+  sdlAssert(depthTexture);
+  
+  SDL_GPUDepthStencilTargetInfo depthTargetInfo = {};
+  depthTargetInfo.clear_depth = 1.0f;
+  depthTargetInfo.load_op = SDL_GPU_LOADOP_LOAD;
+  depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
+  depthTargetInfo.texture = depthTexture;
+
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 keyboard_sensitivity = 20.0f;
+  const f32 keyboard_sensitivity = 50.0f;
   const f32 mouse_sensitivity = 0.1f;
   float delta_x, delta_y;
   while (running) {
@@ -414,16 +440,9 @@ int main(int argc, char* argv[]) {
 						    &width,
 						    &height));
 
-    SDL_GPUColorTargetInfo colorTargetInfo = {};
-    colorTargetInfo.clear_color = SDL_FColor{13.0f/255.0f, 115.0f/255.0f, 89.0f/255.0f, 1.0f};
-    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
     colorTargetInfo.texture = swapchainTexture;
 
-    SDL_GPUDepthStencilTargetInfo depthTargetInfo = {};
-
-    
-    renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, nullptr);
+    renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
     sdlAssert(renderPass != nullptr);
 
     SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
