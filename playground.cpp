@@ -28,6 +28,7 @@ static Camera camera;
 const auto WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
 const f32 KEYBOARD_SENSITIVITY = 10.0f;
 const f32 MOUSE_SENSITIVITY = 0.1f;
+const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f};
 
 int main(int argc, char* argv[]) {
   // (void)argc;
@@ -354,7 +355,7 @@ int main(int argc, char* argv[]) {
   SDL_GPURenderPass* renderPass = nullptr;
 
   SDL_GPUColorTargetInfo colorTargetInfo = {};
-  colorTargetInfo.clear_color = SDL_FColor{13.0f/255.0f, 115.0f/255.0f, 89.0f/255.0f, 1.0f};
+  colorTargetInfo.clear_color = SDL_FColor{bgColor.r, bgColor.g, bgColor.b, bgColor.a};
   colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
