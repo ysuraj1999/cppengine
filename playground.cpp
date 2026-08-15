@@ -35,23 +35,37 @@ int main(int argc, char* argv[]) {
   // (void)argv;
 
   std::vector<Mesh> meshContainer;
-  loadObj("models/breakfast_room.obj", meshContainer);
+  // loadObj("models/bmw.obj", meshContainer);
 
-  const u32 modelIndex = 1;
+  // const u32 modelIndex = 0;
   std::vector<Vertex> worldVertices = {};
   std::vector<u32> worldIndices = {};
 
-  u32 indexOffset = 0;
-  for (auto &mesh : meshContainer) {
-    for (auto &vertex : mesh.vertices) {
-      worldVertices.push_back(vertex);
-    }
-    for (auto &index : mesh.indices) {
-      worldIndices.push_back(index + indexOffset);
-    }
+  Vertex unitVertices[3] = {
+    { .position = {-1.0f, -1.0f, 0.0f} },
+    { .position = { 3.0f, -1.0f, 0.0f} },
+    { .position = {-1.0f,  3.0f, 0.0f} },
+  };
+  u32 unitIndices[3] = { 0, 1, 2 };
 
-    indexOffset += mesh.vertices.size();
+  for (auto &v : unitVertices) {
+    worldVertices.push_back(v);
   }
+  for (auto &i : unitIndices) {
+    worldIndices.push_back(i);
+  }
+  
+  // u32 indexOffset = 0;
+  // for (auto &mesh : meshContainer) {
+  //   for (auto &vertex : mesh.vertices) {
+  //     worldVertices.push_back(vertex);
+  //   }
+  //   for (auto &index : mesh.indices) {
+  //     worldIndices.push_back(index + indexOffset);
+  //   }
+
+  //   indexOffset += mesh.vertices.size();
+  // }
 
   // std::cout << vertices << '\n';
   // std::cout << indices << '\n';
