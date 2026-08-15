@@ -25,8 +25,9 @@
 #include "utils.cpp"
 
 static Camera camera;
-
 const auto WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
+const f32 KEYBOARD_SENSITIVITY = 10.0f;
+const f32 MOUSE_SENSITIVITY = 0.1f;
 
 int main(int argc, char* argv[]) {
   // (void)argc;
@@ -308,6 +309,7 @@ int main(int argc, char* argv[]) {
   pipelineInfo.target_info.num_color_targets = 1;
   pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
 
+  // Culling
   pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
   pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
 
@@ -377,8 +379,6 @@ int main(int argc, char* argv[]) {
 
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
-  const f32 keyboard_sensitivity = 50.0f;
-  const f32 mouse_sensitivity = 0.1f;
   float delta_x, delta_y;
   while (running) {
     const u64 now = SDL_GetPerformanceCounter();
@@ -396,9 +396,9 @@ int main(int argc, char* argv[]) {
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
 
     u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
-    camera.yaw -= delta_x * mouse_sensitivity;
+    camera.yaw -= delta_x * MOUSE_SENSITIVITY;
     camera.yaw = std::fmod(camera.yaw, 360.0f);
-    camera.pitch -= delta_y * mouse_sensitivity;
+    camera.pitch -= delta_y * MOUSE_SENSITIVITY;
     camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
 
     SDL_Event event;
@@ -412,22 +412,22 @@ int main(int argc, char* argv[]) {
       running = false;
     }
     if (keys[SDL_SCANCODE_W]) {
-      camera.position += forward * dt * keyboard_sensitivity;
+      camera.position += forward * dt * KEYBOARD_SENSITIVITY;
     }
     if (keys[SDL_SCANCODE_S]) {
-      camera.position -= forward * dt * keyboard_sensitivity;
+      camera.position -= forward * dt * KEYBOARD_SENSITIVITY;
     }
     if (keys[SDL_SCANCODE_A]) {
-      camera.position -= right * dt * keyboard_sensitivity;
+      camera.position -= right * dt * KEYBOARD_SENSITIVITY;
     }
     if (keys[SDL_SCANCODE_D]) {
-      camera.position += right * dt * keyboard_sensitivity;
+      camera.position += right * dt * KEYBOARD_SENSITIVITY;
     }
     if (keys[SDL_SCANCODE_SPACE]) {
-      camera.position += WORLD_UP * dt * keyboard_sensitivity;
+      camera.position += WORLD_UP * dt * KEYBOARD_SENSITIVITY;
     }
     if (keys[SDL_SCANCODE_LCTRL]) {
-      camera.position -= WORLD_UP * dt * keyboard_sensitivity;
+      camera.position -= WORLD_UP * dt * KEYBOARD_SENSITIVITY;
     }
 
     glm::mat4 view =
