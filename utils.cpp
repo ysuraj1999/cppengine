@@ -48,6 +48,18 @@ std::ostream& operator<<(std::ostream& os, const Vertex& v) {
 	    << "}";
 }
 
+std::ostream& operator<<(std::ostream& os, const glm::vec2& v) {
+    return os << "vec2(" << v.x << ", " << v.y << ")";
+}
+
+std::ostream& operator<<(std::ostream& os, const glm::vec3& v) {
+    return os << "vec3(" << v.x << ", " << v.y << ", " << v.z << ")";
+}
+
+std::ostream& operator<<(std::ostream& os, const glm::vec4& v) {
+    return os << "vec4(" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ")";
+}
+
 // RANDOM shit
 std::random_device rd;
 std::mt19937 gen(rd());

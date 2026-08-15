@@ -37,6 +37,7 @@ int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
+  // std::cout << "Resolution " << resolution << " size " << sizeof(resolution) << '\n';
   std::vector<Mesh> meshContainer;
   // loadObj("models/bmw.obj", meshContainer);
 
