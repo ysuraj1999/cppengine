@@ -318,8 +318,10 @@ int main(int argc, char* argv[]) {
   depthStencilState.enable_depth_write = true;
   depthStencilState.enable_depth_test = true;
   depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;
-  
+
   pipelineInfo.depth_stencil_state = depthStencilState;
+  pipelineInfo.target_info.has_depth_stencil_target = true;
+  pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
       
   SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
