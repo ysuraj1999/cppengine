@@ -132,7 +132,7 @@ int main(int argc, char* argv[]) {
     SDL_GPUTransferBuffer* transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
     sdlAssert(transferToIndexBuffer != nullptr);
 
-    Vertex* mappedIndicesInTransfer = reinterpret_cast<Vertex*>(
+    u32* mappedIndicesInTransfer = reinterpret_cast<u32*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
     std::memcpy(mappedIndicesInTransfer, worldIndices.data(), INDEX_BUFFER_SIZE);
