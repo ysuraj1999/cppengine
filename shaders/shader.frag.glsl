@@ -9,5 +9,7 @@ layout(set = 2, binding = 0) uniform sampler2D tex;
 
 void main()
 {
-  FragColor = texture(tex, v_uv);
+  vec3 N = normalize(v_normal);
+  FragColor = vec4(-N * 0.5 + 0.5, 1.0);
+  // FragColor = v_color;
 }
