@@ -309,7 +309,15 @@ int main(int argc, char* argv[]) {
   pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
 
   pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
-  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
+  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_COUNTER_CLOCKWISE;
+
+  // Depth test
+  SDL_GPUDepthStencilState depthStencilState = {};
+  depthStencilState.enable_depth_write = true;
+  depthStencilState.enable_depth_test = true;
+  depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;
+  
+  pipelineInfo.depth_stencil_state = depthStencilState;
       
   SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
@@ -362,8 +370,8 @@ int main(int argc, char* argv[]) {
   sdlAssert(depthTexture);
   
   SDL_GPUDepthStencilTargetInfo depthTargetInfo = {};
+  depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   depthTargetInfo.clear_depth = 1.0f;
-  depthTargetInfo.load_op = SDL_GPU_LOADOP_LOAD;
   depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
   depthTargetInfo.texture = depthTexture;
 
