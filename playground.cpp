@@ -26,7 +26,7 @@
 
 static Camera camera;
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
-const f32 KEYBOARD_SENSITIVITY = 1.0f;
+const f32 KEYBOARD_SENSITIVITY = 200.0f;
 const f32 MOUSE_SENSITIVITY = 0.1f;
 const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
                            1.0f};
@@ -45,6 +45,7 @@ int main(int argc, char* argv[]) {
   std::vector<Vertex> worldVertices = {};
   std::vector<u32> worldIndices = {};
 
+  // For fragment shader playground
   Vertex unitVertices[3] = {
     { .position = {0.0f, -100.0f, -100.0f} }, // bottom-left
     { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
@@ -435,23 +436,27 @@ int main(int argc, char* argv[]) {
       camera.pitch -= delta_y * MOUSE_SENSITIVITY;
       camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
 
+      f32 speed = KEYBOARD_SENSITIVITY;
+      if (keys[SDL_SCANCODE_LSHIFT]) {
+	speed *= 2.0f;
+      }
       if (keys[SDL_SCANCODE_W]) {
-	camera.position += forward * dt * KEYBOARD_SENSITIVITY;
+	camera.position += forward * dt * speed;
       }
       if (keys[SDL_SCANCODE_S]) {
-	camera.position -= forward * dt * KEYBOARD_SENSITIVITY;
+	camera.position -= forward * dt * speed;
       }
       if (keys[SDL_SCANCODE_A]) {
-	camera.position -= right * dt * KEYBOARD_SENSITIVITY;
+	camera.position -= right * dt * speed;
       }
       if (keys[SDL_SCANCODE_D]) {
-	camera.position += right * dt * KEYBOARD_SENSITIVITY;
+	camera.position += right * dt * speed;
       }
       if (keys[SDL_SCANCODE_SPACE]) {
-	camera.position += WORLD_UP * dt * KEYBOARD_SENSITIVITY;
+	camera.position += WORLD_UP * dt * speed;
       }
       if (keys[SDL_SCANCODE_LCTRL]) {
-	camera.position -= WORLD_UP * dt * KEYBOARD_SENSITIVITY;
+	camera.position -= WORLD_UP * dt * speed;
       }
     }
 
