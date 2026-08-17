@@ -64,6 +64,7 @@ int main(int argc, char* argv[]) {
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;
     meshRegionStorage.indexCount = (u32)mesh.indices.size();
+    renderState.meshRegions.push_back(meshRegionStorage);
     
     for (auto &vertex : mesh.vertices) {
       renderState.vertices.push_back(vertex);
@@ -76,9 +77,17 @@ int main(int argc, char* argv[]) {
     indexIndexOffset += mesh.indices.size();
   }
 
-  // std::cout << renderS << '\n';
-  // std::cout << worldindex.vertices << '\n';
-  
+  scene.objects[0] = {Transform{.position = {0.0f, 0.0f, 0.0f},
+                                .scale = {1.0f, 2.0f, 1.0f},
+                                .rotation = {0.0f, 0.0f, 0.0f}},
+                      Transform{.position = {4.0f, 1.0f, -2.0f},
+                                .scale = {2.0f, 2.0f, 2.0f},
+                                .rotation = {0.0f, 0.0f, 0.0f}}};
+
+  // for (auto &m : renderState.meshRegions) {
+  //   std::cout << m << '\n';
+  // }
+
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
   camera.pitch = 0.0f;
@@ -124,6 +133,13 @@ int main(int argc, char* argv[]) {
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
 
+  SDL_GPUBufferCreateInfo instanceBufferInfo = {};
+  const u32 INSTANCE_BUFFER_SIZE = scene.objects[0].size() * sizeof(Transform); // only instances of first shape
+  instanceBufferInfo.size = INSTANCE_BUFFER_SIZE;
+  instanceBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+  SDL_GPUBuffer* instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
+  sdlAssert(instanceBuffer != nullptr);
+
   SDL_GPUTexture *checkTexture;
   defer(SDL_ReleaseGPUTexture(gpuDevice, checkTexture));
   
@@ -149,6 +165,27 @@ int main(int argc, char* argv[]) {
     vertexBufferRegion.offset = 0;
     vertexBufferRegion.buffer = vertexBuffer;
     vertexBufferRegion.size = VERTEX_BUFFER_SIZE;
+
+    // INSTANCE BUFFER
+    SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
+    transferToInstanceBufferInfo.size = INSTANCE_BUFFER_SIZE;
+    transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBuffer* transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
+    sdlAssert(transferToInstanceBuffer != nullptr);
+
+    Transform* mappedToInstanceInTransfer = reinterpret_cast<Transform*>(
+							       SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
+    sdlAssert(mappedToInstanceInTransfer != nullptr);
+    std::memcpy(mappedToInstanceInTransfer, scene.objects[0].data(), INSTANCE_BUFFER_SIZE);
+
+    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
+    transferToInstanceBufferLocation.offset = 0;
+    transferToInstanceBufferLocation.transfer_buffer = transferToInstanceBuffer;
+
+    SDL_GPUBufferRegion instanceBufferRegion = {};
+    instanceBufferRegion.offset = 0;
+    instanceBufferRegion.buffer = instanceBuffer;
+    instanceBufferRegion.size = INSTANCE_BUFFER_SIZE;
 
     // INDEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {};
@@ -234,7 +271,9 @@ int main(int argc, char* argv[]) {
       // std::cout << "width " << tWidth << " height " << tHeight << '\n';
     }
 
-    
+
+    SDL_UploadToGPUBuffer(copyPass, &transferToInstanceBufferLocation,
+                          &instanceBufferRegion, false);
     SDL_UploadToGPUBuffer(copyPass, &transferToVertexBufferLocation,
                           &vertexBufferRegion, false);
     SDL_UploadToGPUBuffer(copyPass, &transferToIndexBufferLocation,
@@ -292,7 +331,7 @@ int main(int argc, char* argv[]) {
   pipelineInfo.fragment_shader = fragmentShader;
   pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
 
-  SDL_GPUVertexBufferDescription vertexBufferDescription[1] = {};
+  SDL_GPUVertexBufferDescription vertexBufferDescription[2] = {};
 
   // How each vertex is defined
   vertexBufferDescription[0].slot = 0;
@@ -300,11 +339,17 @@ int main(int argc, char* argv[]) {
   vertexBufferDescription[0].instance_step_rate = 0;
   vertexBufferDescription[0].pitch = (u32)sizeof(Vertex);
 
-  pipelineInfo.vertex_input_state.num_vertex_buffers = 1;
+  vertexBufferDescription[1].slot = 1;
+  vertexBufferDescription[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+  vertexBufferDescription[1].instance_step_rate = 1;
+  vertexBufferDescription[1].pitch = (u32)sizeof(Transform);
+
+  
+  pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
   pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
 
   // Vertex attributes
-  SDL_GPUVertexAttribute vertexAttributes[4] = {};
+  SDL_GPUVertexAttribute vertexAttributes[7] = {};
   vertexAttributes[0].buffer_slot = 0;
   vertexAttributes[0].location = 0;
   vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
@@ -325,7 +370,26 @@ int main(int argc, char* argv[]) {
   vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
   vertexAttributes[3].offset = offsetof(Vertex, uv);
 
-  pipelineInfo.vertex_input_state.num_vertex_attributes = 4;
+  // Instance attributes
+  vertexAttributes[4] = {
+    .location = 4,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+    .offset = offsetof(Transform, position)};
+
+  vertexAttributes[5] = {
+    .location = 5,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+    .offset = offsetof(Transform, scale)};
+
+  vertexAttributes[6] = {
+    .location = 6,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
+    .offset = offsetof(Transform, rotation)};
+
+  pipelineInfo.vertex_input_state.num_vertex_attributes = 7;
   pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
   
   SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
@@ -354,6 +418,10 @@ int main(int argc, char* argv[]) {
   SDL_GPUBufferBinding vertexBufferBinding[1] = {};
   vertexBufferBinding[0].buffer = vertexBuffer;
   vertexBufferBinding[0].offset = 0;
+
+  SDL_GPUBufferBinding instanceBufferBinding[1] = {};
+  instanceBufferBinding[0].buffer = instanceBuffer;
+  instanceBufferBinding[0].offset = 0;
 
   SDL_GPUBufferBinding indexBufferBinding[1] = {};
   indexBufferBinding[0].buffer = indexBuffer;
@@ -493,16 +561,33 @@ int main(int argc, char* argv[]) {
 				   
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
+    SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
     SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
                            SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
-    SDL_DrawGPUIndexedPrimitives(
-				 renderPass,
-				 renderState.indices.size(),
-				 1,
-				 0,
-				 0,
-				 0);
+
+
+    for (auto& entry : scene.objects) {
+      auto meshHandle = entry.first;
+      auto &instances = entry.second;
+
+      MeshRegion region = renderState.meshRegions[meshHandle];
+      SDL_DrawGPUIndexedPrimitives(
+				   renderPass,
+				   region.indexCount,
+				   instances.size(),
+				   region.indexOffset,
+				   region.vertexOffset,
+				   0);
+    }
+    
+    // SDL_DrawGPUIndexedPrimitives(
+    // 				 renderPass,
+    // 				 renderState.indices.size(),
+    // 				 1,
+    // 				 0,
+    // 				 0,
+    // 				 0);
     SDL_EndGPURenderPass(renderPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }

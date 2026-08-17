@@ -1,6 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <map>
 #include <vector>
 
 typedef int8_t i8;
@@ -75,9 +76,11 @@ struct Instance {
   Transform transform;
 };
 
+using Instances = std::vector<Transform>;
+
 struct Scene {
   std::vector<Mesh> meshes;
-  std::vector<Instance> instances;
+  std::map<MeshHandle, Instances> objects;
 };
 
 struct RendererState {

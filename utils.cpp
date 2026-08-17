@@ -60,6 +60,14 @@ std::ostream& operator<<(std::ostream& os, const glm::vec4& v) {
     return os << "vec4(" << v.x << ", " << v.y << ", " << v.z << ", " << v.w << ")";
 }
 
+std::ostream& operator<<(std::ostream& os, const MeshRegion& r) {
+  return os << "MeshRegion("
+	    << "vertexOffset=" << r.vertexOffset
+	    << ", indexOffset=" << r.indexOffset
+	    << ", indexCount=" << r.indexCount
+	    << ")";
+}
+
 // RANDOM shit
 std::random_device rd;
 std::mt19937 gen(rd());
