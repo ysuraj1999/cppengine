@@ -78,6 +78,11 @@ struct Instance {
 struct Scene {
   std::vector<Mesh> meshes;
   std::vector<Instance> instances;
+};
+
+struct RendererState {
+  std::vector<Vertex> vertices;
+  std::vector<u32> indices;
   std::vector<MeshRegion> meshRegions;
 };
 

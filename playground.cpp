@@ -38,13 +38,9 @@ int main(int argc, char* argv[]) {
   // (void)argv;
 
   // std::cout << "Resolution " << resolution << " size " << sizeof(resolution) << '\n';
-  Scene scene;
+  Scene scene = {};
+  RendererState renderState = {};
   loadObj("models/cube.obj", scene);
-
-  // const u32 modelIndex = 0;
-  std::vector<Vertex> worldVertices = {};
-  std::vector<u32> worldIndices = {};
-  std::vector<MeshRegion> meshRegions = {};
 
   // For fragment shader playground
   // Vertex unitVertices[3] = {
@@ -52,29 +48,36 @@ int main(int argc, char* argv[]) {
   //   { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
   //   { .position = {0.0f,  300.0f, -100.0f} }, // top-left
   // };
-  // u32 unitIndices[3] = { 0, 1, 2 };
+  // u32 unitindex.vertices[3] = { 0, 1, 2 };
 
   // for (auto &v : unitVertices) {
-  //   worldVertices.push_back(v);
+  //   renderS.push_back(v);
   // }
   // for (auto &i : unitIndices) {
   //   worldIndices.push_back(i);
   // }
-  
+
   u32 vertIndexOffset = 0;
+  u32 indexIndexOffset = 0;
   for (auto &mesh : scene.meshes) {
+    MeshRegion meshRegionStorage = {};
+    meshRegionStorage.vertexOffset = vertIndexOffset;
+    meshRegionStorage.indexOffset = indexIndexOffset;
+    meshRegionStorage.indexCount = (u32)mesh.indices.size();
+    
     for (auto &vertex : mesh.vertices) {
-      worldVertices.push_back(vertex);
+      renderState.vertices.push_back(vertex);
     }
     for (auto &index : mesh.indices) {
-      worldIndices.push_back(index + vertIndexOffset);
+      renderState.indices.push_back(index + vertIndexOffset);
     }
 
     vertIndexOffset += mesh.vertices.size();
+    indexIndexOffset += mesh.indices.size();
   }
 
-  // std::cout << worldVertices << '\n';
-  // std::cout << worldIndices << '\n';
+  // std::cout << renderS << '\n';
+  // std::cout << worldindex.vertices << '\n';
   
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
@@ -108,14 +111,14 @@ int main(int argc, char* argv[]) {
   sdlAssert(commandBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  const u32 VERTEX_BUFFER_SIZE = worldVertices.size() * sizeof(Vertex);
+  const u32 VERTEX_BUFFER_SIZE = renderState.vertices.size() * sizeof(Vertex);
   vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  const u32 INDEX_BUFFER_SIZE = worldIndices.size() * sizeof(u32);
+  const u32 INDEX_BUFFER_SIZE = renderState.indices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
@@ -136,7 +139,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, worldVertices.data(), VERTEX_BUFFER_SIZE);
+    std::memcpy(mappedVertexInTransfer, renderState.vertices.data(), VERTEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
     transferToVertexBufferLocation.offset = 0;
@@ -157,7 +160,7 @@ int main(int argc, char* argv[]) {
     u32* mappedIndicesInTransfer = reinterpret_cast<u32*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, worldIndices.data(), INDEX_BUFFER_SIZE);
+    std::memcpy(mappedIndicesInTransfer, renderState.indices.data(), INDEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
     transferToIndexBufferLocation.offset = 0;
@@ -495,7 +498,7 @@ int main(int argc, char* argv[]) {
     SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass,
-				 worldIndices.size(),
+				 renderState.indices.size(),
 				 1,
 				 0,
 				 0,
