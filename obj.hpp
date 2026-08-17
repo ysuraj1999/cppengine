@@ -1,5 +1,4 @@
 #include <iostream>
-
 #include "types.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION // needed for tinyobj
@@ -10,7 +9,7 @@
 
 
 // Only load the first shape
-void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
+void loadObj(const char* inputfile, Scene &scene) {
   std::string warn, err;
   
   tinyobj::ObjReaderConfig reader_config;
@@ -33,10 +32,13 @@ void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
   auto& attrib = reader.GetAttrib();
   auto &shapes = reader.GetShapes();
 
+
+  
   for (u32 shapeIndex = 0; shapeIndex < shapes.size(); shapeIndex++) {
     auto &shape = shapes[shapeIndex];
 
     Mesh mesh{};
+    std::map<std::tuple<int, int, int>, u32> vertexMap;
     u32 indexOffset = 0;
     for (u32 faceIndex = 0; faceIndex < shape.mesh.num_face_vertices.size();
          faceIndex++) {
@@ -47,6 +49,7 @@ void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
       Vertex vertexStorage{};
       for (u32 vertIndex = 0; vertIndex < 3; vertIndex++) {
         auto idx = shape.mesh.indices[indexOffset + vertIndex];
+
         tinyobj::real_t vx = attrib.vertices[3 * idx.vertex_index + 0];
 	tinyobj::real_t vy = attrib.vertices[3 * idx.vertex_index + 1];
         tinyobj::real_t vz = attrib.vertices[3 * idx.vertex_index + 2];
@@ -74,14 +77,25 @@ void loadObj(const char* inputfile, std::vector<Mesh> &meshContainer) {
 
         vertexStorage.color = {red, green, blue, 255.0f};
 
-        u32 vIndex = mesh.vertices.size();
-        mesh.vertices.push_back(vertexStorage);
-        mesh.indices.push_back(vIndex);
+	auto key = std::make_tuple(
+				   idx.vertex_index,
+				   idx.texcoord_index,
+				   idx.normal_index
+				   );
+
+	auto [it, inserted] =
+	  vertexMap.emplace(key, mesh.vertices.size());
+
+	if (inserted) {
+	  mesh.vertices.push_back(vertexStorage);
+	}
+
+	mesh.indices.push_back(it->second);
       }
 
       indexOffset += 3;
     }
 
-    meshContainer.push_back(mesh);
+    scene.meshes.push_back(mesh);
   }
 }

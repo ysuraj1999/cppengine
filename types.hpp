@@ -56,5 +56,30 @@ struct Mesh {
   std::vector<u32> indices;
 };
 
+struct Transform {
+  glm::vec3 position;
+  glm::vec3 scale;
+  glm::vec3 rotation; // roll, yaw, pitch
+};
+
+struct MeshRegion {
+    u32 vertexOffset;
+    u32 indexOffset;
+    u32 indexCount;
+};
+
+using MeshHandle = u32;
+
+struct Instance {
+  MeshHandle mesh;
+  Transform transform;
+};
+
+struct Scene {
+  std::vector<Mesh> meshes;
+  std::vector<Instance> instances;
+  std::vector<MeshRegion> meshRegions;
+};
+
 Mat4 translateMatrix(const f32 v[4]);
 Mat4 translateMatrix(const glm::vec3& v);

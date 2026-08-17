@@ -26,51 +26,52 @@
 
 static Camera camera;
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
-const f32 KEYBOARD_SENSITIVITY = 200.0f;
+const f32 KEYBOARD_SENSITIVITY = 10.0f;
 const f32 MOUSE_SENSITIVITY = 0.1f;
 const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
                            1.0f};
 const glm::vec2 resolution = {800.0f, 800.0f};
-bool cameraEnabled = false;
+bool cameraEnabled = true;
 
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
   // std::cout << "Resolution " << resolution << " size " << sizeof(resolution) << '\n';
-  std::vector<Mesh> meshContainer;
-  // loadObj("models/bmw.obj", meshContainer);
+  Scene scene;
+  loadObj("models/cube.obj", scene);
 
   // const u32 modelIndex = 0;
   std::vector<Vertex> worldVertices = {};
   std::vector<u32> worldIndices = {};
+  std::vector<MeshRegion> meshRegions = {};
 
   // For fragment shader playground
-  Vertex unitVertices[3] = {
-    { .position = {0.0f, -100.0f, -100.0f} }, // bottom-left
-    { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
-    { .position = {0.0f,  300.0f, -100.0f} }, // top-left
-  };
-  u32 unitIndices[3] = { 0, 1, 2 };
+  // Vertex unitVertices[3] = {
+  //   { .position = {0.0f, -100.0f, -100.0f} }, // bottom-left
+  //   { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
+  //   { .position = {0.0f,  300.0f, -100.0f} }, // top-left
+  // };
+  // u32 unitIndices[3] = { 0, 1, 2 };
 
-  for (auto &v : unitVertices) {
-    worldVertices.push_back(v);
-  }
-  for (auto &i : unitIndices) {
-    worldIndices.push_back(i);
-  }
-  
-  // u32 indexOffset = 0;
-  // for (auto &mesh : meshContainer) {
-  //   for (auto &vertex : mesh.vertices) {
-  //     worldVertices.push_back(vertex);
-  //   }
-  //   for (auto &index : mesh.indices) {
-  //     worldIndices.push_back(index + indexOffset);
-  //   }
-
-  //   indexOffset += mesh.vertices.size();
+  // for (auto &v : unitVertices) {
+  //   worldVertices.push_back(v);
   // }
+  // for (auto &i : unitIndices) {
+  //   worldIndices.push_back(i);
+  // }
+  
+  u32 vertIndexOffset = 0;
+  for (auto &mesh : scene.meshes) {
+    for (auto &vertex : mesh.vertices) {
+      worldVertices.push_back(vertex);
+    }
+    for (auto &index : mesh.indices) {
+      worldIndices.push_back(index + vertIndexOffset);
+    }
+
+    vertIndexOffset += mesh.vertices.size();
+  }
 
   // std::cout << worldVertices << '\n';
   // std::cout << worldIndices << '\n';
