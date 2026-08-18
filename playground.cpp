@@ -33,6 +33,18 @@ const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
 const glm::vec2 resolution = {800.0f, 800.0f};
 bool cameraEnabled = true;
 
+static glm::mat4 transformToMat4(const Transform& t) {
+  glm::mat4 translation = glm::translate(glm::mat4(1.0f), t.position);
+  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.x),
+                                    glm::vec3(1.0f, 0.0f, 0.0f));
+  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.y),
+                                    glm::vec3(0.0f, 1.0f, 0.0f));
+  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.z),
+                                    glm::vec3(0.0f, 0.0f, 1.0f));
+  glm::mat4 scale = glm::scale(glm::mat4(1.0f), t.scale);
+  return translation * rotationZ * rotationY * rotationX * scale;
+}
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
@@ -77,28 +89,26 @@ int main(int argc, char* argv[]) {
     vertIndexOffset += mesh.vertices.size();
     indexIndexOffset += mesh.indices.size();
   }
-
-  scene.objects[0] = {
-    Transform{
-      .position = {0.0f, 0.0f, 0.0f},
-      .scale = {1.0f, 1.0f, 1.0f},
-      .rotation = {0.0f, 0.0f, 0.0f}
+  
+  u32 GRID_SIZE = 1;
+  for (u32 x = 0; x < GRID_SIZE; x++){
+    for (u32 y = 0; y < GRID_SIZE; y++){
+      for (u32 z = 0; z < GRID_SIZE; z++){
+        scene.objects[0].push_back(Transform{
+            .position = {1.0f * x, 1.0f * y, 1.0f * z},
+            .scale = {1.0f, 1.0f, 1.0f},
+            .rotation = {0.0f, 0.0f, 0.0f}
+        });
+      }
     }
-  };
-
-  scene.objects[1] = {
-    Transform{
-      .position = {5.0f, 0.0f, 0.0f},
-      .scale = {1.0f, 1.0f, 1.0f},
-      .rotation = {0.0f, 0.0f, 0.0f}
-    }
-  };
+  }
 
   std::cout << "MESH REGIONS START" << '\n';
   for (auto &m : renderState.meshRegions) {
     std::cout << m << '\n';
   }
   std::cout << "MESH REGIONS END" << '\n';
+  std::cout << "FACE COUNT " << renderState.indices.size() / 3 << '\n';
 
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
@@ -148,14 +158,14 @@ int main(int argc, char* argv[]) {
 
   
   SDL_GPUBufferCreateInfo instanceBufferInfo = {};
-  const u32 INSTANCE_ALLOCATE_SIZE = 10 * 1024 * 1024;
-  instanceBufferInfo.size = INSTANCE_ALLOCATE_SIZE;
+  const u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
+  instanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
   instanceBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
   sdlAssert(instanceBuffer != nullptr);
 
   SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
-  transferToInstanceBufferInfo.size = INSTANCE_ALLOCATE_SIZE;
+  transferToInstanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
   transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
   SDL_GPUTransferBuffer* transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
   sdlAssert(transferToInstanceBuffer != nullptr);
@@ -339,14 +349,14 @@ int main(int argc, char* argv[]) {
   vertexBufferDescription[1].slot = 1;
   vertexBufferDescription[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
   vertexBufferDescription[1].instance_step_rate = 1;
-  vertexBufferDescription[1].pitch = (u32)sizeof(Transform);
+  vertexBufferDescription[1].pitch = (u32)sizeof(glm::mat4);
 
   
   pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
   pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
 
   // Vertex attributes
-  SDL_GPUVertexAttribute vertexAttributes[7] = {};
+  SDL_GPUVertexAttribute vertexAttributes[8] = {};
   vertexAttributes[0].buffer_slot = 0;
   vertexAttributes[0].location = 0;
   vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
@@ -371,22 +381,28 @@ int main(int argc, char* argv[]) {
   vertexAttributes[4] = {
     .location = 4,
     .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    .offset = offsetof(Transform, position)};
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 0};
 
   vertexAttributes[5] = {
     .location = 5,
     .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    .offset = offsetof(Transform, scale)};
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = sizeof(glm::vec4)};
 
   vertexAttributes[6] = {
     .location = 6,
     .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3,
-    .offset = offsetof(Transform, rotation)};
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 2 * sizeof(glm::vec4)};
 
-  pipelineInfo.vertex_input_state.num_vertex_attributes = 7;
+  vertexAttributes[7] = {
+    .location = 7,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 3 * sizeof(glm::vec4)};
+
+  pipelineInfo.vertex_input_state.num_vertex_attributes = 8;
   pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
   
   SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
@@ -571,15 +587,22 @@ int main(int argc, char* argv[]) {
       SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
       sdlAssert(frameCopyPass != nullptr);
 
-      const u32 requiredInstanceCopySize = instances.size() * sizeof(Transform);
-      assert(requiredInstanceCopySize <= INSTANCE_ALLOCATE_SIZE);
-      
-      Transform *mappedToInstanceInTransfer =
-	reinterpret_cast<Transform*>(
+      std::vector<glm::mat4> modelMatrices;
+      modelMatrices.reserve(instances.size());
+      for (auto &t : instances) {
+        modelMatrices.push_back(transformToMat4(t));
+      }
+
+      const u32 requiredInstanceCopySize =
+          modelMatrices.size() * sizeof(glm::mat4);
+      assert(requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+
+      glm::mat4 *mappedToInstanceInTransfer =
+	reinterpret_cast<glm::mat4*>(
 				     SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
       sdlAssert(mappedToInstanceInTransfer != nullptr);
       std::memcpy((u8 *)mappedToInstanceInTransfer + transferBufferOffsetPerMesh,
-		  instances.data(), requiredInstanceCopySize);
+		  modelMatrices.data(), requiredInstanceCopySize);
 
       SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
       transferToInstanceBufferLocation.offset = transferBufferOffsetPerMesh;
@@ -587,7 +610,7 @@ int main(int argc, char* argv[]) {
           transferToInstanceBuffer;
 
       SDL_GPUBufferRegion instanceBufferRegion = {};
-      instanceBufferRegion.offset = 0;
+      instanceBufferRegion.offset = transferBufferOffsetPerMesh;
       instanceBufferRegion.buffer = instanceBuffer;
       instanceBufferRegion.size = requiredInstanceCopySize;
 
@@ -602,6 +625,7 @@ int main(int argc, char* argv[]) {
                                    region.vertexOffset, 0);
       transferBufferOffsetPerMesh += requiredInstanceCopySize;
     }
+
     
     SDL_EndGPURenderPass(renderPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
