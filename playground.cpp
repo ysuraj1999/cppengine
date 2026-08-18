@@ -41,6 +41,7 @@ int main(int argc, char* argv[]) {
   Scene scene = {};
   RendererState renderState = {};
   loadObj("models/cube.obj", scene);
+  loadObj("models/bunny.obj", scene);
 
   // For fragment shader playground
   // Vertex unitVertices[3] = {
@@ -70,23 +71,34 @@ int main(int argc, char* argv[]) {
       renderState.vertices.push_back(vertex);
     }
     for (auto &index : mesh.indices) {
-      renderState.indices.push_back(index + vertIndexOffset);
+      renderState.indices.push_back(index);
     }
 
     vertIndexOffset += mesh.vertices.size();
     indexIndexOffset += mesh.indices.size();
   }
 
-  scene.objects[0] = {Transform{.position = {0.0f, 0.0f, 0.0f},
-                                .scale = {1.0f, 2.0f, 1.0f},
-                                .rotation = {0.0f, 0.0f, 0.0f}},
-                      Transform{.position = {4.0f, 1.0f, -2.0f},
-                                .scale = {2.0f, 2.0f, 2.0f},
-                                .rotation = {0.0f, 0.0f, 0.0f}}};
+  scene.objects[0] = {
+    Transform{
+      .position = {-5.0f, -5.0f, -5.0f},
+      .scale = {2.0f, 2.0f, 2.0f},
+      .rotation = {0.0f, 0.0f, 0.0f}
+    }
+  };
 
-  // for (auto &m : renderState.meshRegions) {
-  //   std::cout << m << '\n';
-  // }
+  scene.objects[1] = {
+    Transform{
+      .position = {5.0f, 5.0f, 5.0f},
+      .scale = {0.5f, 0.5f, 0.5f},
+      .rotation = {0.0f, 0.0f, 0.0f}
+    }
+  };
+
+  std::cout << "MESH REGIONS START" << '\n';
+  for (auto &m : renderState.meshRegions) {
+    std::cout << m << '\n';
+  }
+  std::cout << "MESH REGIONS END" << '\n';
 
   camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
   camera.yaw = 0.0f;
@@ -126,6 +138,7 @@ int main(int argc, char* argv[]) {
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
 
+  
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
   const u32 INDEX_BUFFER_SIZE = renderState.indices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
@@ -133,12 +146,19 @@ int main(int argc, char* argv[]) {
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
 
+  
   SDL_GPUBufferCreateInfo instanceBufferInfo = {};
-  const u32 INSTANCE_BUFFER_SIZE = scene.objects[0].size() * sizeof(Transform); // only instances of first shape
-  instanceBufferInfo.size = INSTANCE_BUFFER_SIZE;
+  const u32 INSTANCE_ALLOCATE_SIZE = 10 * 1024 * 1024;
+  instanceBufferInfo.size = INSTANCE_ALLOCATE_SIZE;
   instanceBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
   sdlAssert(instanceBuffer != nullptr);
+
+  SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
+  transferToInstanceBufferInfo.size = INSTANCE_ALLOCATE_SIZE;
+  transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  SDL_GPUTransferBuffer* transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
+  sdlAssert(transferToInstanceBuffer != nullptr);
 
   SDL_GPUTexture *checkTexture;
   defer(SDL_ReleaseGPUTexture(gpuDevice, checkTexture));
@@ -166,27 +186,6 @@ int main(int argc, char* argv[]) {
     vertexBufferRegion.buffer = vertexBuffer;
     vertexBufferRegion.size = VERTEX_BUFFER_SIZE;
 
-    // INSTANCE BUFFER
-    SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
-    transferToInstanceBufferInfo.size = INSTANCE_BUFFER_SIZE;
-    transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-    SDL_GPUTransferBuffer* transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
-    sdlAssert(transferToInstanceBuffer != nullptr);
-
-    Transform* mappedToInstanceInTransfer = reinterpret_cast<Transform*>(
-							       SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
-    sdlAssert(mappedToInstanceInTransfer != nullptr);
-    std::memcpy(mappedToInstanceInTransfer, scene.objects[0].data(), INSTANCE_BUFFER_SIZE);
-
-    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
-    transferToInstanceBufferLocation.offset = 0;
-    transferToInstanceBufferLocation.transfer_buffer = transferToInstanceBuffer;
-
-    SDL_GPUBufferRegion instanceBufferRegion = {};
-    instanceBufferRegion.offset = 0;
-    instanceBufferRegion.buffer = instanceBuffer;
-    instanceBufferRegion.size = INSTANCE_BUFFER_SIZE;
-
     // INDEX BUFFER
     SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {};
     transferToIndexBufferInfo.size = INDEX_BUFFER_SIZE;
@@ -209,8 +208,8 @@ int main(int argc, char* argv[]) {
     indexBufferRegion.size = INDEX_BUFFER_SIZE;
 
 
-    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
-    sdlAssert(copyPass != nullptr);
+    SDL_GPUCopyPass* initialCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    sdlAssert(initialCopyPass != nullptr);
 
     {
       SDL_GPUTextureCreateInfo textureInfo = {};
@@ -266,19 +265,17 @@ int main(int argc, char* argv[]) {
       textureRegion.h = 512;
       textureRegion.d = 1;
 
-      SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
+      SDL_UploadToGPUTexture(initialCopyPass, &textureTransferInfo, &textureRegion, false);
 
       // std::cout << "width " << tWidth << " height " << tHeight << '\n';
     }
 
 
-    SDL_UploadToGPUBuffer(copyPass, &transferToInstanceBufferLocation,
-                          &instanceBufferRegion, false);
-    SDL_UploadToGPUBuffer(copyPass, &transferToVertexBufferLocation,
+    SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation,
                           &vertexBufferRegion, false);
-    SDL_UploadToGPUBuffer(copyPass, &transferToIndexBufferLocation,
+    SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation,
 			      &indexBufferRegion, false);
-    SDL_EndGPUCopyPass(copyPass);
+    SDL_EndGPUCopyPass(initialCopyPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 
     // Unmap and release transfer buffer once uploaded
@@ -566,28 +563,46 @@ int main(int argc, char* argv[]) {
                            SDL_GPU_INDEXELEMENTSIZE_32BIT);
     SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
 
-
+    u32 transferBufferOffsetPerMesh = 0;
     for (auto& entry : scene.objects) {
       auto meshHandle = entry.first;
       auto &instances = entry.second;
 
+      SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+      sdlAssert(frameCopyPass != nullptr);
+
+      const u32 requiredInstanceCopySize = instances.size() * sizeof(Transform);
+      assert(requiredInstanceCopySize <= INSTANCE_ALLOCATE_SIZE);
+      
+      Transform *mappedToInstanceInTransfer =
+	reinterpret_cast<Transform*>(
+				     SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
+      sdlAssert(mappedToInstanceInTransfer != nullptr);
+      std::memcpy((u8 *)mappedToInstanceInTransfer + transferBufferOffsetPerMesh,
+		  instances.data(), requiredInstanceCopySize);
+
+      SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
+      transferToInstanceBufferLocation.offset = transferBufferOffsetPerMesh;
+      transferToInstanceBufferLocation.transfer_buffer =
+          transferToInstanceBuffer;
+
+      SDL_GPUBufferRegion instanceBufferRegion = {};
+      instanceBufferRegion.offset = 0;
+      instanceBufferRegion.buffer = instanceBuffer;
+      instanceBufferRegion.size = requiredInstanceCopySize;
+
       MeshRegion region = renderState.meshRegions[meshHandle];
-      SDL_DrawGPUIndexedPrimitives(
-				   renderPass,
-				   region.indexCount,
-				   instances.size(),
-				   region.indexOffset,
-				   region.vertexOffset,
-				   0);
+
+      SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
+                          &instanceBufferRegion, false);
+      SDL_EndGPUCopyPass(frameCopyPass);
+
+      SDL_DrawGPUIndexedPrimitives(renderPass, region.indexCount,
+                                   instances.size(), region.indexOffset,
+                                   region.vertexOffset, 0);
+      transferBufferOffsetPerMesh += requiredInstanceCopySize;
     }
     
-    // SDL_DrawGPUIndexedPrimitives(
-    // 				 renderPass,
-    // 				 renderState.indices.size(),
-    // 				 1,
-    // 				 0,
-    // 				 0,
-    // 				 0);
     SDL_EndGPURenderPass(renderPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }

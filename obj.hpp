@@ -2,10 +2,10 @@
 #include "types.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION // needed for tinyobj
-#include "tiny_obj_loader.h"
-
 #define TINYOBJLOADER_USE_MULTITHREADING  // multi-threaded parsing
 #define TINYOBJLOADER_USE_SIMD            // SIMD (SSE2/AVX2/NEON) newline scan
+#include "tiny_obj_loader.h"
+
 
 
 // Only load the first shape
@@ -71,11 +71,14 @@ void loadObj(const char* inputfile, Scene &scene) {
           vertexStorage.uv = {tx, ty};
         }
 
-        tinyobj::real_t red = attrib.colors[3 * idx.vertex_index + 0];
-        tinyobj::real_t green = attrib.colors[3 * idx.vertex_index + 1];
-        tinyobj::real_t blue = attrib.colors[3 * idx.vertex_index + 2];
-
-        vertexStorage.color = {red, green, blue, 255.0f};
+        if (!attrib.colors.empty()){
+          tinyobj::real_t red = attrib.colors[3 * idx.vertex_index + 0];
+          tinyobj::real_t green = attrib.colors[3 * idx.vertex_index + 1];
+          tinyobj::real_t blue = attrib.colors[3 * idx.vertex_index + 2];
+          vertexStorage.color = {red, green, blue, 1.0f};
+        } else {
+          vertexStorage.color = glm::vec4(1.0f);
+        }
 
 	auto key = std::make_tuple(
 				   idx.vertex_index,
