@@ -40,8 +40,8 @@ int main(int argc, char* argv[]) {
   // std::cout << "Resolution " << resolution << " size " << sizeof(resolution) << '\n';
   Scene scene = {};
   RendererState renderState = {};
-  loadObj("models/cube.obj", scene);
-  loadObj("models/bunny.obj", scene);
+  loadObjIntoScene("models/cube.obj", scene);
+  loadObjIntoScene("models/bunny.obj", scene);
 
   // For fragment shader playground
   // Vertex unitVertices[3] = {
@@ -80,16 +80,16 @@ int main(int argc, char* argv[]) {
 
   scene.objects[0] = {
     Transform{
-      .position = {-5.0f, -5.0f, -5.0f},
-      .scale = {2.0f, 2.0f, 2.0f},
+      .position = {0.0f, 0.0f, 0.0f},
+      .scale = {1.0f, 1.0f, 1.0f},
       .rotation = {0.0f, 0.0f, 0.0f}
     }
   };
 
   scene.objects[1] = {
     Transform{
-      .position = {5.0f, 5.0f, 5.0f},
-      .scale = {0.5f, 0.5f, 0.5f},
+      .position = {5.0f, 0.0f, 0.0f},
+      .scale = {1.0f, 1.0f, 1.0f},
       .rotation = {0.0f, 0.0f, 0.0f}
     }
   };

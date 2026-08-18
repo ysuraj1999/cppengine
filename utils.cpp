@@ -74,6 +74,10 @@ std::mt19937 gen(rd());
 std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
 
+float degToRad(float deg) {
+  return deg * (M_PI / 180.0f);
+}
+
 // DEFER
 template <typename F>
 class ScopeGuard {

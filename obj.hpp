@@ -9,7 +9,7 @@
 
 
 // Only load the first shape
-void loadObj(const char* inputfile, Scene &scene) {
+void loadObjIntoScene(const char* inputfile, Scene &scene) {
   std::string warn, err;
   
   tinyobj::ObjReaderConfig reader_config;
