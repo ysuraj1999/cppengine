@@ -24,7 +24,7 @@
 bool renderer_init(RendererConfig config);
 bool scene_load_obj(Scene *scene, const char *path);
 MeshHandle scene_add_mesh(Scene *scene, Mesh m);
-bool scene_remove_mesh(Scene *scene, Mesh m);
+bool scene_remove_mesh(Scene *scene, MeshHandle mh);
 InstanceHandle scene_add_instance(Scene *scene, MeshHandle m, Transform t);
 bool scene_remove_instance(Scene *scene, InstanceHandle i);
 bool renderer_sync_scene(RendererState *rendererState, const Scene *scene);

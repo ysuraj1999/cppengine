@@ -69,18 +69,24 @@ struct MeshRegion {
     u32 indexCount;
 };
 
-using MeshHandle = u32;
-using InstanceHandle = u32;
+using MeshHandle = u64;
+using InstanceHandle = u64;
 
 struct Instance {
-  MeshHandle mesh;
+  InstanceHandle instanceHandle;
+  MeshHandle mesh; // redundant, for direct mapping
   Transform transform;
 };
 
-using Instances = std::vector<Transform>;
+using Instances = std::vector<Instance>;
+
+struct MeshEntry {
+    MeshHandle handle;
+    Mesh mesh;
+};
 
 struct Scene {
-  std::vector<Mesh> meshes;
+  std::vector<MeshEntry> meshes;
   std::map<MeshHandle, Instances> objects;
 };
 

@@ -1,10 +1,95 @@
 #include "playground.h"
+#include "types.hpp"
+
+// CONSTANTS
+const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
+
+// Monotonically increasing counters
+uint64_t next_mesh_handle = 0;
+uint64_t next_instance_handle = 0;
 
 static RendererConfig rendererConfig = {};
-const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
 
 bool renderer_init(RendererConfig config) {
   rendererConfig = config;
+  return true;
+}
+
+bool scene_load_obj(Scene *scene, const char *path) {
+  std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
+
+  for (const auto &m : meshCollection) {
+    scene_add_mesh(scene, m);
+  }
+  
+  return true;
+}
+
+MeshHandle scene_add_mesh(Scene *scene, Mesh m) {
+  MeshEntry mEntry = {};
+  mEntry.handle = next_mesh_handle++;
+  mEntry.mesh = m;
+  (*scene).meshes.push_back(mEntry);
+  return mEntry.handle;
+}
+
+bool scene_remove_mesh(Scene *scene, MeshHandle mh) {
+  for (auto it = scene->meshes.begin(); it != scene->meshes.end(); ++it) {
+    if (it->handle == mh) {
+      // erase instances
+      scene->objects[mh].clear();
+      
+      scene->meshes.erase(it);
+      return true;
+    }
+  }
+  return false;
+}
+
+InstanceHandle scene_add_instance(Scene *scene, MeshHandle m, Transform t) {
+  Instance newInstance = {};
+  newInstance.instanceHandle = next_instance_handle++;
+  newInstance.mesh = m;
+  newInstance.transform = t;
+
+  scene->objects[m].push_back(newInstance);
+  return newInstance.instanceHandle;
+}
+
+bool scene_remove_instance(Scene *scene, InstanceHandle ih) {
+  for (auto &[meshHandle, instances] : scene->objects) {
+    for (auto it = instances.begin(); it != instances.end(); it++) {
+      if (it->instanceHandle == ih) {
+        instances.erase(it);
+	return true;
+      }
+    }
+  }
+  return false;
+}
+
+bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
+  u32 vertIndexOffset = 0;
+  u32 indexIndexOffset = 0;
+  for (const MeshEntry &meshEntry : scene->meshes) {
+    const Mesh mesh = meshEntry.mesh;
+    MeshRegion meshRegionStorage = {};
+    meshRegionStorage.vertexOffset = vertIndexOffset;
+    meshRegionStorage.indexOffset = indexIndexOffset;
+    meshRegionStorage.indexCount = (u32)mesh.indices.size();
+    rendererState->meshRegions.push_back(meshRegionStorage);
+    
+    for (auto &vertex : mesh.vertices) {
+      rendererState->vertices.push_back(vertex);
+    }
+    for (auto &index : mesh.indices) {
+      rendererState->indices.push_back(index);
+    }
+
+    vertIndexOffset += mesh.vertices.size();
+    indexIndexOffset += mesh.indices.size();
+  }
+  
   return true;
 }
 
@@ -24,38 +109,21 @@ int main(int argc, char* argv[]) {
 
   Scene scene = {};
   RendererState renderState = {};
-  loadObjIntoScene("models/cube.obj", scene);
-  loadObjIntoScene("models/bunny.obj", scene);
 
-  u32 vertIndexOffset = 0;
-  u32 indexIndexOffset = 0;
-  for (auto &mesh : scene.meshes) {
-    MeshRegion meshRegionStorage = {};
-    meshRegionStorage.vertexOffset = vertIndexOffset;
-    meshRegionStorage.indexOffset = indexIndexOffset;
-    meshRegionStorage.indexCount = (u32)mesh.indices.size();
-    renderState.meshRegions.push_back(meshRegionStorage);
-    
-    for (auto &vertex : mesh.vertices) {
-      renderState.vertices.push_back(vertex);
-    }
-    for (auto &index : mesh.indices) {
-      renderState.indices.push_back(index);
-    }
+  scene_load_obj(&scene, "models/cube.obj");
+  scene_load_obj(&scene, "models/bunny.obj");
 
-    vertIndexOffset += mesh.vertices.size();
-    indexIndexOffset += mesh.indices.size();
-  }
+  renderer_sync_scene(&renderState, &scene);
   
   u32 GRID_SIZE = 1;
   for (u32 x = 0; x < GRID_SIZE; x++){
     for (u32 y = 0; y < GRID_SIZE; y++){
-      for (u32 z = 0; z < GRID_SIZE; z++){
-        scene.objects[0].push_back(Transform{
+      for (u32 z = 0; z < GRID_SIZE; z++) {
+	scene_add_instance(&scene, 0, Transform{
             .position = {1.0f * x, 1.0f * y, 1.0f * z},
             .scale = {1.0f, 1.0f, 1.0f},
             .rotation = {0.0f, 0.0f, 0.0f}
-        });
+	  });
       }
     }
   }
@@ -543,7 +611,7 @@ int main(int argc, char* argv[]) {
       std::vector<glm::mat4> modelMatrices;
       modelMatrices.reserve(instances.size());
       for (auto &t : instances) {
-        modelMatrices.push_back(transformToMat4(t));
+        modelMatrices.push_back(transformToMat4(t.transform));
       }
 
       const u32 requiredInstanceCopySize =

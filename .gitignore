@@ -9,6 +9,8 @@
 /Makefile
 /compile_commands.json
 
+playground
+
 *.spv
 *~
 .gdb_history
