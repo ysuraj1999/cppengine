@@ -31,6 +31,8 @@ typedef struct Camera {
   glm::vec3 position;
   f32 yaw = 0.0f;
   f32 pitch = 0.0f;
+  glm::vec3 forward; // cached forward & right
+  glm::vec3 right;
 } Camera;
 
 struct Mat4 {

@@ -28,6 +28,6 @@ bool scene_remove_mesh(Scene *scene, MeshHandle mh);
 InstanceHandle scene_add_instance(Scene *scene, MeshHandle m, Transform t);
 bool scene_remove_instance(Scene *scene, InstanceHandle i);
 bool renderer_sync_scene(RendererState *rendererState, const Scene *scene);
-bool renderer_render(RendererState *rendererState);
+void renderer_render(RendererState *rendererState);
 bool renderer_clear(RendererState *rendererState);
 void renderer_quit();

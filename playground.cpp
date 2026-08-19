@@ -481,6 +481,93 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
   return true;
 }
 
+void renderer_render(RendererState *rendererState) {
+  glm::mat4 view =
+    glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
+  glm::mat4 projection = glm::perspectiveLH_ZO(
+					       glm::radians(60.0f),
+					       rendererConfig.resolution.x / rendererConfig.resolution.y,
+					       0.1f,
+					       10000.0f
+					       );
+  glm::mat4 viewProjection = projection * view;
+  commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+
+  sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
+						  commandBuffer,
+						  window,
+						  &swapchainTexture,
+						  &swapchainWidth,
+						  &swapchainHeight));
+
+  colorTargetInfo.texture = swapchainTexture;
+
+  renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
+  sdlAssert(renderPass != nullptr);
+
+  SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection,
+			       (u32)sizeof(viewProjection));
+  SDL_PushGPUFragmentUniformData(commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
+				   
+  SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+  SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
+  SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
+  SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
+			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
+  SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
+
+  u32 transferBufferOffsetPerMesh = 0;
+  for (auto& entry : rendererState->objects) {
+    auto meshHandle = entry.first;
+    auto &instances = entry.second;
+
+    SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    sdlAssert(frameCopyPass != nullptr);
+
+    std::vector<glm::mat4> modelMatrices;
+    modelMatrices.reserve(instances.size());
+    for (auto &t : instances) {
+      modelMatrices.push_back(transformToMat4(t.transform));
+    }
+
+    const u32 requiredInstanceCopySize =
+      modelMatrices.size() * sizeof(glm::mat4);
+    assert(requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+
+    glm::mat4 *mappedToInstanceInTransfer =
+      reinterpret_cast<glm::mat4*>(
+				   SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
+    sdlAssert(mappedToInstanceInTransfer != nullptr);
+    std::memcpy((u8 *)mappedToInstanceInTransfer + transferBufferOffsetPerMesh,
+		modelMatrices.data(), requiredInstanceCopySize);
+
+    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
+    transferToInstanceBufferLocation.offset = transferBufferOffsetPerMesh;
+    transferToInstanceBufferLocation.transfer_buffer =
+      transferToInstanceBuffer;
+
+    SDL_GPUBufferRegion instanceBufferRegion = {};
+    instanceBufferRegion.offset = transferBufferOffsetPerMesh;
+    instanceBufferRegion.buffer = instanceBuffer;
+    instanceBufferRegion.size = requiredInstanceCopySize;
+
+    MeshRegion region = rendererState->meshRegions[meshHandle];
+
+    SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
+                          &instanceBufferRegion, false);
+    SDL_EndGPUCopyPass(frameCopyPass);
+
+    SDL_DrawGPUIndexedPrimitives(renderPass, region.indexCount,
+				 instances.size(), region.indexOffset,
+				 region.vertexOffset, 0);
+    transferBufferOffsetPerMesh += requiredInstanceCopySize;
+  }
+
+    
+  SDL_EndGPURenderPass(renderPass);
+  sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
+}
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
@@ -496,7 +583,7 @@ int main(int argc, char* argv[]) {
   renderer_init(config);
 
   Scene scene = {};
-  RendererState renderState = {};
+  RendererState rendererState = {};
 
   scene_load_obj(&scene, "models/cube.obj");
   scene_load_obj(&scene, "models/bunny.obj");
@@ -514,7 +601,7 @@ int main(int argc, char* argv[]) {
     }
   }
   
-  renderer_sync_scene(&renderState, &scene);
+  renderer_sync_scene(&rendererState, &scene);
 
   bool running = true;
   
@@ -534,8 +621,10 @@ int main(int argc, char* argv[]) {
       cos(glm::radians(rendererConfig.camera.pitch)) * sin(glm::radians(rendererConfig.camera.yaw))};
 
     forward = glm::normalize(forward);
+    rendererConfig.camera.forward = forward;
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
-
+    rendererConfig.camera.right = right;
+    
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
       if (event.type == SDL_EVENT_QUIT) {
@@ -578,90 +667,8 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    glm::mat4 view =
-      glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + forward, WORLD_UP);
-    glm::mat4 projection = glm::perspectiveLH_ZO(
-					    glm::radians(60.0f),
-					    rendererConfig.resolution.x / rendererConfig.resolution.y,
-					    0.1f,
-					    10000.0f
-					    );
-    glm::mat4 viewProjection = projection * view;
-    commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+    renderer_render(&rendererState);
 
-    sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
-						    commandBuffer,
-						    window,
-						    &swapchainTexture,
-						    &swapchainWidth,
-						    &swapchainHeight));
-
-    colorTargetInfo.texture = swapchainTexture;
-
-    renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
-    sdlAssert(renderPass != nullptr);
-
-    SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection,
-                                 (u32)sizeof(viewProjection));
-    SDL_PushGPUFragmentUniformData(commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
-				   
-    SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-    SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-    SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
-    SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
-                           SDL_GPU_INDEXELEMENTSIZE_32BIT);
-    SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
-
-    u32 transferBufferOffsetPerMesh = 0;
-    for (auto& entry : renderState.objects) {
-      auto meshHandle = entry.first;
-      auto &instances = entry.second;
-
-      SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
-      sdlAssert(frameCopyPass != nullptr);
-
-      std::vector<glm::mat4> modelMatrices;
-      modelMatrices.reserve(instances.size());
-      for (auto &t : instances) {
-        modelMatrices.push_back(transformToMat4(t.transform));
-      }
-
-      const u32 requiredInstanceCopySize =
-          modelMatrices.size() * sizeof(glm::mat4);
-      assert(requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
-
-      glm::mat4 *mappedToInstanceInTransfer =
-	reinterpret_cast<glm::mat4*>(
-				     SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
-      sdlAssert(mappedToInstanceInTransfer != nullptr);
-      std::memcpy((u8 *)mappedToInstanceInTransfer + transferBufferOffsetPerMesh,
-		  modelMatrices.data(), requiredInstanceCopySize);
-
-      SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
-      transferToInstanceBufferLocation.offset = transferBufferOffsetPerMesh;
-      transferToInstanceBufferLocation.transfer_buffer =
-          transferToInstanceBuffer;
-
-      SDL_GPUBufferRegion instanceBufferRegion = {};
-      instanceBufferRegion.offset = transferBufferOffsetPerMesh;
-      instanceBufferRegion.buffer = instanceBuffer;
-      instanceBufferRegion.size = requiredInstanceCopySize;
-
-      MeshRegion region = renderState.meshRegions[meshHandle];
-
-      SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
-                          &instanceBufferRegion, false);
-      SDL_EndGPUCopyPass(frameCopyPass);
-
-      SDL_DrawGPUIndexedPrimitives(renderPass, region.indexCount,
-                                   instances.size(), region.indexOffset,
-                                   region.vertexOffset, 0);
-      transferBufferOffsetPerMesh += requiredInstanceCopySize;
-    }
-
-    
-    SDL_EndGPURenderPass(renderPass);
-    sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
   
   SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
