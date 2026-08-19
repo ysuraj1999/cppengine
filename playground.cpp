@@ -1,5 +1,6 @@
 #include "playground.h"
 #include "types.hpp"
+#include <SDL3/SDL_gpu.h>
 
 // CONSTANTS
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
@@ -189,6 +190,110 @@ bool renderer_init(RendererConfig config) {
   pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
 
+  {
+    SDL_GPUTextureCreateInfo textureInfo = {};
+    textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    textureInfo.num_levels = 1;
+    textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    textureInfo.layer_count_or_depth = 1;
+
+    // LOAD TEXTURE
+    int w, h, channels;
+    u8 *pixels =
+      stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
+    assert(pixels != nullptr);
+    defer(stbi_image_free(pixels));
+      
+    u32 tWidth = static_cast<u32>(w);
+    u32 tHeight = static_cast<u32>(h);
+    textureInfo.width = tWidth;
+    textureInfo.height = tHeight;
+    const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
+
+    checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
+    sdlAssert(checkTexture != nullptr);
+
+    
+    SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {};
+    transferToTextureInfo.size = TEXTURE_SIZE;
+    transferToTextureInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBuffer* transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
+    sdlAssert(transferToTexture != nullptr);
+
+    u8* mappedTransferToBytes = reinterpret_cast<u8*>(
+						      SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
+    sdlAssert(mappedTransferToBytes != nullptr);
+    std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
+
+    SDL_GPUTextureTransferInfo textureTransferInfo = {};
+    textureTransferInfo.transfer_buffer = transferToTexture;
+    textureTransferInfo.offset = 0;
+    textureTransferInfo.pixels_per_row = tWidth;
+    textureTransferInfo.rows_per_layer = tHeight;
+
+    SDL_GPUTextureRegion textureRegion = {};
+    textureRegion.texture = checkTexture;
+    textureRegion.mip_level = 0;
+    textureRegion.layer = 0;
+    textureRegion.x = 0;
+    textureRegion.y = 0;
+    textureRegion.z = 0;
+    textureRegion.w = 512;
+    textureRegion.h = 512;
+    textureRegion.d = 1;
+    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    sdlAssert(copyPass != nullptr);
+    SDL_UploadToGPUTexture(copyPass, &textureTransferInfo,
+                           &textureRegion, false);
+    SDL_EndGPUCopyPass(copyPass);
+
+    // make the sampler here
+    SDL_GPUSamplerCreateInfo samplerInfo = {};
+    samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
+    samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
+    samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
+    samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+
+    sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
+    sdlAssert(sampler != nullptr);
+    
+    // bind texture and sampler here
+    textureSamplerBindings[0].sampler = sampler;
+    textureSamplerBindings[0].texture = checkTexture;
+
+    renderPass = nullptr;
+    colorTargetInfo = {};
+    colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
+    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+
+    // make a depth texture here
+    SDL_GPUTextureCreateInfo depthTextureInfo = {};
+    depthTextureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    depthTextureInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+    depthTextureInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
+    depthTextureInfo.num_levels = 1;
+    depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    depthTextureInfo.layer_count_or_depth = 1;
+    depthTextureInfo.width = (u32)rendererConfig.resolution.x;
+    depthTextureInfo.height = (u32)rendererConfig.resolution.y;
+
+    SDL_GPUTexture *depthTexture =
+      SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
+    sdlAssert(depthTexture);
+  
+    depthTargetInfo = {};
+    depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    depthTargetInfo.clear_depth = 1.0f;
+    depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    depthTargetInfo.texture = depthTexture;
+  
+    // std::cout << "width " << tWidth << " height " << tHeight << '\n';
+  }
+
   
   return true;
 }
@@ -350,66 +455,6 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     SDL_GPUCopyPass* initialCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
     sdlAssert(initialCopyPass != nullptr);
 
-    {
-      SDL_GPUTextureCreateInfo textureInfo = {};
-      textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-      textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-      textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-      textureInfo.num_levels = 1;
-      textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-      textureInfo.layer_count_or_depth = 1;
-
-      // LOAD TEXTURE
-      int w, h, channels;
-      u8 *pixels =
-        stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
-      assert(pixels != nullptr);
-      defer(stbi_image_free(pixels));
-      
-      u32 tWidth = static_cast<u32>(w);
-      u32 tHeight = static_cast<u32>(h);
-      textureInfo.width = tWidth;
-      textureInfo.height = tHeight;
-      const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
-
-      checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
-      sdlAssert(checkTexture != nullptr);
-
-    
-      SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {};
-      transferToTextureInfo.size = TEXTURE_SIZE;
-      transferToTextureInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-      SDL_GPUTransferBuffer* transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
-      sdlAssert(transferToTexture != nullptr);
-
-      u8* mappedTransferToBytes = reinterpret_cast<u8*>(
-							SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
-      sdlAssert(mappedTransferToBytes != nullptr);
-      std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
-
-      SDL_GPUTextureTransferInfo textureTransferInfo = {};
-      textureTransferInfo.transfer_buffer = transferToTexture;
-      textureTransferInfo.offset = 0;
-      textureTransferInfo.pixels_per_row = tWidth;
-      textureTransferInfo.rows_per_layer = tHeight;
-
-      SDL_GPUTextureRegion textureRegion = {};
-      textureRegion.texture = checkTexture;
-      textureRegion.mip_level = 0;
-      textureRegion.layer = 0;
-      textureRegion.x = 0;
-      textureRegion.y = 0;
-      textureRegion.z = 0;
-      textureRegion.w = 512;
-      textureRegion.h = 512;
-      textureRegion.d = 1;
-
-      SDL_UploadToGPUTexture(initialCopyPass, &textureTransferInfo, &textureRegion, false);
-
-      // std::cout << "width " << tWidth << " height " << tHeight << '\n';
-    }
-
-
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation,
                           &vertexBufferRegion, false);
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation,
@@ -425,7 +470,6 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
   }
 
-
   vertexBufferBinding[0].buffer = vertexBuffer;
   vertexBufferBinding[0].offset = 0;
 
@@ -434,49 +478,6 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
 
   indexBufferBinding[0].buffer = indexBuffer;
   indexBufferBinding[0].offset = 0;
-
-  // make the sampler here
-  SDL_GPUSamplerCreateInfo samplerInfo = {};
-  samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-  samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
-  samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
-  samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-  samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-
-  sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
-  sdlAssert(sampler != nullptr);
-    
-  // bind texture and sampler here
-  textureSamplerBindings[0].sampler = sampler;
-  textureSamplerBindings[0].texture = checkTexture;
-
-  renderPass = nullptr;
-  colorTargetInfo = {};
-  colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
-  colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-  colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
-
-  // make a depth texture here
-  SDL_GPUTextureCreateInfo depthTextureInfo = {};
-  depthTextureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-  depthTextureInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-  depthTextureInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
-  depthTextureInfo.num_levels = 1;
-  depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-  depthTextureInfo.layer_count_or_depth = 1;
-  depthTextureInfo.width = (u32)rendererConfig.resolution.x;
-  depthTextureInfo.height = (u32)rendererConfig.resolution.y;
-
-  SDL_GPUTexture *depthTexture =
-    SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
-  sdlAssert(depthTexture);
-  
-  depthTargetInfo = {};
-  depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-  depthTargetInfo.clear_depth = 1.0f;
-  depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
-  depthTargetInfo.texture = depthTexture;
-  
   return true;
 }
 
