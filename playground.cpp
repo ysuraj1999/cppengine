@@ -14,6 +14,22 @@ static_global SDL_GPUTexture *swapchainTexture;
 static_global u32 swapchainWidth;
 static_global u32 swapchainHeight;
 static_global SDL_GPUCommandBuffer *commandBuffer;
+static_global SDL_GPUColorTargetInfo colorTargetInfo;
+static_global SDL_GPURenderPass *renderPass;
+static_global SDL_GPUBuffer *vertexBuffer;
+static_global SDL_GPUTexture *checkTexture;
+static_global SDL_GPUShader *vertexShader;
+static_global SDL_GPUShader *fragmentShader;
+static_global SDL_GPUDepthStencilTargetInfo depthTargetInfo;
+static_global SDL_GPUSampler *sampler;
+static_global SDL_GPUBuffer* instanceBuffer;
+static_global SDL_GPUGraphicsPipeline* pipeline;
+static_global SDL_GPUBufferBinding vertexBufferBinding[1] = {};
+static_global SDL_GPUBufferBinding instanceBufferBinding[1] = {};
+static_global SDL_GPUBufferBinding indexBufferBinding[1] = {};
+static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
+static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
+static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 
 bool renderer_init(RendererConfig config) {
   rendererConfig = config;
@@ -126,73 +142,32 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
   }
 
   rendererState->objects = scene->objects;
-  
-  return true;
-}
-
-int main(int argc, char* argv[]) {
-  // (void)argc;
-  // (void)argv;
-
-  RendererConfig config = {
-      .resolution = {800.0f, 800.0f},
-      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
-      .keyboardSensitivity = 10.0f,
-      .mouseSensitivity = 0.1f,
-      .cameraEnabled = true,
-      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
-  };
-  renderer_init(config);
-
-  Scene scene = {};
-  RendererState renderState = {};
-
-  scene_load_obj(&scene, "models/cube.obj");
-  scene_load_obj(&scene, "models/bunny.obj");
-
-  u32 GRID_SIZE = 10;
-  for (u32 x = 0; x < GRID_SIZE; x++){
-    for (u32 y = 0; y < GRID_SIZE; y++){
-      for (u32 z = 0; z < GRID_SIZE; z++) {
-	scene_add_instance(&scene, 0, Transform{
-            .position = {1.0f * x, 1.0f * y, 1.0f * z},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .rotation = {0.0f, 0.0f, 0.0f}
-	  });
-      }
-    }
-  }
-  
-  renderer_sync_scene(&renderState, &scene);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  const u32 VERTEX_BUFFER_SIZE = renderState.vertices.size() * sizeof(Vertex);
+  const u32 VERTEX_BUFFER_SIZE = rendererState->vertices.size() * sizeof(Vertex);
   vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-  SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
+  vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
   
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  const u32 INDEX_BUFFER_SIZE = renderState.indices.size() * sizeof(u32);
+  const u32 INDEX_BUFFER_SIZE = rendererState->indices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
   
   SDL_GPUBufferCreateInfo instanceBufferInfo = {};
-  const u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
   instanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
   instanceBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
-  SDL_GPUBuffer* instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
+  instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
   sdlAssert(instanceBuffer != nullptr);
 
   SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
   transferToInstanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
   transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
-  SDL_GPUTransferBuffer* transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
+  transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
   sdlAssert(transferToInstanceBuffer != nullptr);
-
-  SDL_GPUTexture *checkTexture;
   
   // COPY:
   {
@@ -206,7 +181,7 @@ int main(int argc, char* argv[]) {
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, renderState.vertices.data(), VERTEX_BUFFER_SIZE);
+    std::memcpy(mappedVertexInTransfer, rendererState->vertices.data(), VERTEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
     transferToVertexBufferLocation.offset = 0;
@@ -225,9 +200,9 @@ int main(int argc, char* argv[]) {
     sdlAssert(transferToIndexBuffer != nullptr);
 
     u32* mappedIndicesInTransfer = reinterpret_cast<u32*>(
-							       SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
+							  SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, renderState.indices.data(), INDEX_BUFFER_SIZE);
+    std::memcpy(mappedIndicesInTransfer, rendererState->indices.data(), INDEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
     transferToIndexBufferLocation.offset = 0;
@@ -305,7 +280,7 @@ int main(int argc, char* argv[]) {
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation,
                           &vertexBufferRegion, false);
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation,
-			      &indexBufferRegion, false);
+			  &indexBufferRegion, false);
     SDL_EndGPUCopyPass(initialCopyPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 
@@ -333,7 +308,7 @@ int main(int argc, char* argv[]) {
   vertexShaderInfo.num_storage_buffers = 0;
   vertexShaderInfo.num_uniform_buffers = 1;
 
-  SDL_GPUShader* vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
+  vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
   sdlAssert(vertexShader != nullptr);
 
   std::vector<u8> fragmentShaderContents =
@@ -351,7 +326,7 @@ int main(int argc, char* argv[]) {
   fragmentShaderInfo.num_storage_buffers = 0;
   fragmentShaderInfo.num_uniform_buffers = 1;
 
-  SDL_GPUShader* fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
+  fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
   sdlAssert(fragmentShader != nullptr);
 
   SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
@@ -446,18 +421,15 @@ int main(int argc, char* argv[]) {
   pipelineInfo.target_info.has_depth_stencil_target = true;
   pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
       
-  SDL_GPUGraphicsPipeline* pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
+  pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
   sdlAssert(pipeline != nullptr);
 
-  SDL_GPUBufferBinding vertexBufferBinding[1] = {};
   vertexBufferBinding[0].buffer = vertexBuffer;
   vertexBufferBinding[0].offset = 0;
 
-  SDL_GPUBufferBinding instanceBufferBinding[1] = {};
   instanceBufferBinding[0].buffer = instanceBuffer;
   instanceBufferBinding[0].offset = 0;
 
-  SDL_GPUBufferBinding indexBufferBinding[1] = {};
   indexBufferBinding[0].buffer = indexBuffer;
   indexBufferBinding[0].offset = 0;
 
@@ -469,18 +441,15 @@ int main(int argc, char* argv[]) {
   samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
   samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
 
-  SDL_GPUSampler *sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
+  sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
   sdlAssert(sampler != nullptr);
     
   // bind texture and sampler here
-  SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
   textureSamplerBindings[0].sampler = sampler;
   textureSamplerBindings[0].texture = checkTexture;
 
-  bool running = true;
-  SDL_GPURenderPass* renderPass = nullptr;
-
-  SDL_GPUColorTargetInfo colorTargetInfo = {};
+  renderPass = nullptr;
+  colorTargetInfo = {};
   colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
   colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
@@ -497,15 +466,55 @@ int main(int argc, char* argv[]) {
   depthTextureInfo.height = (u32)rendererConfig.resolution.y;
 
   SDL_GPUTexture *depthTexture =
-      SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
+    SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
   sdlAssert(depthTexture);
   
-  SDL_GPUDepthStencilTargetInfo depthTargetInfo = {};
+  depthTargetInfo = {};
   depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   depthTargetInfo.clear_depth = 1.0f;
   depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
   depthTargetInfo.texture = depthTexture;
+  
+  return true;
+}
 
+int main(int argc, char* argv[]) {
+  // (void)argc;
+  // (void)argv;
+
+  RendererConfig config = {
+      .resolution = {800.0f, 800.0f},
+      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
+      .keyboardSensitivity = 10.0f,
+      .mouseSensitivity = 0.1f,
+      .cameraEnabled = true,
+      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+  };
+  renderer_init(config);
+
+  Scene scene = {};
+  RendererState renderState = {};
+
+  scene_load_obj(&scene, "models/cube.obj");
+  scene_load_obj(&scene, "models/bunny.obj");
+
+  u32 GRID_SIZE = 10;
+  for (u32 x = 0; x < GRID_SIZE; x++){
+    for (u32 y = 0; y < GRID_SIZE; y++){
+      for (u32 z = 0; z < GRID_SIZE; z++) {
+	scene_add_instance(&scene, 0, Transform{
+            .position = {1.0f * x, 1.0f * y, 1.0f * z},
+            .scale = {1.0f, 1.0f, 1.0f},
+            .rotation = {0.0f, 0.0f, 0.0f}
+	  });
+      }
+    }
+  }
+  
+  renderer_sync_scene(&renderState, &scene);
+
+  bool running = true;
+  
   u64 previous = SDL_GetPerformanceCounter();
   const u64 freq = SDL_GetPerformanceFrequency();
   float delta_x, delta_y;
