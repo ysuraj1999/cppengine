@@ -57,6 +57,139 @@ bool renderer_init(RendererConfig config) {
   commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
   sdlAssert(commandBuffer != nullptr);
 
+  // from sync
+    std::vector<u8> vertexShaderContents =
+    readFile(SHADER_BIN_DIR "/shader.vertex.spv");
+  assert(!vertexShaderContents.empty());
+
+  SDL_GPUShaderCreateInfo vertexShaderInfo = {};
+  vertexShaderInfo.entrypoint = "main";
+  vertexShaderInfo.code = vertexShaderContents.data();
+  vertexShaderInfo.code_size = vertexShaderContents.size();
+  vertexShaderInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
+  vertexShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+  vertexShaderInfo.num_samplers = 0;
+  vertexShaderInfo.num_storage_textures = 0;
+  vertexShaderInfo.num_storage_buffers = 0;
+  vertexShaderInfo.num_uniform_buffers = 1;
+
+  vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
+  sdlAssert(vertexShader != nullptr);
+
+  std::vector<u8> fragmentShaderContents =
+    readFile(SHADER_BIN_DIR "/shader.fragment.spv");
+  assert(!fragmentShaderContents.empty());
+
+  SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
+  fragmentShaderInfo.entrypoint = "main";
+  fragmentShaderInfo.code = fragmentShaderContents.data();
+  fragmentShaderInfo.code_size = fragmentShaderContents.size();
+  fragmentShaderInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
+  fragmentShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
+  fragmentShaderInfo.num_samplers = 1;
+  fragmentShaderInfo.num_storage_textures = 0;
+  fragmentShaderInfo.num_storage_buffers = 0;
+  fragmentShaderInfo.num_uniform_buffers = 1;
+
+  fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
+  sdlAssert(fragmentShader != nullptr);
+
+  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
+  pipelineInfo.vertex_shader = vertexShader;
+  pipelineInfo.fragment_shader = fragmentShader;
+  pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+
+  SDL_GPUVertexBufferDescription vertexBufferDescription[2] = {};
+
+  // How each vertex is defined
+  vertexBufferDescription[0].slot = 0;
+  vertexBufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
+  vertexBufferDescription[0].instance_step_rate = 0;
+  vertexBufferDescription[0].pitch = (u32)sizeof(Vertex);
+
+  vertexBufferDescription[1].slot = 1;
+  vertexBufferDescription[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
+  vertexBufferDescription[1].instance_step_rate = 1;
+  vertexBufferDescription[1].pitch = (u32)sizeof(glm::mat4);
+
+  
+  pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
+  pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
+
+  // Vertex attributes
+  SDL_GPUVertexAttribute vertexAttributes[8] = {};
+  vertexAttributes[0].buffer_slot = 0;
+  vertexAttributes[0].location = 0;
+  vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  vertexAttributes[0].offset = offsetof(Vertex, position);
+
+  vertexAttributes[1].buffer_slot = 0;
+  vertexAttributes[1].location = 1;
+  vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+  vertexAttributes[1].offset = offsetof(Vertex, color);
+
+  vertexAttributes[2].buffer_slot = 0;
+  vertexAttributes[2].location = 2;
+  vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
+  vertexAttributes[2].offset = offsetof(Vertex, normal);
+
+  vertexAttributes[3].buffer_slot = 0;
+  vertexAttributes[3].location = 3;
+  vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
+  vertexAttributes[3].offset = offsetof(Vertex, uv);
+
+  // Instance attributes
+  vertexAttributes[4] = {
+    .location = 4,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 0};
+
+  vertexAttributes[5] = {
+    .location = 5,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = sizeof(glm::vec4)};
+
+  vertexAttributes[6] = {
+    .location = 6,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 2 * sizeof(glm::vec4)};
+
+  vertexAttributes[7] = {
+    .location = 7,
+    .buffer_slot = 1,
+    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
+    .offset = 3 * sizeof(glm::vec4)};
+
+  pipelineInfo.vertex_input_state.num_vertex_attributes = 8;
+  pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
+  
+  SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
+  colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
+
+  pipelineInfo.target_info.num_color_targets = 1;
+  pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
+
+  // Culling
+  pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
+  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
+
+  // Depth test
+  SDL_GPUDepthStencilState depthStencilState = {};
+  depthStencilState.enable_depth_write = true;
+  depthStencilState.enable_depth_test = true;
+  depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;
+
+  pipelineInfo.depth_stencil_state = depthStencilState;
+  pipelineInfo.target_info.has_depth_stencil_target = true;
+  pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
+      
+  pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
+  sdlAssert(pipeline != nullptr);
+
+  
   return true;
 }
 
@@ -292,137 +425,6 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
   }
 
-
-  std::vector<u8> vertexShaderContents =
-    readFile(SHADER_BIN_DIR "/shader.vertex.spv");
-  assert(!vertexShaderContents.empty());
-
-  SDL_GPUShaderCreateInfo vertexShaderInfo = {};
-  vertexShaderInfo.entrypoint = "main";
-  vertexShaderInfo.code = vertexShaderContents.data();
-  vertexShaderInfo.code_size = vertexShaderContents.size();
-  vertexShaderInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-  vertexShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-  vertexShaderInfo.num_samplers = 0;
-  vertexShaderInfo.num_storage_textures = 0;
-  vertexShaderInfo.num_storage_buffers = 0;
-  vertexShaderInfo.num_uniform_buffers = 1;
-
-  vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
-  sdlAssert(vertexShader != nullptr);
-
-  std::vector<u8> fragmentShaderContents =
-    readFile(SHADER_BIN_DIR "/shader.fragment.spv");
-  assert(!fragmentShaderContents.empty());
-
-  SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
-  fragmentShaderInfo.entrypoint = "main";
-  fragmentShaderInfo.code = fragmentShaderContents.data();
-  fragmentShaderInfo.code_size = fragmentShaderContents.size();
-  fragmentShaderInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-  fragmentShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-  fragmentShaderInfo.num_samplers = 1;
-  fragmentShaderInfo.num_storage_textures = 0;
-  fragmentShaderInfo.num_storage_buffers = 0;
-  fragmentShaderInfo.num_uniform_buffers = 1;
-
-  fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
-  sdlAssert(fragmentShader != nullptr);
-
-  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
-  pipelineInfo.vertex_shader = vertexShader;
-  pipelineInfo.fragment_shader = fragmentShader;
-  pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
-
-  SDL_GPUVertexBufferDescription vertexBufferDescription[2] = {};
-
-  // How each vertex is defined
-  vertexBufferDescription[0].slot = 0;
-  vertexBufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
-  vertexBufferDescription[0].instance_step_rate = 0;
-  vertexBufferDescription[0].pitch = (u32)sizeof(Vertex);
-
-  vertexBufferDescription[1].slot = 1;
-  vertexBufferDescription[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
-  vertexBufferDescription[1].instance_step_rate = 1;
-  vertexBufferDescription[1].pitch = (u32)sizeof(glm::mat4);
-
-  
-  pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
-  pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
-
-  // Vertex attributes
-  SDL_GPUVertexAttribute vertexAttributes[8] = {};
-  vertexAttributes[0].buffer_slot = 0;
-  vertexAttributes[0].location = 0;
-  vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  vertexAttributes[0].offset = offsetof(Vertex, position);
-
-  vertexAttributes[1].buffer_slot = 0;
-  vertexAttributes[1].location = 1;
-  vertexAttributes[1].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
-  vertexAttributes[1].offset = offsetof(Vertex, color);
-
-  vertexAttributes[2].buffer_slot = 0;
-  vertexAttributes[2].location = 2;
-  vertexAttributes[2].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
-  vertexAttributes[2].offset = offsetof(Vertex, normal);
-
-  vertexAttributes[3].buffer_slot = 0;
-  vertexAttributes[3].location = 3;
-  vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
-  vertexAttributes[3].offset = offsetof(Vertex, uv);
-
-  // Instance attributes
-  vertexAttributes[4] = {
-    .location = 4,
-    .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-    .offset = 0};
-
-  vertexAttributes[5] = {
-    .location = 5,
-    .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-    .offset = sizeof(glm::vec4)};
-
-  vertexAttributes[6] = {
-    .location = 6,
-    .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-    .offset = 2 * sizeof(glm::vec4)};
-
-  vertexAttributes[7] = {
-    .location = 7,
-    .buffer_slot = 1,
-    .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4,
-    .offset = 3 * sizeof(glm::vec4)};
-
-  pipelineInfo.vertex_input_state.num_vertex_attributes = 8;
-  pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
-  
-  SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
-  colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
-
-  pipelineInfo.target_info.num_color_targets = 1;
-  pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
-
-  // Culling
-  pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
-  pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
-
-  // Depth test
-  SDL_GPUDepthStencilState depthStencilState = {};
-  depthStencilState.enable_depth_write = true;
-  depthStencilState.enable_depth_test = true;
-  depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;
-
-  pipelineInfo.depth_stencil_state = depthStencilState;
-  pipelineInfo.target_info.has_depth_stencil_target = true;
-  pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-      
-  pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
-  sdlAssert(pipeline != nullptr);
 
   vertexBufferBinding[0].buffer = vertexBuffer;
   vertexBufferBinding[0].offset = 0;
