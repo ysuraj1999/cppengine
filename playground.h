@@ -19,7 +19,7 @@
 #include "stb_image.h"
 #include "types.hpp"
 #include "obj.hpp"
-#include "utils.cpp"
+#include "utils.hpp"
 
 bool renderer_init(RendererConfig config);
 bool scene_load_obj(Scene *scene, const char *path);

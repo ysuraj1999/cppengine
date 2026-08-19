@@ -108,5 +108,4 @@ struct RendererConfig {
   Camera camera;
 };
 
-Mat4 translateMatrix(const f32 v[4]);
-Mat4 translateMatrix(const glm::vec3& v);
+

@@ -24,6 +24,8 @@ static_global SDL_GPUShader *fragmentShader;
 static_global SDL_GPUDepthStencilTargetInfo depthTargetInfo;
 static_global SDL_GPUSampler *sampler;
 static_global SDL_GPUBuffer* instanceBuffer;
+static_global SDL_GPUBuffer* indexBuffer;
+static_global SDL_GPUTexture* depthTexture;
 static_global SDL_GPUGraphicsPipeline* pipeline;
 static_global SDL_GPUBufferBinding vertexBufferBinding[1] = {};
 static_global SDL_GPUBufferBinding instanceBufferBinding[1] = {};
@@ -54,9 +56,6 @@ bool renderer_init(RendererConfig config) {
   swapchainTexture = nullptr;
   swapchainWidth = 0;
   swapchainHeight = 0;
-
-  commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
-  sdlAssert(commandBuffer != nullptr);
 
   std::vector<u8> vertexShaderContents =
     readFile(SHADER_BIN_DIR "/shader.vertex.spv");
@@ -242,11 +241,14 @@ bool renderer_init(RendererConfig config) {
     textureRegion.w = 512;
     textureRegion.h = 512;
     textureRegion.d = 1;
-    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    SDL_GPUCommandBuffer* initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
+    sdlAssert(initCmd != nullptr);
+    SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(initCmd);
     sdlAssert(copyPass != nullptr);
     SDL_UploadToGPUTexture(copyPass, &textureTransferInfo,
                            &textureRegion, false);
     SDL_EndGPUCopyPass(copyPass);
+    sdlAssert(SDL_SubmitGPUCommandBuffer(initCmd));
 
     // make the sampler here
     SDL_GPUSamplerCreateInfo samplerInfo = {};
@@ -280,7 +282,7 @@ bool renderer_init(RendererConfig config) {
     depthTextureInfo.width = (u32)rendererConfig.resolution.x;
     depthTextureInfo.height = (u32)rendererConfig.resolution.y;
 
-    SDL_GPUTexture *depthTexture =
+    depthTexture =
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
     sdlAssert(depthTexture);
   
@@ -391,7 +393,7 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
   const u32 INDEX_BUFFER_SIZE = rendererState->indices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
-  SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
+  indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
   
   SDL_GPUBufferCreateInfo instanceBufferInfo = {};
@@ -451,7 +453,9 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     indexBufferRegion.size = INDEX_BUFFER_SIZE;
 
 
-    SDL_GPUCopyPass* initialCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    SDL_GPUCommandBuffer* syncCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
+    sdlAssert(syncCmd != nullptr);
+    SDL_GPUCopyPass* initialCopyPass = SDL_BeginGPUCopyPass(syncCmd);
     sdlAssert(initialCopyPass != nullptr);
 
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation,
@@ -459,7 +463,7 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation,
 			  &indexBufferRegion, false);
     SDL_EndGPUCopyPass(initialCopyPass);
-    sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
+    sdlAssert(SDL_SubmitGPUCommandBuffer(syncCmd));
 
     // Unmap and release transfer buffer once uploaded
     SDL_UnmapGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
@@ -567,6 +571,30 @@ void renderer_render(RendererState *rendererState) {
   sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 }
 
+bool renderer_clear(RendererState *rendererState) {
+  rendererState->vertices.clear();
+  rendererState->indices.clear();
+  rendererState->meshRegions.clear();
+  rendererState->objects.clear();
+  return true;
+}
+
+void renderer_quit() {
+  SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
+  SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
+  SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
+  SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
+  SDL_ReleaseGPUShader(gpuDevice, vertexShader);
+  SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+  SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
+  SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
+  SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
+  SDL_ReleaseGPUSampler(gpuDevice, sampler);
+  SDL_DestroyGPUDevice(gpuDevice);
+  SDL_DestroyWindow(window);
+  SDL_Quit();
+}
+
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
@@ -669,13 +697,6 @@ int main(int argc, char* argv[]) {
     renderer_render(&rendererState);
   }
   
-  SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
-  SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
-  SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
-  SDL_ReleaseGPUShader(gpuDevice, vertexShader);
-  SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
-  SDL_DestroyGPUDevice(gpuDevice);    
-  SDL_DestroyWindow(window);
-  SDL_Quit();
+  renderer_quit();
   return 0;
 }

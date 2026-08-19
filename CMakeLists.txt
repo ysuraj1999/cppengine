@@ -19,7 +19,7 @@ FetchContent_MakeAvailable(glm)
 
 add_executable(playground
   playground.cpp
-  types.cpp
+  utils.cpp
   stb_image.cpp
 )
 
