@@ -5,13 +5,42 @@
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
 
 // Monotonically increasing counters
-uint64_t next_mesh_handle = 0;
-uint64_t next_instance_handle = 0;
-
-static RendererConfig rendererConfig = {};
+static_global uint64_t next_mesh_handle = 0;
+static_global uint64_t next_instance_handle = 0;
+static_global RendererConfig rendererConfig = {};
+static_global SDL_Window *window;
+static_global SDL_GPUDevice *gpuDevice;
+static_global SDL_GPUTexture *swapchainTexture;
+static_global u32 swapchainWidth;
+static_global u32 swapchainHeight;
+static_global SDL_GPUCommandBuffer *commandBuffer;
 
 bool renderer_init(RendererConfig config) {
   rendererConfig = config;
+
+  sdlAssert(SDL_Init(SDL_INIT_VIDEO));
+
+  window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
+  sdlAssert(window != nullptr);
+
+  if (rendererConfig.cameraEnabled)
+    sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
+
+  gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+  sdlAssert(gpuDevice != nullptr);
+
+  sdlAssert(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
+
+  sdlAssert(SDL_SetGPUSwapchainParameters(gpuDevice, window,
+                                          SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+                                          SDL_GPU_PRESENTMODE_VSYNC));
+  swapchainTexture = nullptr;
+  swapchainWidth = 0;
+  swapchainHeight = 0;
+
+  commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+  sdlAssert(commandBuffer != nullptr);
+
   return true;
 }
 
@@ -127,40 +156,6 @@ int main(int argc, char* argv[]) {
       }
     }
   }
-
-  std::cout << "MESH REGIONS START" << '\n';
-  for (auto &m : renderState.meshRegions) {
-    std::cout << m << '\n';
-  }
-  std::cout << "MESH REGIONS END" << '\n';
-  std::cout << "FACE COUNT " << renderState.indices.size() / 3 << '\n';
-
-  sdlAssert(SDL_Init(SDL_INIT_VIDEO));
-
-  SDL_Window* window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
-  sdlAssert(window != nullptr);
-
-  if (rendererConfig.cameraEnabled)
-    sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
-
-  SDL_GPUTexture* swapchainTexture = nullptr;
-  u32 width = 0;
-  u32 height = 0;
-
-  SDL_GPUDevice* gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
-  sdlAssert(gpuDevice != nullptr);
-
-  sdlAssert(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
-
-  sdlAssert(SDL_SetGPUSwapchainParameters(
-					  gpuDevice,
-					  window,
-					  SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-					  SDL_GPU_PRESENTMODE_VSYNC
-					  ));
-
-  SDL_GPUCommandBuffer* commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
-  sdlAssert(commandBuffer != nullptr);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
   const u32 VERTEX_BUFFER_SIZE = renderState.vertices.size() * sizeof(Vertex);
@@ -581,8 +576,8 @@ int main(int argc, char* argv[]) {
 						    commandBuffer,
 						    window,
 						    &swapchainTexture,
-						    &width,
-						    &height));
+						    &swapchainWidth,
+						    &swapchainHeight));
 
     colorTargetInfo.texture = swapchainTexture;
 
