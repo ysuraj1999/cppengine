@@ -70,6 +70,7 @@ struct MeshRegion {
 };
 
 using MeshHandle = u32;
+using InstanceHandle = u32;
 
 struct Instance {
   MeshHandle mesh;
@@ -87,6 +88,15 @@ struct RendererState {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
   std::vector<MeshRegion> meshRegions;
+};
+
+struct RendererConfig {
+  glm::vec2 resolution;
+  glm::vec4 backgroundColor;
+  f32 keyboardSensitivity;
+  f32 mouseSensitivity;
+  bool cameraEnabled;
+  Camera camera;
 };
 
 Mat4 translateMatrix(const f32 v[4]);

@@ -1,74 +1,26 @@
-#include <SDL3/SDL.h>
-#include <SDL3/SDL_gpu.h>
-#include <SDL3/SDL_main.h>
-#include <SDL3/SDL_events.h>
-#include <SDL3/SDL_scancode.h>
-#include <cfloat>
-#include <cstddef>
-#include <glm/glm.hpp>
-
-#include <cassert>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include <vector>
-
-#include "glm/ext/matrix_clip_space.hpp"
-#include "glm/ext/matrix_transform.hpp"
-#include "glm/geometric.hpp"
-#include "glm/trigonometric.hpp"
-
-#include "stb_image.h"
-
-#include "types.hpp"
-#include "obj.hpp"
-#include "utils.cpp"
+#include "playground.h"
 
 static Camera camera;
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
-const f32 KEYBOARD_SENSITIVITY = 10.0f;
-const f32 MOUSE_SENSITIVITY = 0.1f;
-const glm::vec4 bgColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
+
+const f32 keyboardSensitivity = 10.0f;
+const f32 mouseSensitivity = 0.1f;
+const glm::vec4 backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
                            1.0f};
 const glm::vec2 resolution = {800.0f, 800.0f};
 bool cameraEnabled = true;
 
-static glm::mat4 transformToMat4(const Transform& t) {
-  glm::mat4 translation = glm::translate(glm::mat4(1.0f), t.position);
-  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.x),
-                                    glm::vec3(1.0f, 0.0f, 0.0f));
-  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.y),
-                                    glm::vec3(0.0f, 1.0f, 0.0f));
-  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.z),
-                                    glm::vec3(0.0f, 0.0f, 1.0f));
-  glm::mat4 scale = glm::scale(glm::mat4(1.0f), t.scale);
-  return translation * rotationZ * rotationY * rotationX * scale;
+bool renderer_init(RendererConfig config) {
 }
 
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
-  // std::cout << "Resolution " << resolution << " size " << sizeof(resolution) << '\n';
   Scene scene = {};
   RendererState renderState = {};
   loadObjIntoScene("models/cube.obj", scene);
   loadObjIntoScene("models/bunny.obj", scene);
-
-  // For fragment shader playground
-  // Vertex unitVertices[3] = {
-  //   { .position = {0.0f, -100.0f, -100.0f} }, // bottom-left
-  //   { .position = {0.0f, -100.0f,  300.0f} }, // bottom-right
-  //   { .position = {0.0f,  300.0f, -100.0f} }, // top-left
-  // };
-  // u32 unitindex.vertices[3] = { 0, 1, 2 };
-
-  // for (auto &v : unitVertices) {
-  //   renderS.push_back(v);
-  // }
-  // for (auto &i : unitIndices) {
-  //   worldIndices.push_back(i);
-  // }
 
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
@@ -460,7 +412,7 @@ int main(int argc, char* argv[]) {
   SDL_GPURenderPass* renderPass = nullptr;
 
   SDL_GPUColorTargetInfo colorTargetInfo = {};
-  colorTargetInfo.clear_color = SDL_FColor{bgColor.r, bgColor.g, bgColor.b, bgColor.a};
+  colorTargetInfo.clear_color = SDL_FColor{backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a};
   colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -516,12 +468,12 @@ int main(int argc, char* argv[]) {
 
     if (cameraEnabled){
       u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
-      camera.yaw -= delta_x * MOUSE_SENSITIVITY;
+      camera.yaw -= delta_x * mouseSensitivity;
       camera.yaw = std::fmod(camera.yaw, 360.0f);
-      camera.pitch -= delta_y * MOUSE_SENSITIVITY;
+      camera.pitch -= delta_y * mouseSensitivity;
       camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
 
-      f32 speed = KEYBOARD_SENSITIVITY;
+      f32 speed = keyboardSensitivity;
       if (keys[SDL_SCANCODE_LSHIFT]) {
 	speed *= 2.0f;
       }

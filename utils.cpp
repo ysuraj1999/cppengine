@@ -2,6 +2,7 @@
 #include <random>
 #include <vector>
 
+#include "glm/ext/matrix_transform.hpp"
 #include "types.hpp"
 
 #define sdlAssert(cond)					\
@@ -109,3 +110,16 @@ ScopeGuard(F&&) -> ScopeGuard<F>;
 
 #define defer(code)						\
   auto DEFER(_defer_, __COUNTER__) = ScopeGuard([&] { code; })
+
+glm::mat4 transformToMat4(const Transform& t) {
+  glm::mat4 translation = glm::translate(glm::mat4(1.0f), t.position);
+  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.x),
+                                    glm::vec3(1.0f, 0.0f, 0.0f));
+  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.y),
+                                    glm::vec3(0.0f, 1.0f, 0.0f));
+  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.z),
+                                    glm::vec3(0.0f, 0.0f, 1.0f));
+  glm::mat4 scale = glm::scale(glm::mat4(1.0f), t.scale);
+  return translation * rotationZ * rotationY * rotationX * scale;
+}
+
