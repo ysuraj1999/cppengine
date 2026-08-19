@@ -1,21 +1,26 @@
 #include "playground.h"
 
-static Camera camera;
+static RendererConfig rendererConfig = {};
 const glm::vec3 WORLD_UP = glm::vec3(0.0, 1.0, 0.0);
 
-const f32 keyboardSensitivity = 10.0f;
-const f32 mouseSensitivity = 0.1f;
-const glm::vec4 backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
-                           1.0f};
-const glm::vec2 resolution = {800.0f, 800.0f};
-bool cameraEnabled = true;
-
 bool renderer_init(RendererConfig config) {
+  rendererConfig = config;
+  return true;
 }
 
 int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
+
+  RendererConfig config = {
+      .resolution = {800.0f, 800.0f},
+      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
+      .keyboardSensitivity = 10.0f,
+      .mouseSensitivity = 0.1f,
+      .cameraEnabled = true,
+      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+  };
+  renderer_init(config);
 
   Scene scene = {};
   RendererState renderState = {};
@@ -62,16 +67,12 @@ int main(int argc, char* argv[]) {
   std::cout << "MESH REGIONS END" << '\n';
   std::cout << "FACE COUNT " << renderState.indices.size() / 3 << '\n';
 
-  camera.position = glm::vec3{-5.0f, 0.0f, 0.0f};
-  camera.yaw = 0.0f;
-  camera.pitch = 0.0f;
-
   sdlAssert(SDL_Init(SDL_INIT_VIDEO));
 
-  SDL_Window* window = SDL_CreateWindow("Lens", (u32)resolution.x, (u32)resolution.y, 0);
+  SDL_Window* window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
   sdlAssert(window != nullptr);
 
-  if (cameraEnabled)
+  if (rendererConfig.cameraEnabled)
     sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
 
   SDL_GPUTexture* swapchainTexture = nullptr;
@@ -412,7 +413,7 @@ int main(int argc, char* argv[]) {
   SDL_GPURenderPass* renderPass = nullptr;
 
   SDL_GPUColorTargetInfo colorTargetInfo = {};
-  colorTargetInfo.clear_color = SDL_FColor{backgroundColor.r, backgroundColor.g, backgroundColor.b, backgroundColor.a};
+  colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
   colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
   colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
@@ -424,8 +425,8 @@ int main(int argc, char* argv[]) {
   depthTextureInfo.num_levels = 1;
   depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
   depthTextureInfo.layer_count_or_depth = 1;
-  depthTextureInfo.width = (u32)resolution.x;
-  depthTextureInfo.height = (u32)resolution.y;
+  depthTextureInfo.width = (u32)rendererConfig.resolution.x;
+  depthTextureInfo.height = (u32)rendererConfig.resolution.y;
 
   SDL_GPUTexture *depthTexture =
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
@@ -448,9 +449,9 @@ int main(int argc, char* argv[]) {
     const bool* keys =  SDL_GetKeyboardState(nullptr);
     
     glm::vec3 forward{
-      cos(glm::radians(camera.pitch)) * cos(glm::radians(camera.yaw)),
-      sin(glm::radians(camera.pitch)),
-      cos(glm::radians(camera.pitch)) * sin(glm::radians(camera.yaw))};
+      cos(glm::radians(rendererConfig.camera.pitch)) * cos(glm::radians(rendererConfig.camera.yaw)),
+      sin(glm::radians(rendererConfig.camera.pitch)),
+      cos(glm::radians(rendererConfig.camera.pitch)) * sin(glm::radians(rendererConfig.camera.yaw))};
 
     forward = glm::normalize(forward);
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
@@ -466,42 +467,42 @@ int main(int argc, char* argv[]) {
       running = false;
     }
 
-    if (cameraEnabled){
+    if (rendererConfig.cameraEnabled){
       u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
-      camera.yaw -= delta_x * mouseSensitivity;
-      camera.yaw = std::fmod(camera.yaw, 360.0f);
-      camera.pitch -= delta_y * mouseSensitivity;
-      camera.pitch = glm::clamp(camera.pitch, -90.0f, 90.0f);
+      rendererConfig.camera.yaw -= delta_x * rendererConfig.mouseSensitivity;
+      rendererConfig.camera.yaw = std::fmod(rendererConfig.camera.yaw, 360.0f);
+      rendererConfig.camera.pitch -= delta_y * rendererConfig.mouseSensitivity;
+      rendererConfig.camera.pitch = glm::clamp(rendererConfig.camera.pitch, -90.0f, 90.0f);
 
-      f32 speed = keyboardSensitivity;
+      f32 speed = rendererConfig.keyboardSensitivity;
       if (keys[SDL_SCANCODE_LSHIFT]) {
 	speed *= 2.0f;
       }
       if (keys[SDL_SCANCODE_W]) {
-	camera.position += forward * dt * speed;
+	rendererConfig.camera.position += forward * dt * speed;
       }
       if (keys[SDL_SCANCODE_S]) {
-	camera.position -= forward * dt * speed;
+	rendererConfig.camera.position -= forward * dt * speed;
       }
       if (keys[SDL_SCANCODE_A]) {
-	camera.position -= right * dt * speed;
+	rendererConfig.camera.position -= right * dt * speed;
       }
       if (keys[SDL_SCANCODE_D]) {
-	camera.position += right * dt * speed;
+	rendererConfig.camera.position += right * dt * speed;
       }
       if (keys[SDL_SCANCODE_SPACE]) {
-	camera.position += WORLD_UP * dt * speed;
+	rendererConfig.camera.position += WORLD_UP * dt * speed;
       }
       if (keys[SDL_SCANCODE_LCTRL]) {
-	camera.position -= WORLD_UP * dt * speed;
+	rendererConfig.camera.position -= WORLD_UP * dt * speed;
       }
     }
 
     glm::mat4 view =
-      glm::lookAtLH(camera.position, camera.position + forward, WORLD_UP);
+      glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + forward, WORLD_UP);
     glm::mat4 projection = glm::perspectiveLH_ZO(
 					    glm::radians(60.0f),
-					    resolution.x / resolution.y,
+					    rendererConfig.resolution.x / rendererConfig.resolution.y,
 					    0.1f,
 					    10000.0f
 					    );
@@ -522,7 +523,7 @@ int main(int argc, char* argv[]) {
 
     SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection,
                                  (u32)sizeof(viewProjection));
-    SDL_PushGPUFragmentUniformData(commandBuffer, 0, &resolution, (u32)sizeof(resolution));
+    SDL_PushGPUFragmentUniformData(commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
 				   
     SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
     SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
