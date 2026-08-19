@@ -353,10 +353,7 @@ bool scene_remove_instance(Scene *scene, InstanceHandle ih) {
 }
 
 bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
-  rendererState->vertices.clear();
-  rendererState->indices.clear();
-  rendererState->meshRegions.clear();
-  rendererState->objects.clear();
+  renderer_clear(rendererState);
   
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
