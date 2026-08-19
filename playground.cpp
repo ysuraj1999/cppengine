@@ -58,8 +58,7 @@ bool renderer_init(RendererConfig config) {
   commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
   sdlAssert(commandBuffer != nullptr);
 
-  // from sync
-    std::vector<u8> vertexShaderContents =
+  std::vector<u8> vertexShaderContents =
     readFile(SHADER_BIN_DIR "/shader.vertex.spv");
   assert(!vertexShaderContents.empty());
 
@@ -573,12 +572,12 @@ int main(int argc, char* argv[]) {
   // (void)argv;
 
   RendererConfig config = {
-      .resolution = {800.0f, 800.0f},
-      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
-      .keyboardSensitivity = 10.0f,
-      .mouseSensitivity = 0.1f,
-      .cameraEnabled = true,
-      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+    .resolution = {800.0f, 800.0f},
+    .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
+    .keyboardSensitivity = 10.0f,
+    .mouseSensitivity = 0.1f,
+    .cameraEnabled = true,
+    .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
   renderer_init(config);
 
@@ -643,32 +642,31 @@ int main(int argc, char* argv[]) {
       rendererConfig.camera.pitch -= delta_y * rendererConfig.mouseSensitivity;
       rendererConfig.camera.pitch = glm::clamp(rendererConfig.camera.pitch, -90.0f, 90.0f);
 
-      f32 speed = rendererConfig.keyboardSensitivity;
+      f32 keyboardSensitivity = rendererConfig.keyboardSensitivity;
       if (keys[SDL_SCANCODE_LSHIFT]) {
-	speed *= 2.0f;
+	keyboardSensitivity *= 2.0f;
       }
       if (keys[SDL_SCANCODE_W]) {
-	rendererConfig.camera.position += forward * dt * speed;
+	rendererConfig.camera.position += forward * dt * keyboardSensitivity;
       }
       if (keys[SDL_SCANCODE_S]) {
-	rendererConfig.camera.position -= forward * dt * speed;
+	rendererConfig.camera.position -= forward * dt * keyboardSensitivity;
       }
       if (keys[SDL_SCANCODE_A]) {
-	rendererConfig.camera.position -= right * dt * speed;
+	rendererConfig.camera.position -= right * dt * keyboardSensitivity;
       }
       if (keys[SDL_SCANCODE_D]) {
-	rendererConfig.camera.position += right * dt * speed;
+	rendererConfig.camera.position += right * dt * keyboardSensitivity;
       }
       if (keys[SDL_SCANCODE_SPACE]) {
-	rendererConfig.camera.position += WORLD_UP * dt * speed;
+	rendererConfig.camera.position += WORLD_UP * dt * keyboardSensitivity;
       }
       if (keys[SDL_SCANCODE_LCTRL]) {
-	rendererConfig.camera.position -= WORLD_UP * dt * speed;
+	rendererConfig.camera.position -= WORLD_UP * dt * keyboardSensitivity;
       }
     }
 
     renderer_render(&rendererState);
-
   }
   
   SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
