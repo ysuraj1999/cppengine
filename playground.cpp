@@ -98,15 +98,21 @@ bool scene_remove_instance(Scene *scene, InstanceHandle ih) {
 }
 
 bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
+  rendererState->vertices.clear();
+  rendererState->indices.clear();
+  rendererState->meshRegions.clear();
+  rendererState->objects.clear();
+  
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
   for (const MeshEntry &meshEntry : scene->meshes) {
     const Mesh mesh = meshEntry.mesh;
+    const MeshHandle meshHandle = meshEntry.handle;
     MeshRegion meshRegionStorage = {};
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;
     meshRegionStorage.indexCount = (u32)mesh.indices.size();
-    rendererState->meshRegions.push_back(meshRegionStorage);
+    rendererState->meshRegions[meshHandle] = meshRegionStorage;
     
     for (auto &vertex : mesh.vertices) {
       rendererState->vertices.push_back(vertex);
@@ -118,6 +124,8 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     vertIndexOffset += mesh.vertices.size();
     indexIndexOffset += mesh.indices.size();
   }
+
+  rendererState->objects = scene->objects;
   
   return true;
 }
@@ -142,9 +150,7 @@ int main(int argc, char* argv[]) {
   scene_load_obj(&scene, "models/cube.obj");
   scene_load_obj(&scene, "models/bunny.obj");
 
-  renderer_sync_scene(&renderState, &scene);
-  
-  u32 GRID_SIZE = 1;
+  u32 GRID_SIZE = 10;
   for (u32 x = 0; x < GRID_SIZE; x++){
     for (u32 y = 0; y < GRID_SIZE; y++){
       for (u32 z = 0; z < GRID_SIZE; z++) {
@@ -156,6 +162,8 @@ int main(int argc, char* argv[]) {
       }
     }
   }
+  
+  renderer_sync_scene(&renderState, &scene);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
   const u32 VERTEX_BUFFER_SIZE = renderState.vertices.size() * sizeof(Vertex);
@@ -163,7 +171,6 @@ int main(int argc, char* argv[]) {
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   SDL_GPUBuffer* vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
-
   
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
   const u32 INDEX_BUFFER_SIZE = renderState.indices.size() * sizeof(u32);
@@ -171,7 +178,6 @@ int main(int argc, char* argv[]) {
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   SDL_GPUBuffer* indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
-
   
   SDL_GPUBufferCreateInfo instanceBufferInfo = {};
   const u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
@@ -187,7 +193,6 @@ int main(int argc, char* argv[]) {
   sdlAssert(transferToInstanceBuffer != nullptr);
 
   SDL_GPUTexture *checkTexture;
-  defer(SDL_ReleaseGPUTexture(gpuDevice, checkTexture));
   
   // COPY:
   {
@@ -596,7 +601,7 @@ int main(int argc, char* argv[]) {
     SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
 
     u32 transferBufferOffsetPerMesh = 0;
-    for (auto& entry : scene.objects) {
+    for (auto& entry : renderState.objects) {
       auto meshHandle = entry.first;
       auto &instances = entry.second;
 
@@ -646,7 +651,8 @@ int main(int argc, char* argv[]) {
     SDL_EndGPURenderPass(renderPass);
     sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
-
+  
+  SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
   SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
   SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
   SDL_ReleaseGPUShader(gpuDevice, vertexShader);

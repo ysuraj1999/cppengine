@@ -93,7 +93,8 @@ struct Scene {
 struct RendererState {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
-  std::vector<MeshRegion> meshRegions;
+  std::map<MeshHandle, MeshRegion> meshRegions;
+  std::map<MeshHandle, Instances> objects;
 };
 
 struct RendererConfig {
