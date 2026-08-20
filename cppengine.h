@@ -8,6 +8,10 @@ typedef u64 SceneHandle;
 typedef u64 MeshHandle;
 typedef u64 InstanceHandle;
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 bool renderer_init();
 
 SceneHandle renderer_scene_create();
@@ -38,3 +42,7 @@ MeshHandle renderer_scene_mesh_at(SceneHandle sh, u64 index);
 
 u64 renderer_scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh);
 InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index);
+
+#ifdef __cplusplus
+}
+#endif
