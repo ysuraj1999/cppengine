@@ -320,24 +320,18 @@ bool renderer_scene_load_obj(Scene *scene, const char *path) {
 }
 
 MeshHandle renderer_scene_add_mesh(Scene *scene, Mesh m) {
-  MeshEntry mEntry = {};
-  mEntry.handle = next_mesh_handle++;
-  mEntry.mesh = m;
-  (*scene).meshes.push_back(mEntry);
-  return mEntry.handle;
+  u64 newMeshHandle = next_mesh_handle++;
+  scene->meshes[newMeshHandle] = m;
+  return newMeshHandle;
 }
 
 bool renderer_scene_remove_mesh(Scene *scene, MeshHandle mh) {
-  for (auto it = scene->meshes.begin(); it != scene->meshes.end(); ++it) {
-    if (it->handle == mh) {
-      // erase instances
-      scene->objects[mh].clear();
-      
-      scene->meshes.erase(it);
-      return true;
-    }
+  if (!scene->meshes.contains(mh)) {
+    return false;
   }
-  return false;
+  scene->objects.erase(mh);
+  scene->meshes.erase(mh);
+  return true;
 }
 
 InstanceHandle renderer_scene_add_instance(Scene *scene, MeshHandle m, Transform t) {
@@ -352,9 +346,9 @@ InstanceHandle renderer_scene_add_instance(Scene *scene, MeshHandle m, Transform
 
 bool renderer_scene_remove_instance(Scene *scene, InstanceHandle ih) {
   for (auto &[meshHandle, instances] : scene->objects) {
-    for (auto it = instances.begin(); it != instances.end(); it++) {
-      if (it->instanceHandle == ih) {
-        instances.erase(it);
+    for (u64 i = 0; i < instances.size(); i++){
+      if (instances[i].instanceHandle == ih) {
+        instances.erase(instances.begin() + i);
 	return true;
       }
     }
@@ -367,9 +361,7 @@ bool renderer_sync_scene(const Scene *scene) {
   
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
-  for (const MeshEntry &meshEntry : scene->meshes) {
-    const Mesh mesh = meshEntry.mesh;
-    const MeshHandle meshHandle = meshEntry.handle;
+  for (const auto &[meshHandle, mesh] : scene->meshes) {
     MeshRegion meshRegionStorage = {};
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;

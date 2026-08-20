@@ -83,13 +83,8 @@ struct Instance {
 
 using Instances = std::vector<Instance>;
 
-struct MeshEntry {
-    MeshHandle handle;
-    Mesh mesh;
-};
-
 struct Scene {
-  std::vector<MeshEntry> meshes;
+  std::unordered_map<MeshHandle, Mesh> meshes;
   std::unordered_map<MeshHandle, Instances> objects;
 };
 
