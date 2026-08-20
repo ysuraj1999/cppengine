@@ -6,18 +6,9 @@ int main(int argc, char* argv[]) {
   // (void)argc;
   // (void)argv;
 
-  RendererConfig config = {
-    .resolution = {1000.0f, 1000.0f},
-    .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
-    .keyboardSensitivity = 200.0f,
-    .mouseSensitivity = 0.1f,
-    .cameraEnabled = true,
-    .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
-  };
-  renderer_init(config);
+  renderer_init();
 
   Scene scene = {};
-  RendererState rendererState = {};
 
   renderer_scene_load_obj(&scene, "models/bmw.obj");
   std::cout << "Length " << scene.meshes.size() << '\n';
@@ -42,7 +33,7 @@ int main(int argc, char* argv[]) {
   //   }
   // }
   
-  renderer_sync_scene(&rendererState, &scene);
+  renderer_sync_scene(&scene);
 
   bool running = true;
   
@@ -108,7 +99,7 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    renderer_render(&rendererState);
+    renderer_render();
   }
   
   renderer_quit();

@@ -27,15 +27,15 @@
 extern glm::vec3 WORLD_UP;
 extern RendererConfig rendererConfig;
 
-bool renderer_init(RendererConfig config);
+bool renderer_init();
 bool renderer_scene_load_obj(Scene *scene, const char *path);
 MeshHandle renderer_scene_add_mesh(Scene *scene, Mesh m);
 bool renderer_scene_remove_mesh(Scene *scene, MeshHandle mh);
 InstanceHandle renderer_scene_add_instance(Scene *scene, MeshHandle m, Transform t);
 bool renderer_scene_remove_instance(Scene *scene, InstanceHandle i);
-bool renderer_sync_scene(RendererState *rendererState, const Scene *scene);
-void renderer_render(RendererState *rendererState);
-bool renderer_clear(RendererState *rendererState);
+bool renderer_sync_scene(const Scene *scene);
+void renderer_render(void);
+bool renderer_clear(void);
 void renderer_quit();
 
 // Assuming only 1 scene exists for now

@@ -33,8 +33,18 @@ static_global SDL_GPUBufferBinding indexBufferBinding[1] = {};
 static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
 static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
+static_global RendererState rendererState;
 
-bool renderer_init(RendererConfig config) {
+bool renderer_init() {
+  RendererConfig config = {
+    .resolution = {1000.0f, 1000.0f},
+    .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
+    .keyboardSensitivity = 200.0f,
+    .mouseSensitivity = 0.1f,
+    .cameraEnabled = true,
+    .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+  };
+
   rendererConfig = config;
   
   sdlAssert(SDL_Init(SDL_INIT_VIDEO));
@@ -352,8 +362,8 @@ bool renderer_scene_remove_instance(Scene *scene, InstanceHandle ih) {
   return false;
 }
 
-bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
-  renderer_clear(rendererState);
+bool renderer_sync_scene(const Scene *scene) {
+  renderer_clear();
   
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
@@ -364,30 +374,30 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;
     meshRegionStorage.indexCount = (u32)mesh.indices.size();
-    rendererState->meshRegions[meshHandle] = meshRegionStorage;
+    rendererState.meshRegions[meshHandle] = meshRegionStorage;
     
     for (auto &vertex : mesh.vertices) {
-      rendererState->vertices.push_back(vertex);
+      rendererState.vertices.push_back(vertex);
     }
     for (auto &index : mesh.indices) {
-      rendererState->indices.push_back(index);
+      rendererState.indices.push_back(index);
     }
 
     vertIndexOffset += mesh.vertices.size();
     indexIndexOffset += mesh.indices.size();
   }
 
-  rendererState->objects = scene->objects;
+  rendererState.objects = scene->objects;
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
-  const u32 VERTEX_BUFFER_SIZE = rendererState->vertices.size() * sizeof(Vertex);
+  const u32 VERTEX_BUFFER_SIZE = rendererState.vertices.size() * sizeof(Vertex);
   vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
   vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
   vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
   
   SDL_GPUBufferCreateInfo indexBufferInfo = {};
-  const u32 INDEX_BUFFER_SIZE = rendererState->indices.size() * sizeof(u32);
+  const u32 INDEX_BUFFER_SIZE = rendererState.indices.size() * sizeof(u32);
   indexBufferInfo.size = INDEX_BUFFER_SIZE;
   indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
   indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
@@ -417,7 +427,7 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
 							       SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
     sdlAssert(mappedVertexInTransfer != nullptr);
-    std::memcpy(mappedVertexInTransfer, rendererState->vertices.data(), VERTEX_BUFFER_SIZE);
+    std::memcpy(mappedVertexInTransfer, rendererState.vertices.data(), VERTEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
     transferToVertexBufferLocation.offset = 0;
@@ -438,7 +448,7 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
     u32* mappedIndicesInTransfer = reinterpret_cast<u32*>(
 							  SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
     sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, rendererState->indices.data(), INDEX_BUFFER_SIZE);
+    std::memcpy(mappedIndicesInTransfer, rendererState.indices.data(), INDEX_BUFFER_SIZE);
 
     SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
     transferToIndexBufferLocation.offset = 0;
@@ -481,7 +491,7 @@ bool renderer_sync_scene(RendererState *rendererState, const Scene *scene) {
   return true;
 }
 
-void renderer_render(RendererState *rendererState) {
+void renderer_render(void) {
   glm::mat4 view =
     glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
   glm::mat4 projection = glm::perspectiveLH_ZO(
@@ -517,7 +527,7 @@ void renderer_render(RendererState *rendererState) {
   SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
 
   u32 transferBufferOffsetPerMesh = 0;
-  for (auto& entry : rendererState->objects) {
+  for (auto& entry : rendererState.objects) {
     auto meshHandle = entry.first;
     auto &instances = entry.second;
 
@@ -551,7 +561,7 @@ void renderer_render(RendererState *rendererState) {
     instanceBufferRegion.buffer = instanceBuffer;
     instanceBufferRegion.size = requiredInstanceCopySize;
 
-    MeshRegion region = rendererState->meshRegions[meshHandle];
+    MeshRegion region = rendererState.meshRegions[meshHandle];
 
     SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
                           &instanceBufferRegion, false);
@@ -568,11 +578,11 @@ void renderer_render(RendererState *rendererState) {
   sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
 }
 
-bool renderer_clear(RendererState *rendererState) {
-  rendererState->vertices.clear();
-  rendererState->indices.clear();
-  rendererState->meshRegions.clear();
-  rendererState->objects.clear();
+bool renderer_clear(void) {
+  rendererState.vertices.clear();
+  rendererState.indices.clear();
+  rendererState.meshRegions.clear();
+  rendererState.objects.clear();
   return true;
 }
 
