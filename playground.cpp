@@ -1,6 +1,17 @@
 #include "cppengine.h"
 #include "types.hpp"
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_scancode.h>
 #include <SDL3/SDL_gpu.h>
+#include <glm/glm.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
+#include <cmath>
+#include <iostream>
+
+extern RendererConfig rendererConfig;
+extern glm::vec3 WORLD_UP;
 
 int main(int argc, char* argv[]) {
   // (void)argc;
@@ -8,17 +19,18 @@ int main(int argc, char* argv[]) {
 
   renderer_init();
 
-  Scene scene = {};
+  SceneHandle sh = renderer_scene_create();
 
-  renderer_scene_load_obj(&scene, "models/bmw.obj");
-  std::cout << "Length " << scene.meshes.size() << '\n';
+  renderer_scene_load_obj(sh, "models/bmw.obj");
+  std::cout << "Length " << renderer_scene_mesh_count(sh) << '\n';
 
-  u32 GRID_SIZE = 1;
-  for (int i = 0; i < scene.meshes.size(); i++) {
-    renderer_scene_add_instance(&scene, i, Transform{
-            .position = {0.0f, 0.0f, 0.0f},
-            .scale = {1.0f, 1.0f, 1.0f},
-            .rotation = {0.0f, 0.0f, 0.0f}});
+  u64 meshCount = renderer_scene_mesh_count(sh);
+  for (u64 i = 0; i < meshCount; i++) {
+    MeshHandle mh = renderer_scene_mesh_at(sh, i);
+    renderer_scene_add_instance(sh, mh,
+                                0.0f, 0.0f, 0.0f,   // position
+                                1.0f, 1.0f, 1.0f,   // scale
+                                0.0f, 0.0f, 0.0f);  // rotation
   }
 
   // for (u32 x = 0; x < GRID_SIZE; x++){
@@ -33,7 +45,7 @@ int main(int argc, char* argv[]) {
   //   }
   // }
   
-  renderer_sync_scene(&scene);
+  renderer_sync_scene(sh);
 
   bool running = true;
   
@@ -102,6 +114,7 @@ int main(int argc, char* argv[]) {
     renderer_render();
   }
   
+  renderer_scene_destroy(sh);
   renderer_quit();
   return 0;
 }

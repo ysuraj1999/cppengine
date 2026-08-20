@@ -85,6 +85,7 @@ using Instances = std::vector<Instance>;
 
 struct Scene {
   std::unordered_map<MeshHandle, Mesh> meshes;
+  std::vector<MeshHandle> meshOrder;
   std::unordered_map<MeshHandle, Instances> objects;
 };
 

@@ -1,14 +1,40 @@
 #include "cppengine.h"
 #include "types.hpp"
 #include <SDL3/SDL_gpu.h>
+#include <algorithm>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_gpu.h>
+#include <SDL3/SDL_main.h>
+#include <SDL3/SDL_events.h>
+#include <SDL3/SDL_scancode.h>
+#include <cfloat>
+#include <cstddef>
+#include <glm/glm.hpp>
+#include <cassert>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <vector>
+#include <glm/ext/matrix_clip_space.hpp>
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/geometric.hpp>
+#include <glm/trigonometric.hpp>
 
-// cppengine.cpp
+#include "stb_image.h"
+#include "types.hpp"
+#include "obj.hpp"
+#include "utils.hpp"
+
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
 // Monotonically increasing counters
 static_global uint64_t next_mesh_handle = 0;
 static_global uint64_t next_instance_handle = 0;
+static_global uint64_t next_scene_handle = 0;
+
+static_global std::unordered_map<SceneHandle, Scene> sceneRegistry;
+static_global std::vector<SceneHandle> sceneOrder;
 static_global SDL_Window *window;
 static_global SDL_GPUDevice *gpuDevice;
 static_global SDL_GPUTexture *swapchainTexture;
@@ -34,6 +60,62 @@ static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
 static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
+
+static_internal SceneHandle scene_create() {
+  SceneHandle sh = next_scene_handle++;
+  sceneRegistry[sh] = Scene{};
+  sceneOrder.push_back(sh);
+  return sh;
+}
+
+static_internal bool scene_destroy(SceneHandle sh) {
+  bool erased = sceneRegistry.erase(sh) > 0;
+  if (erased) {
+    auto it = std::find(sceneOrder.begin(), sceneOrder.end(), sh);
+    sceneOrder.erase(it);
+  }
+  return erased;
+}
+
+static_internal Scene* scene_get(SceneHandle sh) {
+  auto it = sceneRegistry.find(sh);
+  assert(it != sceneRegistry.end());
+  return &it->second;
+}
+
+static_internal Mesh* mesh_get(Scene* scene, MeshHandle mh) {
+  auto it = scene->meshes.find(mh);
+  assert(it != scene->meshes.end());
+  return &it->second;
+}
+
+static_internal Instance* instance_get(Scene* scene, InstanceHandle ih) {
+  for (auto &[meshHandle, instances] : scene->objects) {
+    for (auto &inst : instances) {
+      if (inst.instanceHandle == ih)
+        return &inst;
+    }
+  }
+  assert(false && "instance handle not found");
+  return nullptr;
+}
+
+static_internal MeshHandle mesh_add(Scene* scene, Mesh m) {
+  MeshHandle newMeshHandle = next_mesh_handle++;
+  scene->meshes[newMeshHandle] = m;
+  scene->meshOrder.push_back(newMeshHandle);
+  return newMeshHandle;
+}
+
+static_internal InstanceHandle instance_add(Scene* scene, MeshHandle m, Transform t) {
+  mesh_get(scene, m);
+  Instance newInstance = {};
+  newInstance.instanceHandle = next_instance_handle++;
+  newInstance.mesh = m;
+  newInstance.transform = t;
+  scene->objects[m].push_back(newInstance);
+  return newInstance.instanceHandle;
+}
 
 bool renderer_init() {
   RendererConfig config = {
@@ -309,42 +391,56 @@ bool renderer_init() {
   return true;
 }
 
-bool renderer_scene_load_obj(Scene *scene, const char *path) {
+SceneHandle renderer_scene_create() {
+  return scene_create();
+}
+
+bool renderer_scene_destroy(SceneHandle sh) {
+  return scene_destroy(sh);
+}
+
+bool renderer_scene_load_obj(SceneHandle sh, const char *path) {
+  Scene* scene = scene_get(sh);
+
   std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
 
   for (const auto &m : meshCollection) {
-    renderer_scene_add_mesh(scene, m);
+    mesh_add(scene, m);
   }
   
   return true;
 }
 
-MeshHandle renderer_scene_add_mesh(Scene *scene, Mesh m) {
-  u64 newMeshHandle = next_mesh_handle++;
-  scene->meshes[newMeshHandle] = m;
-  return newMeshHandle;
-}
+bool renderer_scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
+  Scene* scene = scene_get(sh);
 
-bool renderer_scene_remove_mesh(Scene *scene, MeshHandle mh) {
   if (!scene->meshes.contains(mh)) {
     return false;
   }
   scene->objects.erase(mh);
   scene->meshes.erase(mh);
+  auto it = std::find(scene->meshOrder.begin(), scene->meshOrder.end(), mh);
+  scene->meshOrder.erase(it);
   return true;
 }
 
-InstanceHandle renderer_scene_add_instance(Scene *scene, MeshHandle m, Transform t) {
-  Instance newInstance = {};
-  newInstance.instanceHandle = next_instance_handle++;
-  newInstance.mesh = m;
-  newInstance.transform = t;
+InstanceHandle renderer_scene_add_instance(SceneHandle sh, MeshHandle m,
+                                           f32 px, f32 py, f32 pz,
+                                           f32 sx, f32 sy, f32 sz,
+                                           f32 rx, f32 ry, f32 rz) {
+  Scene* scene = scene_get(sh);
 
-  scene->objects[m].push_back(newInstance);
-  return newInstance.instanceHandle;
+  Transform t = {};
+  t.position = {px, py, pz};
+  t.scale    = {sx, sy, sz};
+  t.rotation = {rx, ry, rz};
+
+  return instance_add(scene, m, t);
 }
 
-bool renderer_scene_remove_instance(Scene *scene, InstanceHandle ih) {
+bool renderer_scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
+  Scene* scene = scene_get(sh);
+
   for (auto &[meshHandle, instances] : scene->objects) {
     for (u64 i = 0; i < instances.size(); i++){
       if (instances[i].instanceHandle == ih) {
@@ -356,12 +452,15 @@ bool renderer_scene_remove_instance(Scene *scene, InstanceHandle ih) {
   return false;
 }
 
-bool renderer_sync_scene(const Scene *scene) {
+bool renderer_sync_scene(SceneHandle sh) {
+  Scene* scene = scene_get(sh);
+
   renderer_clear();
   
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
-  for (const auto &[meshHandle, mesh] : scene->meshes) {
+  for (MeshHandle meshHandle : scene->meshOrder) {
+    const Mesh& mesh = scene->meshes[meshHandle];
     MeshRegion meshRegionStorage = {};
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;
@@ -481,6 +580,42 @@ bool renderer_sync_scene(const Scene *scene) {
   indexBufferBinding[0].buffer = indexBuffer;
   indexBufferBinding[0].offset = 0;
   return true;
+}
+
+u64 renderer_scene_count() {
+  return sceneOrder.size();
+}
+
+SceneHandle renderer_scene_at(u64 index) {
+  assert(index < sceneOrder.size());
+  return sceneOrder[index];
+}
+
+u64 renderer_scene_mesh_count(SceneHandle sh) {
+  Scene* scene = scene_get(sh);
+  return scene->meshOrder.size();
+}
+
+MeshHandle renderer_scene_mesh_at(SceneHandle sh, u64 index) {
+  Scene* scene = scene_get(sh);
+  assert(index < scene->meshOrder.size());
+  return scene->meshOrder[index];
+}
+
+u64 renderer_scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh) {
+  Scene* scene = scene_get(sh);
+  mesh_get(scene, mesh);
+  auto it = scene->objects.find(mesh);
+  return it == scene->objects.end() ? 0 : it->second.size();
+}
+
+InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index) {
+  Scene* scene = scene_get(sh);
+  mesh_get(scene, mesh);
+  auto it = scene->objects.find(mesh);
+  assert(it != scene->objects.end());
+  assert(index < it->second.size());
+  return it->second[index].instanceHandle;
 }
 
 void renderer_render(void) {
