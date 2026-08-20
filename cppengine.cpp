@@ -533,8 +533,8 @@ void renderer_render(void) {
     }
 
     const u32 requiredInstanceCopySize =
-      modelMatrices.size() * sizeof(glm::mat4);
-    assert(requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+        modelMatrices.size() * sizeof(glm::mat4);
+    assert(transferBufferOffsetPerMesh + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
 
     glm::mat4 *mappedToInstanceInTransfer =
       reinterpret_cast<glm::mat4*>(
