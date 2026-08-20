@@ -25,6 +25,21 @@
 #include "obj.hpp"
 #include "utils.hpp"
 
+#include <cfenv>
+
+// Save the caller's floating-point environment and switch to a non-stop
+// (all-exceptions-masked) mode for the duration of a foreign entry point.
+// Hosts like SBCL run with FP exception traps enabled, while SDL/GTK/libxml2
+// and friends legitimately compute NaN/Inf via 0.0/0.0 and 1.0/0.0 at init,
+// which must not trap inside our code.
+struct ScopedFpuMask {
+  std::fenv_t env;
+  ScopedFpuMask() { std::feholdexcept(&env); }
+  ~ScopedFpuMask() { std::fesetenv(&env); }
+  ScopedFpuMask(const ScopedFpuMask&) = delete;
+  ScopedFpuMask& operator=(const ScopedFpuMask&) = delete;
+};
+
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -117,7 +132,23 @@ static_internal InstanceHandle instance_add(Scene* scene, MeshHandle m, Transfor
   return newInstance.instanceHandle;
 }
 
+static_internal void camera_update(Camera& cam) {
+  cam.forward = glm::normalize(glm::vec3{
+    cos(glm::radians(cam.pitch)) * cos(glm::radians(cam.yaw)),
+    sin(glm::radians(cam.pitch)),
+    cos(glm::radians(cam.pitch)) * sin(glm::radians(cam.yaw))});
+  cam.right = glm::cross(WORLD_UP, cam.forward);
+}
+
+void renderer_camera_set(f32 px, f32 py, f32 pz, f32 yaw, f32 pitch) {
+  rendererConfig.camera.position = {px, py, pz};
+  rendererConfig.camera.yaw = yaw;
+  rendererConfig.camera.pitch = pitch;
+  camera_update(rendererConfig.camera);
+}
+
 bool renderer_init() {
+  ScopedFpuMask fpuMask;
   RendererConfig config = {
     .resolution = {1000.0f, 1000.0f},
     .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
@@ -128,7 +159,9 @@ bool renderer_init() {
   };
 
   rendererConfig = config;
-  
+
+  camera_update(rendererConfig.camera);
+
   sdlAssert(SDL_Init(SDL_INIT_VIDEO));
 
   window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
@@ -453,6 +486,8 @@ bool renderer_scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
 }
 
 bool renderer_sync_scene(SceneHandle sh) {
+  if (!gpuDevice)
+    return false;
   Scene* scene = scene_get(sh);
 
   renderer_clear();
@@ -619,6 +654,8 @@ InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, 
 }
 
 void renderer_render(void) {
+  if (!gpuDevice)
+    return;
   glm::mat4 view =
     glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
   glm::mat4 projection = glm::perspectiveLH_ZO(
@@ -714,18 +751,49 @@ bool renderer_clear(void) {
 }
 
 void renderer_quit() {
-  SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
-  SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
-  SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
-  SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
-  SDL_ReleaseGPUShader(gpuDevice, vertexShader);
-  SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
-  SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
-  SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
-  SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
-  SDL_ReleaseGPUSampler(gpuDevice, sampler);
+  if (!gpuDevice)
+    return;
+
+  if (checkTexture)
+    SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
+  if (depthTexture)
+    SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
+  if (pipeline)
+    SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
+  if (fragmentShader)
+    SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
+  if (vertexShader)
+    SDL_ReleaseGPUShader(gpuDevice, vertexShader);
+  if (vertexBuffer)
+    SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+  if (indexBuffer)
+    SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
+  if (instanceBuffer)
+    SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
+  if (transferToInstanceBuffer)
+    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
+  if (sampler)
+    SDL_ReleaseGPUSampler(gpuDevice, sampler);
+
   SDL_DestroyGPUDevice(gpuDevice);
-  SDL_DestroyWindow(window);
+  if (window)
+    SDL_DestroyWindow(window);
   SDL_Quit();
+
+  gpuDevice = nullptr;
+  window = nullptr;
+  swapchainTexture = nullptr;
+  commandBuffer = nullptr;
+  renderPass = nullptr;
+  vertexBuffer = nullptr;
+  indexBuffer = nullptr;
+  instanceBuffer = nullptr;
+  transferToInstanceBuffer = nullptr;
+  checkTexture = nullptr;
+  depthTexture = nullptr;
+  pipeline = nullptr;
+  sampler = nullptr;
+  vertexShader = nullptr;
+  fragmentShader = nullptr;
 }
 

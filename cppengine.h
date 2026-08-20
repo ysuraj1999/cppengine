@@ -43,6 +43,8 @@ MeshHandle renderer_scene_mesh_at(SceneHandle sh, u64 index);
 u64 renderer_scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh);
 InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index);
 
+void renderer_camera_set(f32 px, f32 py, f32 pz, f32 yaw, f32 pitch);
+
 #ifdef __cplusplus
 }
 #endif
