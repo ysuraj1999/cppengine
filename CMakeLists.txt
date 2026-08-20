@@ -17,23 +17,33 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-add_executable(playground
-  playground.cpp
+add_library(cppengine SHARED
+  cppengine.cpp
+  obj.cpp
   utils.cpp
   stb_image.cpp
 )
 
-target_include_directories(playground PRIVATE
+target_include_directories(cppengine PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/includes)
-target_link_libraries(playground PRIVATE SDL3::SDL3 glm::glm)
+
+target_link_libraries(cppengine PUBLIC
+  SDL3::SDL3
+  glm::glm)
+
+add_executable(playground
+  playground.cpp
+)
+
+target_link_libraries(playground PRIVATE cppengine)
 
 # SHADERS
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 set(TEXTURE_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/textures)
 
-target_compile_definitions(playground PRIVATE
+target_compile_definitions(cppengine PRIVATE
   SHADER_BIN_DIR="${SHADER_BIN_DIR}"
   TEXTURE_BIN_DIR="${TEXTURE_BIN_DIR}"
 )

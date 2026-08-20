@@ -73,6 +73,7 @@ struct MeshRegion {
 
 using MeshHandle = u64;
 using InstanceHandle = u64;
+using SceneHandle = u64;
 
 struct Instance {
   InstanceHandle instanceHandle;
@@ -107,5 +108,3 @@ struct RendererConfig {
   bool cameraEnabled;
   Camera camera;
 };
-
-
