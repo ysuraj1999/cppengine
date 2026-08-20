@@ -1,7 +1,7 @@
 #pragma once
 #include <cstdint>
 #include <glm/glm.hpp>
-#include <map>
+#include <unordered_map>
 #include <vector>
 
 typedef int8_t i8;
@@ -90,14 +90,14 @@ struct MeshEntry {
 
 struct Scene {
   std::vector<MeshEntry> meshes;
-  std::map<MeshHandle, Instances> objects;
+  std::unordered_map<MeshHandle, Instances> objects;
 };
 
 struct RendererState {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
-  std::map<MeshHandle, MeshRegion> meshRegions;
-  std::map<MeshHandle, Instances> objects;
+  std::unordered_map<MeshHandle, MeshRegion> meshRegions;
+  std::unordered_map<MeshHandle, Instances> objects;
 };
 
 struct RendererConfig {
