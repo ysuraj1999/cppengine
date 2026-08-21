@@ -80,6 +80,7 @@ static_global MouseState mouseState;
 static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
 static_global bool currentKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
+static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 
 static_internal void keyboard_update() {
   memcpy(
@@ -946,4 +947,12 @@ bool renderer_key_pressed(SDL_Scancode key) {
 
 bool renderer_key_released(SDL_Scancode key) {
   return !currentKeyboardState[key] && previousKeyboardState[key];
+}
+
+f32 renderer_dt(void) {
+  static_local u64 previous = SDL_GetPerformanceCounter();
+  const u64 now = SDL_GetPerformanceCounter();
+  const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(timerFrequency);
+  previous = now;
+  return dt;
 }

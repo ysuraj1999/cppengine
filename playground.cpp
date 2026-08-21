@@ -49,13 +49,9 @@ int main(int argc, char* argv[]) {
 
   bool running = true;
   
-  u64 previous = SDL_GetPerformanceCounter();
-  const u64 freq = SDL_GetPerformanceFrequency();
   float delta_x, delta_y;
   while (running) {
-    const u64 now = SDL_GetPerformanceCounter();
-    const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(freq);
-    previous = now;
+    const f32 dt = renderer_dt();
 
     const bool* keys =  SDL_GetKeyboardState(nullptr);
     

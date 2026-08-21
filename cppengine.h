@@ -80,6 +80,8 @@ void renderer_camera_update(void);
 bool renderer_key_down(SDL_Scancode key);
 bool renderer_key_pressed(SDL_Scancode key);
 bool renderer_key_released(SDL_Scancode key);
+
+f32 renderer_dt(void);
   
 #ifdef __cplusplus
 }

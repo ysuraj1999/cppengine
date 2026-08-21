@@ -306,6 +306,8 @@
 (cffi:defcfun ("renderer_key_released" renderer-key-released-p) :bool
   (key :int))
 
+(cffi:defcfun ("renderer_dt" renderer-dt) :float)
+
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -313,6 +315,9 @@
   (if (>= value maximum)
       0.0
       value))
+
+(defparameter *keyboard-sensitivity* 200.0);
+(defparameter *mouse-sensitivity* 100.0);
 
 (defun demo2 ()
   (renderer-init)
@@ -326,24 +331,27 @@
 			     :transform '(500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
     (scene-sync scene)
     (loop until (renderer-should-close-p)
+	  for dt = (renderer-dt)
 	  doing
 	     (renderer-poll-events)
-	     (let ((dy (renderer-mouse-wheel-y))
-		   (dx (renderer-mouse-wheel-x))
-		   (w-down (renderer-key-down-p +key-w+))
-		   (a-down (renderer-key-down-p +key-a+))
-		   (s-down (renderer-key-down-p +key-s+))
-		   (d-down (renderer-key-down-p +key-d+))
-		   (space-down (renderer-key-down-p +key-space+))
-		   (ctrl-down (renderer-key-down-p +key-left-ctrl+)))
-	       (renderer-camera-rotate (- dx) dy)
+	     (let* ((dy (renderer-mouse-wheel-y))
+		    (dx (renderer-mouse-wheel-x))
+		    (w-down (renderer-key-down-p +key-w+))
+		    (a-down (renderer-key-down-p +key-a+))
+		    (s-down (renderer-key-down-p +key-s+))
+		    (d-down (renderer-key-down-p +key-d+))
+		    (space-down (renderer-key-down-p +key-space+))
+		    (ctrl-down (renderer-key-down-p +key-left-ctrl+))
+		    (move-speed (* *keyboard-sensitivity* dt))
+		    (look-speed (* *mouse-sensitivity* dt)))
+	       (renderer-camera-rotate (* (- dx) look-speed) (* dy look-speed))
 	       (renderer-camera-move
-		(- (if w-down 1.0 0.0)
-		   (if s-down 1.0 0.0))
-		(- (if d-down 1.0 0.0)
-		   (if a-down 1.0 0.0))
-		(- (if space-down 1.0 0.0)
-		   (if ctrl-down 1.0 0.0)))
+		(- (if w-down move-speed 0.0)
+		   (if s-down move-speed 0.0))
+		(- (if d-down move-speed 0.0)
+		   (if a-down move-speed 0.0))
+		(- (if space-down move-speed 0.0)
+		   (if ctrl-down move-speed 0.0)))
 	       (renderer-camera-update))
 	     (renderer-render))
     (scene-destroy scene))
