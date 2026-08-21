@@ -76,6 +76,8 @@ static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
 static_global bool shouldClose = false;
+static_global MouseState mouseState;
+static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
 
 static_internal SceneHandle scene_create() {
   SceneHandle sh = next_scene_handle++;
@@ -139,13 +141,6 @@ static_internal void camera_update(Camera& cam) {
     sin(glm::radians(cam.pitch)),
     cos(glm::radians(cam.pitch)) * sin(glm::radians(cam.yaw))});
   cam.right = glm::cross(WORLD_UP, cam.forward);
-}
-
-void renderer_camera_set(f32 px, f32 py, f32 pz, f32 yaw, f32 pitch) {
-  rendererConfig.camera.position = {px, py, pz};
-  rendererConfig.camera.yaw = yaw;
-  rendererConfig.camera.pitch = pitch;
-  camera_update(rendererConfig.camera);
 }
 
 bool renderer_init() {
@@ -756,16 +751,104 @@ bool renderer_clear(void) {
 }
 
 void renderer_poll_events() {
+  mouseState.dx = 0.0f;
+  mouseState.dy = 0.0f;
+  mouseState.wheel_x = 0.0f;
+  mouseState.wheel_y = 0.0f;
+  memcpy(lastMouseDown, mouseState.down, sizeof(lastMouseDown));
+  memset(mouseState.pressed, 0, sizeof(mouseState.pressed));
+  memset(mouseState.released, 0, sizeof(mouseState.released));
+
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
-    if (event.type == SDL_EVENT_QUIT) {
+    switch (event.type) {
+    case SDL_EVENT_QUIT: {
       shouldClose = true;
+      break;
     }
+    case SDL_EVENT_MOUSE_MOTION: {
+      mouseState.x = event.motion.x;
+      mouseState.y = event.motion.y;
+      mouseState.dx += event.motion.xrel;
+      mouseState.dy += event.motion.yrel;
+      break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_DOWN: {
+      int button = event.button.button;
+      if (button > 0 && button < MOUSE_BUTTON_COUNT) {
+        mouseState.down[button] = true;
+      }
+      mouseState.x = event.button.x;
+      mouseState.y = event.button.y;
+      break;
+    }
+    case SDL_EVENT_MOUSE_BUTTON_UP: {
+      int button = event.button.button;
+      if (button > 0 && button < MOUSE_BUTTON_COUNT) {
+        mouseState.down[button] = false;
+      }
+      mouseState.x = event.button.x;
+      mouseState.y = event.button.y;
+      break;
+    }
+    case SDL_EVENT_MOUSE_WHEEL: {
+      mouseState.wheel_x += event.wheel.x;
+      mouseState.wheel_y += event.wheel.y;
+      break;
+    }
+    }
+  }
+
+  for (int i = 0; i < MOUSE_BUTTON_COUNT; i++) {
+    mouseState.pressed[i]  =  mouseState.down[i] && !lastMouseDown[i];
+    mouseState.released[i] = !mouseState.down[i] &&  lastMouseDown[i];
   }
 }
 
 bool renderer_should_close() {
   return shouldClose;
+}
+
+f32 renderer_mouse_x(void) {
+  return mouseState.x;
+}
+
+f32 renderer_mouse_y(void) {
+  return mouseState.y;
+}
+
+f32 renderer_mouse_dx(void) {
+  return mouseState.dx;
+}
+
+f32 renderer_mouse_dy(void) {
+  return mouseState.dy;
+}
+
+f32 renderer_mouse_wheel_x(void) {
+  return mouseState.wheel_x;
+}
+
+f32 renderer_mouse_wheel_y(void) {
+  return mouseState.wheel_y;
+}
+
+bool renderer_mouse_down(MouseButton button) {
+  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
+    return false;
+  return mouseState.down[button];
+}
+
+bool renderer_mouse_pressed(MouseButton button) {
+  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
+    return false;
+  return mouseState.pressed[button];
+}
+
+bool renderer_mouse_released(MouseButton button) {
+  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
+    return false;
+  return mouseState.released[button];
 }
 
 void renderer_quit() {
@@ -815,3 +898,36 @@ void renderer_quit() {
   fragmentShader = nullptr;
 }
 
+f32 renderer_camera_x(void) {
+  return rendererConfig.camera.position.x;
+}
+void renderer_camera_set_x(f32 x) {
+  rendererConfig.camera.position.x = x;
+}
+f32 renderer_camera_y(void) {
+  return rendererConfig.camera.position.y;
+}
+void renderer_camera_set_y(f32 y) {
+  rendererConfig.camera.position.y = y;
+}
+f32 renderer_camera_z(void) {
+  return rendererConfig.camera.position.z;
+}
+void renderer_camera_set_z(f32 z) {
+  rendererConfig.camera.position.z = z;
+}
+f32 renderer_camera_yaw(void) {
+  return rendererConfig.camera.yaw;
+}
+void renderer_camera_set_yaw(f32 yaw) {
+  rendererConfig.camera.yaw = yaw;
+}
+f32 renderer_camera_pitch(void) {
+  return rendererConfig.camera.pitch;
+}
+void renderer_camera_set_pitch(f32 pitch) {
+  rendererConfig.camera.pitch = pitch;
+}
+void renderer_camera_update(void) {
+  camera_update(rendererConfig.camera);
+}

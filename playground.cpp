@@ -68,13 +68,8 @@ int main(int argc, char* argv[]) {
     rendererConfig.camera.forward = forward;
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
     rendererConfig.camera.right = right;
-    
-    SDL_Event event;
-    while (SDL_PollEvent(&event)) {
-      if (event.type == SDL_EVENT_QUIT) {
-	running = false;
-      }
-    }
+
+    renderer_poll_events();
 
     if (keys[SDL_SCANCODE_ESCAPE]) {
       running = false;

@@ -74,6 +74,48 @@
   (px :float) (py :float) (pz :float)
   (yaw :float) (pitch :float))
 
+(defcenum (mouse-button :int)
+  (:left 1)
+  (:middle 2)
+  (:right 3)
+  (:x1 4)
+  (:x2 5))
+
+(defcfun ("renderer_mouse_x" renderer-mouse-x) :float)
+(defcfun ("renderer_mouse_y" renderer-mouse-y) :float)
+(defcfun ("renderer_mouse_dx" renderer-mouse-dx) :float)
+(defcfun ("renderer_mouse_dy" renderer-mouse-dy) :float)
+(defcfun ("renderer_mouse_wheel_x" renderer-mouse-wheel-x) :float)
+(defcfun ("renderer_mouse_wheel_y" renderer-mouse-wheel-y) :float)
+(defcfun ("renderer_mouse_down" renderer-mouse-down-p) :bool
+  (button mouse-button))
+(defcfun ("renderer_mouse_pressed" renderer-mouse-pressed-p) :bool
+  (button mouse-button))
+(defcfun ("renderer_mouse_released" renderer-mouse-released-p) :bool
+  (button mouse-button))
+
+(defcfun ("renderer_camera_x" renderer-camera-x) :float)
+(defcfun ("renderer_camera_set_x" renderer-camera-set-x) :void
+  (x :float))
+
+(defcfun ("renderer_camera_y" renderer-camera-y) :float)
+(defcfun ("renderer_camera_set_y" renderer-camera-set-y) :void
+  (y :float))
+
+(defcfun ("renderer_camera_z" renderer-camera-z) :float)
+(defcfun ("renderer_camera_set_z" renderer-camera-set-z) :void
+  (z :float))
+
+(defcfun ("renderer_camera_yaw" renderer-camera-yaw) :float)
+(defcfun ("renderer_camera_set_yaw" renderer-camera-set-yaw) :void
+  (yaw :float))
+
+(defcfun ("renderer_camera_pitch" renderer-camera-pitch) :float)
+(defcfun ("renderer_camera_set_pitch" renderer-camera-set-pitch) :void
+  (pitch :float))
+
+(defcfun ("renderer_camera_update" renderer-camera-update) :void)
+
 (deftype u64 () '(unsigned-byte 64))
 
 (defclass instance ()
@@ -170,20 +212,43 @@
 
 ;; (demo)
 
+(defun clamp(val minimum maximum)
+  (min (max val minimum) maximum))
+
+(defun wrap(value maximum)
+  (if (>= value maximum)
+      0.0
+      value))
+
+(defparameter *mouse-sensitivity* 5.0)
+(defparameter *keyboard-sensitivity* 1.0)
+
 (defun demo2 ()
   (renderer-init)
   (let ((scene (make-instance 'scene)))
-    (scene-load-obj scene "models/cube.obj")
+    (scene-load-obj scene "models/bmw.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
-	     (scene-add-instance
-	      scene mesh
-	      (make-instance 'instance
-			     :transform '(0.0 0.0 0.0 1.0 1.0 1.0 30.0 30.0 30.0))))
+	     (let ((ins
+		     (scene-add-instance
+		      scene mesh
+		      (make-instance 'instance
+				     :transform '(500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))))
+	       (format t "Instance transform - ~a~%" (instance-transform ins))))
     (scene-sync scene)
     (loop until (renderer-should-close-p)
 	  doing
 	     (renderer-poll-events)
+	     (let ((dy (renderer-mouse-wheel-y))
+		   (dx (renderer-mouse-wheel-x))
+		   (yaw (renderer-camera-yaw))
+		   (pitch (renderer-camera-pitch)))
+	       (renderer-camera-set-yaw (wrap (- yaw (* dx *mouse-sensitivity*)) 360.0))
+	       (renderer-camera-set-pitch (clamp (- pitch (* dy *mouse-sensitivity*)) -89.99 89.99))
+	       (renderer-camera-update))
+	     ;; (format t "Delta (~a, ~a)~%" (renderer-mouse-dx) (renderer-mouse-dy))
+	     ;; (format t "Position (~a, ~a)~%" (renderer-mouse-x) (renderer-mouse-y))
+	     ;; (format t "Wheel (~a, ~a)~%" (renderer-mouse-wheel-x) (renderer-mouse-wheel-y))
 	     (renderer-render))
     (scene-destroy scene))
   (renderer-quit))
