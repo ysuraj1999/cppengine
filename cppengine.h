@@ -45,6 +45,10 @@ InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, 
 
 void renderer_camera_set(f32 px, f32 py, f32 pz, f32 yaw, f32 pitch);
 
+void renderer_poll_events();
+
+bool renderer_should_close();
+  
 #ifdef __cplusplus
 }
 #endif

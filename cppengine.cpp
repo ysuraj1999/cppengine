@@ -75,6 +75,7 @@ static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
 static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
+static_global bool shouldClose = false;
 
 static_internal SceneHandle scene_create() {
   SceneHandle sh = next_scene_handle++;
@@ -150,13 +151,16 @@ void renderer_camera_set(f32 px, f32 py, f32 pz, f32 yaw, f32 pitch) {
 bool renderer_init() {
   ScopedFpuMask fpuMask;
   RendererConfig config = {
-    .resolution = {1000.0f, 1000.0f},
-    .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
-    .keyboardSensitivity = 200.0f,
-    .mouseSensitivity = 0.1f,
-    .cameraEnabled = true,
-    .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+      .resolution = {1000.0f, 1000.0f},
+      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
+                          1.0f},
+      .keyboardSensitivity = 200.0f,
+      .mouseSensitivity = 0.1f,
+      .cameraEnabled = true,
+      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
+
+  shouldClose = false;
 
   rendererConfig = config;
 
@@ -167,8 +171,9 @@ bool renderer_init() {
   window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
   sdlAssert(window != nullptr);
 
-  if (rendererConfig.cameraEnabled)
-    sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
+  // TODO - flag cameraRelative
+  // if (rendererConfig.cameraEnabled)
+  //   sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
 
   gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
   sdlAssert(gpuDevice != nullptr);
@@ -748,6 +753,19 @@ bool renderer_clear(void) {
   rendererState.meshRegions.clear();
   rendererState.objects.clear();
   return true;
+}
+
+void renderer_poll_events() {
+  SDL_Event event;
+  while (SDL_PollEvent(&event)) {
+    if (event.type == SDL_EVENT_QUIT) {
+      shouldClose = true;
+    }
+  }
+}
+
+bool renderer_should_close() {
+  return shouldClose;
 }
 
 void renderer_quit() {
