@@ -229,12 +229,10 @@
     (scene-load-obj scene "models/bmw.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
-	     (let ((ins
-		     (scene-add-instance
-		      scene mesh
-		      (make-instance 'instance
-				     :transform '(500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))))
-	       (format t "Instance transform - ~a~%" (instance-transform ins))))
+	     (scene-add-instance
+	      scene mesh
+	      (make-instance 'instance
+			     :transform '(500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
     (scene-sync scene)
     (loop until (renderer-should-close-p)
 	  doing
@@ -244,11 +242,8 @@
 		   (yaw (renderer-camera-yaw))
 		   (pitch (renderer-camera-pitch)))
 	       (renderer-camera-set-yaw (wrap (- yaw (* dx *mouse-sensitivity*)) 360.0))
-	       (renderer-camera-set-pitch (clamp (- pitch (* dy *mouse-sensitivity*)) -89.99 89.99))
+	       (renderer-camera-set-pitch (clamp (+ pitch (* dy *mouse-sensitivity*)) -89.99 89.99))
 	       (renderer-camera-update))
-	     ;; (format t "Delta (~a, ~a)~%" (renderer-mouse-dx) (renderer-mouse-dy))
-	     ;; (format t "Position (~a, ~a)~%" (renderer-mouse-x) (renderer-mouse-y))
-	     ;; (format t "Wheel (~a, ~a)~%" (renderer-mouse-wheel-x) (renderer-mouse-wheel-y))
 	     (renderer-render))
     (scene-destroy scene))
   (renderer-quit))
