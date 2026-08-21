@@ -201,6 +201,111 @@
 
 ;; (demo)
 
+;; Letters
+(defconstant +key-a+ 4)
+(defconstant +key-b+ 5)
+(defconstant +key-c+ 6)
+(defconstant +key-d+ 7)
+(defconstant +key-e+ 8)
+(defconstant +key-f+ 9)
+(defconstant +key-g+ 10)
+(defconstant +key-h+ 11)
+(defconstant +key-i+ 12)
+(defconstant +key-j+ 13)
+(defconstant +key-k+ 14)
+(defconstant +key-l+ 15)
+(defconstant +key-m+ 16)
+(defconstant +key-n+ 17)
+(defconstant +key-o+ 18)
+(defconstant +key-p+ 19)
+(defconstant +key-q+ 20)
+(defconstant +key-r+ 21)
+(defconstant +key-s+ 22)
+(defconstant +key-t+ 23)
+(defconstant +key-u+ 24)
+(defconstant +key-v+ 25)
+(defconstant +key-w+ 26)
+(defconstant +key-x+ 27)
+(defconstant +key-y+ 28)
+(defconstant +key-z+ 29)
+
+;; Numbers
+(defconstant +key-1+ 30)
+(defconstant +key-2+ 31)
+(defconstant +key-3+ 32)
+(defconstant +key-4+ 33)
+(defconstant +key-5+ 34)
+(defconstant +key-6+ 35)
+(defconstant +key-7+ 36)
+(defconstant +key-8+ 37)
+(defconstant +key-9+ 38)
+(defconstant +key-0+ 39)
+
+;; Common
+(defconstant +key-enter+ 40)
+(defconstant +key-escape+ 41)
+(defconstant +key-backspace+ 42)
+(defconstant +key-tab+ 43)
+(defconstant +key-space+ 44)
+
+;; Punctuation
+(defconstant +key-minus+ 45)
+(defconstant +key-equals+ 46)
+(defconstant +key-left-bracket+ 47)
+(defconstant +key-right-bracket+ 48)
+(defconstant +key-backslash+ 49)
+(defconstant +key-semicolon+ 51)
+(defconstant +key-apostrophe+ 52)
+(defconstant +key-grave+ 53)
+(defconstant +key-comma+ 54)
+(defconstant +key-period+ 55)
+(defconstant +key-slash+ 56)
+
+;; Function keys
+(defconstant +key-f1+ 58)
+(defconstant +key-f2+ 59)
+(defconstant +key-f3+ 60)
+(defconstant +key-f4+ 61)
+(defconstant +key-f5+ 62)
+(defconstant +key-f6+ 63)
+(defconstant +key-f7+ 64)
+(defconstant +key-f8+ 65)
+(defconstant +key-f9+ 66)
+(defconstant +key-f10+ 67)
+(defconstant +key-f11+ 68)
+(defconstant +key-f12+ 69)
+
+;; Navigation
+(defconstant +key-insert+ 73)
+(defconstant +key-home+ 74)
+(defconstant +key-page-up+ 75)
+(defconstant +key-delete+ 76)
+(defconstant +key-end+ 77)
+(defconstant +key-page-down+ 78)
+(defconstant +key-right+ 79)
+(defconstant +key-left+ 80)
+(defconstant +key-down+ 81)
+(defconstant +key-up+ 82)
+
+;; Modifiers
+(defconstant +key-left-ctrl+ 224)
+(defconstant +key-left-shift+ 225)
+(defconstant +key-left-alt+ 226)
+(defconstant +key-left-gui+ 227)
+(defconstant +key-right-ctrl+ 228)
+(defconstant +key-right-shift+ 229)
+(defconstant +key-right-alt+ 230)
+(defconstant +key-right-gui+ 231)
+
+(cffi:defcfun ("renderer_key_down" renderer-key-down-p) :bool
+  (key :int))
+
+(cffi:defcfun ("renderer_key_pressed" renderer-key-pressed-p) :bool
+  (key :int))
+
+(cffi:defcfun ("renderer_key_released" renderer-key-released-p) :bool
+  (key :int))
+
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -208,9 +313,6 @@
   (if (>= value maximum)
       0.0
       value))
-
-(defparameter *mouse-sensitivity* 5.0)
-(defparameter *keyboard-sensitivity* 1.0)
 
 (defun demo2 ()
   (renderer-init)
@@ -227,8 +329,21 @@
 	  doing
 	     (renderer-poll-events)
 	     (let ((dy (renderer-mouse-wheel-y))
-		   (dx (renderer-mouse-wheel-x)))
+		   (dx (renderer-mouse-wheel-x))
+		   (w-down (renderer-key-down-p +key-w+))
+		   (a-down (renderer-key-down-p +key-a+))
+		   (s-down (renderer-key-down-p +key-s+))
+		   (d-down (renderer-key-down-p +key-d+))
+		   (space-down (renderer-key-down-p +key-space+))
+		   (ctrl-down (renderer-key-down-p +key-left-ctrl+)))
 	       (renderer-camera-rotate (- dx) dy)
+	       (renderer-camera-move
+		(- (if w-down 1.0 0.0)
+		   (if s-down 1.0 0.0))
+		(- (if d-down 1.0 0.0)
+		   (if a-down 1.0 0.0))
+		(- (if space-down 1.0 0.0)
+		   (if ctrl-down 1.0 0.0)))
 	       (renderer-camera-update))
 	     (renderer-render))
     (scene-destroy scene))

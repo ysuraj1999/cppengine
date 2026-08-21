@@ -1,6 +1,7 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
+#include <SDL3/SDL_scancode.h>
 
 typedef uint64_t u64;
 typedef float f32;
@@ -75,6 +76,10 @@ bool renderer_mouse_released(MouseButton button);
 void renderer_camera_move(f32 forward, f32 right, f32 up);
 void renderer_camera_rotate(f32 dx, f32 dy);
 void renderer_camera_update(void);
+
+bool renderer_key_down(SDL_Scancode key);
+bool renderer_key_pressed(SDL_Scancode key);
+bool renderer_key_released(SDL_Scancode key);
   
 #ifdef __cplusplus
 }

@@ -78,6 +78,22 @@ static_global RendererState rendererState;
 static_global bool shouldClose = false;
 static_global MouseState mouseState;
 static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
+static_global bool currentKeyboardState[SDL_SCANCODE_COUNT] = {};
+static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
+
+static_internal void keyboard_update() {
+  memcpy(
+	 previousKeyboardState,
+	 currentKeyboardState,
+	 sizeof(currentKeyboardState));
+
+  const bool* state = SDL_GetKeyboardState(nullptr);
+
+  memcpy(
+	 currentKeyboardState,
+	 state,
+	 sizeof(currentKeyboardState));
+}
 
 static_internal SceneHandle scene_create() {
   SceneHandle sh = next_scene_handle++;
@@ -803,6 +819,8 @@ void renderer_poll_events() {
     mouseState.pressed[i]  =  mouseState.down[i] && !lastMouseDown[i];
     mouseState.released[i] = !mouseState.down[i] &&  lastMouseDown[i];
   }
+
+  keyboard_update();
 }
 
 bool renderer_should_close() {
@@ -916,4 +934,16 @@ void renderer_camera_rotate(f32 yaw, f32 pitch) {
 
 void renderer_camera_update(void) {
   camera_update(rendererConfig.camera);
+}
+
+bool renderer_key_down(SDL_Scancode key) {
+  return currentKeyboardState[key];
+}
+
+bool renderer_key_pressed(SDL_Scancode key) {
+  return currentKeyboardState[key] && !previousKeyboardState[key];
+}
+
+bool renderer_key_released(SDL_Scancode key) {
+  return !currentKeyboardState[key] && previousKeyboardState[key];
 }
