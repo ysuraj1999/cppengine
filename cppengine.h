@@ -72,16 +72,8 @@ bool renderer_mouse_down(MouseButton button);
 bool renderer_mouse_pressed(MouseButton button);
 bool renderer_mouse_released(MouseButton button);
 
-f32  renderer_camera_x(void);
-void renderer_camera_set_x(f32 x);
-f32  renderer_camera_y(void);
-void renderer_camera_set_y(f32 y);
-f32  renderer_camera_z(void);
-void renderer_camera_set_z(f32 z);
-f32  renderer_camera_yaw(void);
-void renderer_camera_set_yaw(f32 yaw);
-f32  renderer_camera_pitch(void);
-void renderer_camera_set_pitch(f32 pitch);
+void renderer_camera_move(f32 forward, f32 right, f32 up);
+void renderer_camera_rotate(f32 dx, f32 dy);
 void renderer_camera_update(void);
   
 #ifdef __cplusplus

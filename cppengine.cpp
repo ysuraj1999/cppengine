@@ -898,36 +898,22 @@ void renderer_quit() {
   fragmentShader = nullptr;
 }
 
-f32 renderer_camera_x(void) {
-  return rendererConfig.camera.position.x;
+void renderer_camera_move(f32 forward, f32 right, f32 up) {
+  auto &camera = rendererConfig.camera;
+  camera_update(camera);
+
+  camera.position += camera.forward * forward;
+  camera.position += camera.right * right;
+  camera.position += WORLD_UP * up;
 }
-void renderer_camera_set_x(f32 x) {
-  rendererConfig.camera.position.x = x;
+
+void renderer_camera_rotate(f32 yaw, f32 pitch) {
+  auto& camera = rendererConfig.camera;
+
+  camera.yaw = glm::mod(camera.yaw + yaw, 360.0f);
+  camera.pitch = glm::clamp(camera.pitch + pitch, -89.99f, 89.99f);
 }
-f32 renderer_camera_y(void) {
-  return rendererConfig.camera.position.y;
-}
-void renderer_camera_set_y(f32 y) {
-  rendererConfig.camera.position.y = y;
-}
-f32 renderer_camera_z(void) {
-  return rendererConfig.camera.position.z;
-}
-void renderer_camera_set_z(f32 z) {
-  rendererConfig.camera.position.z = z;
-}
-f32 renderer_camera_yaw(void) {
-  return rendererConfig.camera.yaw;
-}
-void renderer_camera_set_yaw(f32 yaw) {
-  rendererConfig.camera.yaw = yaw;
-}
-f32 renderer_camera_pitch(void) {
-  return rendererConfig.camera.pitch;
-}
-void renderer_camera_set_pitch(f32 pitch) {
-  rendererConfig.camera.pitch = pitch;
-}
+
 void renderer_camera_update(void) {
   camera_update(rendererConfig.camera);
 }

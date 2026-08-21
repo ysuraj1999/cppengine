@@ -94,24 +94,13 @@
 (defcfun ("renderer_mouse_released" renderer-mouse-released-p) :bool
   (button mouse-button))
 
-(defcfun ("renderer_camera_x" renderer-camera-x) :float)
-(defcfun ("renderer_camera_set_x" renderer-camera-set-x) :void
-  (x :float))
+(cffi:defcfun ("renderer_camera_move" renderer-camera-move) :void
+  (forward :float)
+  (right :float)
+  (up :float))
 
-(defcfun ("renderer_camera_y" renderer-camera-y) :float)
-(defcfun ("renderer_camera_set_y" renderer-camera-set-y) :void
-  (y :float))
-
-(defcfun ("renderer_camera_z" renderer-camera-z) :float)
-(defcfun ("renderer_camera_set_z" renderer-camera-set-z) :void
-  (z :float))
-
-(defcfun ("renderer_camera_yaw" renderer-camera-yaw) :float)
-(defcfun ("renderer_camera_set_yaw" renderer-camera-set-yaw) :void
-  (yaw :float))
-
-(defcfun ("renderer_camera_pitch" renderer-camera-pitch) :float)
-(defcfun ("renderer_camera_set_pitch" renderer-camera-set-pitch) :void
+(cffi:defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
+  (yaw :float)
   (pitch :float))
 
 (defcfun ("renderer_camera_update" renderer-camera-update) :void)
@@ -238,11 +227,8 @@
 	  doing
 	     (renderer-poll-events)
 	     (let ((dy (renderer-mouse-wheel-y))
-		   (dx (renderer-mouse-wheel-x))
-		   (yaw (renderer-camera-yaw))
-		   (pitch (renderer-camera-pitch)))
-	       (renderer-camera-set-yaw (wrap (- yaw (* dx *mouse-sensitivity*)) 360.0))
-	       (renderer-camera-set-pitch (clamp (+ pitch (* dy *mouse-sensitivity*)) -89.99 89.99))
+		   (dx (renderer-mouse-wheel-x)))
+	       (renderer-camera-rotate (- dx) dy)
 	       (renderer-camera-update))
 	     (renderer-render))
     (scene-destroy scene))
