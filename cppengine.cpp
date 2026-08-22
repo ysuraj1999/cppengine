@@ -665,46 +665,44 @@ InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, 
 }
 
 static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
-  for (auto &instance : instances) {
-    SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(frame.commandBuffer);
-    sdlAssert(frameCopyPass != nullptr);
+  SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(frame.commandBuffer);
+  sdlAssert(frameCopyPass != nullptr);
 
-    std::vector<glm::mat4> modelMatrices;
-    modelMatrices.reserve(instances.size());
-    for (auto &t : instances) {
-      modelMatrices.push_back(transformToMat4(t.transform));
-    }
-
-    const u32 requiredInstanceCopySize =
-      modelMatrices.size() * sizeof(glm::mat4);
-    assert(frame.instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
-
-    glm::mat4 *mappedToInstanceInTransfer =
-      reinterpret_cast<glm::mat4*>(
-				   SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
-    sdlAssert(mappedToInstanceInTransfer != nullptr);
-    std::memcpy((u8 *)mappedToInstanceInTransfer + frame.instanceBufferOffset,
-		modelMatrices.data(), requiredInstanceCopySize);
-
-    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
-    transferToInstanceBufferLocation.offset = frame.instanceBufferOffset;
-    transferToInstanceBufferLocation.transfer_buffer =
-      transferToInstanceBuffer;
-
-    SDL_GPUBufferRegion instanceBufferRegion = {};
-    instanceBufferRegion.offset = frame.instanceBufferOffset;
-    instanceBufferRegion.buffer = instanceBuffer;
-    instanceBufferRegion.size = requiredInstanceCopySize;
-
-    SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
-                          &instanceBufferRegion, false);
-    SDL_EndGPUCopyPass(frameCopyPass);
-
-    SDL_DrawGPUIndexedPrimitives(frame.renderPass, meshRegion.indexCount,
-				 instances.size(), meshRegion.indexOffset,
-				 meshRegion.vertexOffset, 0);
-    frame.instanceBufferOffset += requiredInstanceCopySize;
+  std::vector<glm::mat4> modelMatrices;
+  modelMatrices.reserve(instances.size());
+  for (auto &t : instances) {
+    modelMatrices.push_back(transformToMat4(t.transform));
   }
+
+  const u32 requiredInstanceCopySize =
+    modelMatrices.size() * sizeof(glm::mat4);
+  assert(frame.instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+
+  glm::mat4 *mappedToInstanceInTransfer =
+    reinterpret_cast<glm::mat4*>(
+				 SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
+  sdlAssert(mappedToInstanceInTransfer != nullptr);
+  std::memcpy((u8 *)mappedToInstanceInTransfer + frame.instanceBufferOffset,
+	      modelMatrices.data(), requiredInstanceCopySize);
+
+  SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
+  transferToInstanceBufferLocation.offset = frame.instanceBufferOffset;
+  transferToInstanceBufferLocation.transfer_buffer =
+    transferToInstanceBuffer;
+
+  SDL_GPUBufferRegion instanceBufferRegion = {};
+  instanceBufferRegion.offset = frame.instanceBufferOffset;
+  instanceBufferRegion.buffer = instanceBuffer;
+  instanceBufferRegion.size = requiredInstanceCopySize;
+
+  SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
+			&instanceBufferRegion, false);
+  SDL_EndGPUCopyPass(frameCopyPass);
+
+  SDL_DrawGPUIndexedPrimitives(frame.renderPass, meshRegion.indexCount,
+			       instances.size(), meshRegion.indexOffset,
+			       meshRegion.vertexOffset, 0);
+  frame.instanceBufferOffset += requiredInstanceCopySize;
 }
 
 void renderer_render(void) {
@@ -753,8 +751,6 @@ void renderer_render(void) {
     MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
     draw_mesh(meshRegion, instances);
   }
-aaaaaaaaaa
-
     
   SDL_EndGPURenderPass(frame.renderPass);
   sdlAssert(SDL_SubmitGPUCommandBuffer(frame.commandBuffer));
