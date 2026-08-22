@@ -142,11 +142,27 @@
    (transform :accessor instance-transform :initarg :transform
 	      :type transform)))
 
+(defmethod initialize-instance :after ((scene scene) &rest initargs)
+  (declare (ignore initargs))
+  (setf (slot-value scene 'handle) (renderer-scene-create)))
+
 (defclass mesh ()
   ((handle :reader mesh-handle :type u64 :initarg :handle)
    (scene :reader mesh-scene :initarg :scene)
    (instances :reader mesh-instances
               :initform (make-array 0 :adjustable t :fill-pointer 0))))
+
+(defmethod mesh-instances ((mesh mesh))
+  (let ((scene (mesh-scene mesh))
+        (v (slot-value mesh 'instances)))
+    (setf (fill-pointer v) 0)
+    (dotimes (i (renderer-scene-mesh-instance-count (scene-handle scene) (mesh-handle mesh)))
+      (vector-push-extend
+       (make-instance 'instance
+                      :handle (renderer-scene-mesh-instance-at
+                               (scene-handle scene) (mesh-handle mesh) i))
+       v))
+    v))
 
 (defmethod mesh-add-instance ((mesh mesh) (transform transform))
   (let* ((scene (mesh-scene mesh))
@@ -175,10 +191,6 @@
    (meshes :reader scene-meshes
            :initform (make-array 0 :adjustable t :fill-pointer 0))))
 
-(defmethod initialize-instance :after ((scene scene) &rest initargs)
-  (declare (ignore initargs))
-  (setf (slot-value scene 'handle) (renderer-scene-create)))
-
 (defmethod scene-load-obj ((scene scene) path)
   (renderer-scene-load-obj (scene-handle scene) path))
 
@@ -198,40 +210,6 @@
 
 (defmethod scene-destroy ((scene scene))
   (renderer-scene-destroy (scene-handle scene)))
-
-(defmethod mesh-instances ((mesh mesh))
-  (let ((scene (mesh-scene mesh))
-        (v (slot-value mesh 'instances)))
-    (setf (fill-pointer v) 0)
-    (dotimes (i (renderer-scene-mesh-instance-count (scene-handle scene) (mesh-handle mesh)))
-      (vector-push-extend
-       (make-instance 'instance
-                      :handle (renderer-scene-mesh-instance-at
-                               (scene-handle scene) (mesh-handle mesh) i))
-       v))
-    v))
-
-(defun demo ()
-  (renderer-init)
-  (let ((scene (renderer-scene-create)))
-    (renderer-scene-load-obj scene "models/cube.obj")
-    (let ((count (renderer-scene-mesh-count scene)))
-      (dotimes (i count)
-	(let ((mesh (renderer-scene-mesh-at scene i)))
-          (renderer-scene-add-instance
-           scene mesh
-           0.0 0.0 0.0
-           1.0 1.0 1.0
-           0.0 0.0 0.0))))
-    (renderer-sync-scene scene)
-    (loop until (renderer-should-close-p)
-	  doing
-	     (renderer-poll-events)
-	     (renderer-render))
-    (renderer-scene-destroy scene))
-  (renderer-quit))
-
-;; (demo)
 
 ;; Letters
 (defconstant +key-a+ 4)
@@ -359,10 +337,10 @@
 (defun demo2 ()
   (renderer-init)
   (let ((scene (make-instance 'scene)))
-    (scene-load-obj scene "models/bmw.obj")
+    (scene-load-obj scene "models/cube.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
-	     (mesh-add-instance mesh (transform! 500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (scene-sync scene)
     (loop until (renderer-should-close-p)
 	  for dt = (renderer-dt)
