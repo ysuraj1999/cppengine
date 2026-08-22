@@ -733,15 +733,16 @@ static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
   frame.instanceBufferOffset += requiredInstanceCopySize;
 }
 
-void renderer_render(void) {
+
+void renderer_render_begin(void) {
   if (!gpuDevice)
     return;
 
   frame.instanceBufferOffset = 0;
 
   glm::mat4 view = glm::lookAtLH(
-      rendererConfig.camera.position,
-      rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
+				 rendererConfig.camera.position,
+				 rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
   // TODO move near and far into config
   glm::mat4 projection = glm::perspectiveLH_ZO(
 					       glm::radians(60.0f),
@@ -774,30 +775,29 @@ void renderer_render(void) {
   SDL_BindGPUIndexBuffer(frame.renderPass, indexBufferBinding,
 			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
   SDL_BindGPUFragmentSamplers(frame.renderPass, 0, textureSamplerBindings, 1);
+}
 
-  for (auto &[meshHandle, instances] : rendererState.objects) {
-    MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
-    draw_mesh(meshRegion, instances);
-  }
-
+void renderer_ui_begin() {
   ImGui_ImplSDLGPU3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
+}
 
-  ImGui::Begin("Scenes");
-
-  for (SceneHandle sh : sceneOrder) {
-    std::string name = std::format("Scene #{}", sh);
-    ImGui::Selectable(name.c_str());
-  }
-
-  ImGui::End();
-  
+void renderer_ui_end() {
   ImGui::Render();
   ImDrawData *draw_data = ImGui::GetDrawData();
   ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
   ImGui_ImplSDLGPU3_RenderDrawData(draw_data, frame.commandBuffer, frame.renderPass);
-  
+}
+
+void renderer_render(void) {
+  for (auto &[meshHandle, instances] : rendererState.objects) {
+    MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
+    draw_mesh(meshRegion, instances);
+  }
+}
+
+void renderer_render_end() {
   SDL_EndGPURenderPass(frame.renderPass);
   sdlAssert(SDL_SubmitGPUCommandBuffer(frame.commandBuffer));
 }
@@ -822,8 +822,6 @@ void renderer_poll_events() {
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
     ImGui_ImplSDL3_ProcessEvent(&event);
-    // if (ImGui::GetIO().WantCaptureMouse)
-    //   continue;
 
     switch (event.type) {
     case SDL_EVENT_QUIT: {
@@ -1017,4 +1015,3 @@ void ui_end_window() { ImGui::End(); }
 bool ui_button(const char* label) {
   return ImGui::Button(label);
 }
-

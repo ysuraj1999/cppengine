@@ -45,9 +45,15 @@ bool renderer_scene_remove_instance(SceneHandle sh, InstanceHandle i);
 
 bool renderer_sync_scene(SceneHandle sh);
 
+void renderer_render_begin(void);
 void renderer_render(void);
-bool renderer_clear(void);
+void renderer_render_end(void);
 
+void renderer_ui_begin(void);
+void renderer_ui_end(void);
+  
+bool renderer_clear(void);
+  
 void renderer_quit();
 
 u64 renderer_scene_count();

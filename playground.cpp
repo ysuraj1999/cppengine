@@ -102,7 +102,14 @@ int main(int argc, char* argv[]) {
       }
     }
 
+    renderer_render_begin();
     renderer_render();
+    renderer_ui_begin();
+    ui_begin_window("Hello");
+    ui_button("Hi");
+    ui_end_window();
+    renderer_ui_end();
+    renderer_render_end();
   }
   
   renderer_scene_destroy(sh);
