@@ -87,22 +87,26 @@ static_internal void keyboard_update() {
 	 currentKeyboardState,
 	 sizeof(currentKeyboardState));
 
-  const bool* state = SDL_GetKeyboardState(nullptr);
-
-  memcpy(
+  ImGuiIO& io = ImGui::GetIO();
+  if (io.WantCaptureKeyboard) {
+    memset(currentKeyboardState, 0, sizeof(currentKeyboardState));
+  } else {
+    const bool* state = SDL_GetKeyboardState(nullptr);
+    memcpy(
 	 currentKeyboardState,
 	 state,
 	 sizeof(currentKeyboardState));
+  }
 }
 
-static_internal SceneHandle scene_create() {
+SceneHandle scene_create() {
   SceneHandle sh = next_scene_handle++;
   sceneRegistry[sh] = Scene{};
   sceneOrder.push_back(sh);
   return sh;
 }
 
-static_internal bool scene_destroy(SceneHandle sh) {
+bool scene_destroy(SceneHandle sh) {
   bool erased = sceneRegistry.erase(sh) > 0;
   if (erased) {
     auto it = std::find(sceneOrder.begin(), sceneOrder.end(), sh);
@@ -466,15 +470,7 @@ bool renderer_init() {
   return true;
 }
 
-SceneHandle renderer_scene_create() {
-  return scene_create();
-}
-
-bool renderer_scene_destroy(SceneHandle sh) {
-  return scene_destroy(sh);
-}
-
-bool renderer_scene_load_obj(SceneHandle sh, const char *path) {
+bool scene_load_obj(SceneHandle sh, const char *path) {
   Scene* scene = scene_get(sh);
 
   std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
@@ -486,7 +482,7 @@ bool renderer_scene_load_obj(SceneHandle sh, const char *path) {
   return true;
 }
 
-bool renderer_scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
+bool scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
   Scene* scene = scene_get(sh);
 
   if (!scene->meshes.contains(mh)) {
@@ -508,10 +504,10 @@ static_internal Transform make_transform(f32 px, f32 py, f32 pz, f32 sx, f32 sy,
   return t;
 }
 
-InstanceHandle renderer_scene_add_instance(SceneHandle sh, MeshHandle m,
-                                           f32 px, f32 py, f32 pz,
-                                           f32 sx, f32 sy, f32 sz,
-                                           f32 rx, f32 ry, f32 rz) {
+InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m,
+                                  f32 px, f32 py, f32 pz,
+                                  f32 sx, f32 sy, f32 sz,
+                                  f32 rx, f32 ry, f32 rz) {
   Scene* scene = scene_get(sh);
   Transform t = make_transform(px, py, pz,
 			       sx, sy, sz,
@@ -519,7 +515,7 @@ InstanceHandle renderer_scene_add_instance(SceneHandle sh, MeshHandle m,
   return instance_add(scene, m, t);
 }
 
-bool renderer_scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
+bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
   Scene* scene = scene_get(sh);
 
   for (auto &[meshHandle, instances] : scene->objects) {
@@ -665,34 +661,34 @@ bool renderer_sync_scene(SceneHandle sh) {
   return true;
 }
 
-u64 renderer_scene_count() {
+u64 scene_count() {
   return sceneOrder.size();
 }
 
-SceneHandle renderer_scene_at(u64 index) {
+SceneHandle scene_at(u64 index) {
   assert(index < sceneOrder.size());
   return sceneOrder[index];
 }
 
-u64 renderer_scene_mesh_count(SceneHandle sh) {
+u64 scene_mesh_count(SceneHandle sh) {
   Scene* scene = scene_get(sh);
   return scene->meshOrder.size();
 }
 
-MeshHandle renderer_scene_mesh_at(SceneHandle sh, u64 index) {
+MeshHandle scene_mesh_at(SceneHandle sh, u64 index) {
   Scene* scene = scene_get(sh);
   assert(index < scene->meshOrder.size());
   return scene->meshOrder[index];
 }
 
-u64 renderer_scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh) {
+u64 scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh) {
   Scene* scene = scene_get(sh);
   mesh_get(scene, mesh);
   auto it = scene->objects.find(mesh);
   return it == scene->objects.end() ? 0 : it->second.size();
 }
 
-InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index) {
+InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index) {
   Scene* scene = scene_get(sh);
   mesh_get(scene, mesh);
   auto it = scene->objects.find(mesh);
@@ -786,13 +782,13 @@ void renderer_render_begin(void) {
   SDL_BindGPUFragmentSamplers(frame.renderPass, 0, textureSamplerBindings, 1);
 }
 
-void renderer_ui_begin() {
+void ui_begin() {
   ImGui_ImplSDLGPU3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
 }
 
-void renderer_ui_end() {
+void ui_end() {
   ImGui::Render();
   ImDrawData *draw_data = ImGui::GetDrawData();
   ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
@@ -819,7 +815,7 @@ bool renderer_clear(void) {
   return true;
 }
 
-void renderer_poll_events() {
+void input_poll() {
   mouseState.dx = 0.0f;
   mouseState.dy = 0.0f;
   mouseState.wheel_x = 0.0f;
@@ -827,6 +823,8 @@ void renderer_poll_events() {
   memcpy(lastMouseDown, mouseState.down, sizeof(lastMouseDown));
   memset(mouseState.pressed, 0, sizeof(mouseState.pressed));
   memset(mouseState.released, 0, sizeof(mouseState.released));
+
+  ImGuiIO& io = ImGui::GetIO();
 
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
@@ -840,31 +838,37 @@ void renderer_poll_events() {
     case SDL_EVENT_MOUSE_MOTION: {
       mouseState.x = event.motion.x;
       mouseState.y = event.motion.y;
-      mouseState.dx += event.motion.xrel;
-      mouseState.dy += event.motion.yrel;
+      if (!io.WantCaptureMouse) {
+        mouseState.dx += event.motion.xrel;
+        mouseState.dy += event.motion.yrel;
+      }
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-      int button = event.button.button;
-      if (button > 0 && button < MOUSE_BUTTON_COUNT) {
-        mouseState.down[button] = true;
-      }
       mouseState.x = event.button.x;
       mouseState.y = event.button.y;
+      if (!io.WantCaptureMouse) {
+        int button = event.button.button;
+        if (button > 0 && button < MOUSE_BUTTON_COUNT) {
+          mouseState.down[button] = true;
+        }
+      }
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP: {
+      mouseState.x = event.button.x;
+      mouseState.y = event.button.y;
       int button = event.button.button;
       if (button > 0 && button < MOUSE_BUTTON_COUNT) {
         mouseState.down[button] = false;
       }
-      mouseState.x = event.button.x;
-      mouseState.y = event.button.y;
       break;
     }
     case SDL_EVENT_MOUSE_WHEEL: {
-      mouseState.wheel_x += event.wheel.x;
-      mouseState.wheel_y += event.wheel.y;
+      if (!io.WantCaptureMouse) {
+        mouseState.wheel_x += event.wheel.x;
+        mouseState.wheel_y += event.wheel.y;
+      }
       break;
     }
     }
@@ -878,47 +882,47 @@ void renderer_poll_events() {
   keyboard_update();
 }
 
-bool renderer_should_close() {
+bool input_should_close() {
   return shouldClose;
 }
 
-f32 renderer_mouse_x(void) {
+f32 input_mouse_x(void) {
   return mouseState.x;
 }
 
-f32 renderer_mouse_y(void) {
+f32 input_mouse_y(void) {
   return mouseState.y;
 }
 
-f32 renderer_mouse_dx(void) {
+f32 input_mouse_dx(void) {
   return mouseState.dx;
 }
 
-f32 renderer_mouse_dy(void) {
+f32 input_mouse_dy(void) {
   return mouseState.dy;
 }
 
-f32 renderer_mouse_wheel_x(void) {
+f32 input_mouse_wheel_x(void) {
   return mouseState.wheel_x;
 }
 
-f32 renderer_mouse_wheel_y(void) {
+f32 input_mouse_wheel_y(void) {
   return mouseState.wheel_y;
 }
 
-bool renderer_mouse_down(MouseButton button) {
+bool input_mouse_down(MouseButton button) {
   if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
     return false;
   return mouseState.down[button];
 }
 
-bool renderer_mouse_pressed(MouseButton button) {
+bool input_mouse_pressed(MouseButton button) {
   if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
     return false;
   return mouseState.pressed[button];
 }
 
-bool renderer_mouse_released(MouseButton button) {
+bool input_mouse_released(MouseButton button) {
   if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
     return false;
   return mouseState.released[button];
@@ -995,19 +999,19 @@ void renderer_camera_update(void) {
   camera_update(rendererConfig.camera);
 }
 
-bool renderer_key_down(SDL_Scancode key) {
+bool input_key_down(SDL_Scancode key) {
   return currentKeyboardState[key];
 }
 
-bool renderer_key_pressed(SDL_Scancode key) {
+bool input_key_pressed(SDL_Scancode key) {
   return currentKeyboardState[key] && !previousKeyboardState[key];
 }
 
-bool renderer_key_released(SDL_Scancode key) {
+bool input_key_released(SDL_Scancode key) {
   return !currentKeyboardState[key] && previousKeyboardState[key];
 }
 
-f32 renderer_dt(void) {
+f32 time_dt(void) {
   static_local u64 previous = SDL_GetPerformanceCounter();
   const u64 now = SDL_GetPerformanceCounter();
   const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(timerFrequency);
@@ -1025,7 +1029,7 @@ bool ui_button(const char* label) {
   return ImGui::Button(label);
 }
 
-void renderer_scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
+void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
                                            f32 px, f32 py, f32 pz,
                                            f32 sx, f32 sy, f32 sz,
                                            f32 rx, f32 ry, f32 rz) {

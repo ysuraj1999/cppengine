@@ -11,257 +11,6 @@
 (defctype mesh-handle :uint64)
 (defctype instance-handle :uint64)
 
-(defcfun ("renderer_init" renderer-init) :bool)
-
-(defcfun ("renderer_scene_create" renderer-scene-create) scene-handle)
-(defcfun ("renderer_scene_destroy" renderer-scene-destroy) :bool
-  (sh scene-handle))
-
-(defcfun ("renderer_scene_load_obj" renderer-scene-load-obj) :bool
-  (sh scene-handle)
-  (path :string))
-
-(defcfun ("renderer_scene_remove_mesh" renderer-scene-remove-mesh) :bool
-  (sh scene-handle)
-  (mh mesh-handle))
-
-(defcfun ("renderer_scene_add_instance" renderer-scene-add-instance) instance-handle
-  (sh scene-handle)
-  (m mesh-handle)
-  (px :float) (py :float) (pz :float)
-  (sx :float) (sy :float) (sz :float)
-  (rx :float) (ry :float) (rz :float))
-
-(defcfun ("renderer_scene_instance_set_transform"
-          renderer-scene-instance-set-transform) :void
-  (sh :uint64)
-  (i :uint64)
-  (px :float)
-  (py :float)
-  (pz :float)
-  (sx :float)
-  (sy :float)
-  (sz :float)
-  (rx :float)
-  (ry :float)
-  (rz :float))
-
-(defcfun ("renderer_scene_remove_instance" renderer-scene-remove-instance) :bool
-  (sh scene-handle)
-  (i instance-handle))
-
-(defcfun ("renderer_sync_scene" renderer-sync-scene) :bool
-  (sh scene-handle))
-(defcfun ("renderer_render_begin" renderer-render-begin) :void)
-(defcfun ("renderer_render" renderer-render) :void)
-(defcfun ("renderer_render_end" renderer-render-end) :void)
-
-(defcfun ("renderer_ui_begin" renderer-ui-begin) :void)
-(defcfun ("renderer_ui_end" renderer-ui-end) :void)
-
-(defcfun ("ui_begin_window" ui-begin-window)
-  :void
-  (name :string))
-(defcfun ("ui_end_window" ui-end-window)
-  :void)
-(defcfun ("ui_button" ui-button)
-  :bool
-  (label :string))
-
-(defcfun ("renderer_clear" renderer-clear) :bool)
-
-(defcfun ("renderer_quit" renderer-quit) :void)
-
-(defcfun ("renderer_poll_events" renderer-poll-events) :void)
-
-(defcfun ("renderer_should_close" renderer-should-close-p) :bool)
-
-(defcfun ("renderer_scene_count" renderer-scene-count) :uint64)
-
-(defcfun ("renderer_scene_at" renderer-scene-at) scene-handle
-  (index :uint64))
-
-(defcfun ("renderer_scene_mesh_count" renderer-scene-mesh-count) :uint64
-  (sh scene-handle))
-
-(defcfun ("renderer_scene_mesh_at" renderer-scene-mesh-at) mesh-handle
-  (sh scene-handle)
-  (index :uint64))
-
-(defcfun ("renderer_scene_mesh_instance_count" renderer-scene-mesh-instance-count) :uint64
-  (sh scene-handle)
-  (mesh mesh-handle))
-
-(defcfun ("renderer_scene_mesh_instance_at" renderer-scene-mesh-instance-at) instance-handle
-  (sh scene-handle)
-  (mesh mesh-handle)
-  (index :uint64))
-
-(defcfun ("renderer_camera_set" renderer-camera-set) :void
-  (px :float) (py :float) (pz :float)
-  (yaw :float) (pitch :float))
-
-(defcenum (mouse-button :int)
-  (:left 1)
-  (:middle 2)
-  (:right 3)
-  (:x1 4)
-  (:x2 5))
-
-(defcfun ("renderer_mouse_x" renderer-mouse-x) :float)
-(defcfun ("renderer_mouse_y" renderer-mouse-y) :float)
-(defcfun ("renderer_mouse_dx" renderer-mouse-dx) :float)
-(defcfun ("renderer_mouse_dy" renderer-mouse-dy) :float)
-(defcfun ("renderer_mouse_wheel_x" renderer-mouse-wheel-x) :float)
-(defcfun ("renderer_mouse_wheel_y" renderer-mouse-wheel-y) :float)
-(defcfun ("renderer_mouse_down" renderer-mouse-down-p) :bool
-  (button mouse-button))
-(defcfun ("renderer_mouse_pressed" renderer-mouse-pressed-p) :bool
-  (button mouse-button))
-(defcfun ("renderer_mouse_released" renderer-mouse-released-p) :bool
-  (button mouse-button))
-
-(defcfun ("renderer_camera_move" renderer-camera-move) :void
-  (forward :float)
-  (right :float)
-  (up :float))
-
-(defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
-  (yaw :float)
-  (pitch :float))
-
-(defcfun ("renderer_camera_update" renderer-camera-update) :void)
-
-(deftype u64 () '(unsigned-byte 64))
-
-(defstruct transform
-  (px 0.0 :type single-float)
-  (py 0.0 :type single-float)
-  (pz 0.0 :type single-float)
-  (sx 1.0 :type single-float)
-  (sy 1.0 :type single-float)
-  (sz 1.0 :type single-float)
-  (rx 0.0 :type single-float)
-  (ry 0.0 :type single-float)
-  (rz 0.0 :type single-float))
-
-(defun transform! (px py pz sx sy sz rx ry rz)
-  (make-transform
-   :px px :py py :pz pz
-   :sx sx :sy sy :sz sz
-   :rx rx :ry ry :rz rz))
-
-(defclass instance ()
-  ((handle :reader instance-handle :type u64 :initarg :handle)
-   (mesh :reader instance-mesh :initarg :mesh)
-   (transform :accessor instance-transform :initarg :transform
-	      :type transform)))
-
-(defmethod print-object ((instance instance) stream)
-  (print-unreadable-object (instance stream :type t :identity t)
-    (format stream
-            "handle=~a mesh=~a"
-            (instance-handle instance)
-            (mesh-handle (instance-mesh instance)))))
-
-(defmethod (setf instance-transform) (value (instance instance))
-  (setf (slot-value instance 'transform) value)
-  (renderer-scene-instance-set-transform
-   (scene-handle (mesh-scene (instance-mesh instance)))
-   (instance-handle instance)
-   (transform-px value)
-   (transform-py value)
-   (transform-pz value)
-   (transform-sx value)
-   (transform-sy value)
-   (transform-sz value)
-   (transform-rx value)
-   (transform-ry value)
-   (transform-rz value))
-  value)
-
-(defclass mesh ()
-  ((handle :reader mesh-handle :type u64 :initarg :handle)
-   (scene :reader mesh-scene :initarg :scene)
-   (instances :reader mesh-instances
-              :initform (make-array 0 :adjustable t :fill-pointer 0))))
-
-(defmethod print-object ((mesh mesh) stream)
-  (print-unreadable-object (mesh stream :type t :identity t)
-    (format stream
-            "handle=~a instances=~a"
-            (mesh-handle mesh)
-            (renderer-scene-mesh-instance-count
-             (scene-handle (mesh-scene mesh))
-             (mesh-handle mesh)))))
-
-(defmethod mesh-instances ((mesh mesh))
-  (slot-value mesh 'instances))
-
-(defmethod mesh-add-instance ((mesh mesh) (transform transform))
-  (let* ((scene (mesh-scene mesh))
-         (handle
-           (renderer-scene-add-instance
-            (scene-handle scene)
-            (mesh-handle mesh)
-            (transform-px transform)
-            (transform-py transform)
-            (transform-pz transform)
-            (transform-sx transform)
-            (transform-sy transform)
-            (transform-sz transform)
-            (transform-rx transform)
-            (transform-ry transform)
-            (transform-rz transform)))
-         (instance
-           (make-instance 'instance
-                          :handle handle
-                          :mesh mesh
-                          :transform transform)))
-    (vector-push-extend instance
-                        (slot-value mesh 'instances))
-    instance))
-
-(defclass scene ()
-  ((handle :reader scene-handle :type u64)
-   (meshes :reader scene-meshes
-           :initform (make-array 0 :adjustable t :fill-pointer 0))))
-
-(defmethod print-object ((scene scene) stream)
-  (print-unreadable-object (scene stream :type t :identity t)
-    (format stream
-            "handle=~a meshes=~a instances=~a"
-            (scene-handle scene)
-            (renderer-scene-mesh-count (scene-handle scene))
-            (loop for mesh across (scene-meshes scene)
-                  sum (renderer-scene-mesh-instance-count
-                       (scene-handle scene)
-                       (mesh-handle mesh))))))
-
-(defmethod initialize-instance :after ((scene scene) &rest initargs)
-  (declare (ignore initargs))
-  (setf (slot-value scene 'handle) (renderer-scene-create)))
-
-(defmethod scene-load-obj ((scene scene) path)
-  (renderer-scene-load-obj (scene-handle scene) path)
-  (let ((v (slot-value scene 'meshes)))
-    (dotimes (i (renderer-scene-mesh-count (scene-handle scene)))
-      (vector-push-extend
-       (make-instance 'mesh
-                      :handle (renderer-scene-mesh-at
-                               (scene-handle scene) i)
-                      :scene scene)
-       v))))
-
-(defmethod scene-meshes ((scene scene))
-  (slot-value scene 'meshes))
-
-(defmethod scene-sync ((scene scene))
-  (renderer-sync-scene (scene-handle scene)))
-
-(defmethod scene-destroy ((scene scene))
-  (renderer-scene-destroy (scene-handle scene)))
-
 ;; Letters
 (defconstant +key-a+ 4)
 (defconstant +key-b+ 5)
@@ -358,16 +107,269 @@
 (defconstant +key-right-alt+ 230)
 (defconstant +key-right-gui+ 231)
 
-(defcfun ("renderer_key_down" renderer-key-down-p) :bool
+(defcfun ("renderer_init" renderer-init) :bool)
+
+(defcfun ("scene_create" scene-create) scene-handle)
+(defcfun ("scene_destroy" %scene-destroy) :bool
+  (sh scene-handle))
+
+(defcfun ("scene_load_obj" %scene-load-obj) :bool
+  (sh scene-handle)
+  (path :string))
+
+(defcfun ("scene_remove_mesh" scene-remove-mesh) :bool
+  (sh scene-handle)
+  (mh mesh-handle))
+
+(defcfun ("scene_add_instance" scene-add-instance) instance-handle
+  (sh scene-handle)
+  (m mesh-handle)
+  (px :float) (py :float) (pz :float)
+  (sx :float) (sy :float) (sz :float)
+  (rx :float) (ry :float) (rz :float))
+
+(defcfun ("scene_instance_set_transform"
+          scene-instance-set-transform) :void
+  (sh :uint64)
+  (i :uint64)
+  (px :float)
+  (py :float)
+  (pz :float)
+  (sx :float)
+  (sy :float)
+  (sz :float)
+  (rx :float)
+  (ry :float)
+  (rz :float))
+
+(defcfun ("scene_remove_instance" scene-remove-instance) :bool
+  (sh scene-handle)
+  (i instance-handle))
+
+(defcfun ("renderer_sync_scene" renderer-sync-scene) :bool
+  (sh scene-handle))
+(defcfun ("renderer_render_begin" renderer-render-begin) :void)
+(defcfun ("renderer_render" renderer-render) :void)
+(defcfun ("renderer_render_end" renderer-render-end) :void)
+
+(defcfun ("ui_begin" ui-begin) :void)
+(defcfun ("ui_end" ui-end) :void)
+
+(defcfun ("ui_begin_window" ui-begin-window)
+  :void
+  (name :string))
+(defcfun ("ui_end_window" ui-end-window)
+  :void)
+(defcfun ("ui_button" ui-button)
+  :bool
+  (label :string))
+
+(defcfun ("renderer_clear" renderer-clear) :bool)
+
+(defcfun ("renderer_quit" renderer-quit) :void)
+
+(defcfun ("input_poll" input-poll) :void)
+
+(defcfun ("input_should_close" input-should-close-p) :bool)
+
+(defcfun ("scene_count" scene-count) :uint64)
+
+(defcfun ("scene_at" scene-at) scene-handle
+  (index :uint64))
+
+(defcfun ("scene_mesh_count" scene-mesh-count) :uint64
+  (sh scene-handle))
+
+(defcfun ("scene_mesh_at" scene-mesh-at) mesh-handle
+  (sh scene-handle)
+  (index :uint64))
+
+(defcfun ("scene_mesh_instance_count" scene-mesh-instance-count) :uint64
+  (sh scene-handle)
+  (mesh mesh-handle))
+
+(defcfun ("scene_mesh_instance_at" scene-mesh-instance-at) instance-handle
+  (sh scene-handle)
+  (mesh mesh-handle)
+  (index :uint64))
+
+(defcfun ("renderer_camera_set" renderer-camera-set) :void
+  (px :float) (py :float) (pz :float)
+  (yaw :float) (pitch :float))
+
+(defcenum (mouse-button :int)
+  (:left 1)
+  (:middle 2)
+  (:right 3)
+  (:x1 4)
+  (:x2 5))
+
+(defcfun ("input_mouse_x" input-mouse-x) :float)
+(defcfun ("input_mouse_y" input-mouse-y) :float)
+(defcfun ("input_mouse_dx" input-mouse-dx) :float)
+(defcfun ("input_mouse_dy" input-mouse-dy) :float)
+(defcfun ("input_mouse_wheel_x" input-mouse-wheel-x) :float)
+(defcfun ("input_mouse_wheel_y" input-mouse-wheel-y) :float)
+(defcfun ("input_mouse_down" input-mouse-down-p) :bool
+  (button mouse-button))
+(defcfun ("input_mouse_pressed" input-mouse-pressed-p) :bool
+  (button mouse-button))
+(defcfun ("input_mouse_released" input-mouse-released-p) :bool
+  (button mouse-button))
+
+(defcfun ("renderer_camera_move" renderer-camera-move) :void
+  (forward :float)
+  (right :float)
+  (up :float))
+
+(defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
+  (yaw :float)
+  (pitch :float))
+
+(defcfun ("renderer_camera_update" renderer-camera-update) :void)
+
+(defcfun ("input_key_down" input-key-down-p) :bool
   (key :int))
 
-(defcfun ("renderer_key_pressed" renderer-key-pressed-p) :bool
+(defcfun ("input_key_pressed" input-key-pressed-p) :bool
   (key :int))
 
-(defcfun ("renderer_key_released" renderer-key-released-p) :bool
+(defcfun ("input_key_released" input-key-released-p) :bool
   (key :int))
 
-(defcfun ("renderer_dt" renderer-dt) :float)
+(defcfun ("time_dt" time-dt) :float)
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(deftype u64 () '(unsigned-byte 64))
+
+(defstruct transform
+  (px 0.0 :type single-float)
+  (py 0.0 :type single-float)
+  (pz 0.0 :type single-float)
+  (sx 1.0 :type single-float)
+  (sy 1.0 :type single-float)
+  (sz 1.0 :type single-float)
+  (rx 0.0 :type single-float)
+  (ry 0.0 :type single-float)
+  (rz 0.0 :type single-float))
+
+(defun transform! (px py pz sx sy sz rx ry rz)
+  (make-transform
+   :px px :py py :pz pz
+   :sx sx :sy sy :sz sz
+   :rx rx :ry ry :rz rz))
+
+(defclass instance ()
+  ((handle :reader instance-handle :type u64 :initarg :handle)
+   (mesh :reader instance-mesh :initarg :mesh)
+   (transform :accessor instance-transform :initarg :transform
+	      :type transform)))
+
+(defmethod print-object ((instance instance) stream)
+  (print-unreadable-object (instance stream :type t :identity t)
+    (format stream
+            "handle=~a mesh=~a"
+            (instance-handle instance)
+            (mesh-handle (instance-mesh instance)))))
+
+(defmethod (setf instance-transform) (value (instance instance))
+  (setf (slot-value instance 'transform) value)
+  (scene-instance-set-transform
+   (scene-handle (mesh-scene (instance-mesh instance)))
+   (instance-handle instance)
+   (transform-px value)
+   (transform-py value)
+   (transform-pz value)
+   (transform-sx value)
+   (transform-sy value)
+   (transform-sz value)
+   (transform-rx value)
+   (transform-ry value)
+   (transform-rz value))
+  value)
+
+(defclass mesh ()
+  ((handle :reader mesh-handle :type u64 :initarg :handle)
+   (scene :reader mesh-scene :initarg :scene)
+   (instances :reader mesh-instances
+              :initform (make-array 0 :adjustable t :fill-pointer 0))))
+
+(defmethod print-object ((mesh mesh) stream)
+  (print-unreadable-object (mesh stream :type t :identity t)
+    (format stream
+            "handle=~a instances=~a"
+            (mesh-handle mesh)
+            (scene-mesh-instance-count
+             (scene-handle (mesh-scene mesh))
+             (mesh-handle mesh)))))
+
+(defmethod mesh-instances ((mesh mesh))
+  (slot-value mesh 'instances))
+
+(defmethod mesh-add-instance ((mesh mesh) (transform transform))
+  (let* ((scene (mesh-scene mesh))
+         (handle
+           (scene-add-instance
+            (scene-handle scene)
+            (mesh-handle mesh)
+            (transform-px transform)
+            (transform-py transform)
+            (transform-pz transform)
+            (transform-sx transform)
+            (transform-sy transform)
+            (transform-sz transform)
+            (transform-rx transform)
+            (transform-ry transform)
+            (transform-rz transform)))
+         (instance
+           (make-instance 'instance
+                          :handle handle
+                          :mesh mesh
+                          :transform transform)))
+    (vector-push-extend instance
+                        (slot-value mesh 'instances))
+    instance))
+
+(defclass scene ()
+  ((handle :reader scene-handle :type u64)
+   (meshes :reader scene-meshes
+           :initform (make-array 0 :adjustable t :fill-pointer 0))))
+
+(defmethod print-object ((scene scene) stream)
+  (print-unreadable-object (scene stream :type t :identity t)
+    (format stream
+            "handle=~a meshes=~a instances=~a"
+            (scene-handle scene)
+            (scene-mesh-count (scene-handle scene))
+            (loop for mesh across (scene-meshes scene)
+                  sum (scene-mesh-instance-count
+                       (scene-handle scene)
+                       (mesh-handle mesh))))))
+
+(defmethod initialize-instance :after ((scene scene) &rest initargs)
+  (declare (ignore initargs))
+  (setf (slot-value scene 'handle) (scene-create)))
+
+(defmethod scene-load-obj ((scene scene) path)
+  (%scene-load-obj (scene-handle scene) path)
+  (let ((v (slot-value scene 'meshes)))
+    (dotimes (i (scene-mesh-count (scene-handle scene)))
+      (vector-push-extend
+       (make-instance 'mesh
+                      :handle (scene-mesh-at
+                               (scene-handle scene) i)
+                      :scene scene)
+       v))))
+
+(defmethod scene-meshes ((scene scene))
+  (slot-value scene 'meshes))
+
+(defmethod scene-sync ((scene scene))
+  (renderer-sync-scene (scene-handle scene)))
+
+(defmethod scene-destroy ((scene scene))
+  (%scene-destroy (scene-handle scene)))
 
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
@@ -377,8 +379,8 @@
       0.0
       value))
 
-(defparameter *keyboard-sensitivity* 200.0)
-(defparameter *mouse-sensitivity* 50.0)
+(defparameter *keyboard-sensitivity* 10.0)
+(defparameter *mouse-sensitivity* 10.0)
 
 ;; (require :sb-sprof)
 ;; (defmacro sbcl-profile(&body body)
@@ -387,7 +389,7 @@
 
 (defvar *scene* nil)
 
-(defun demo2 ()
+(defun demo ()
   (renderer-init)
   (let ((scene (make-instance 'scene)))
     (setf *scene* scene)
@@ -396,23 +398,23 @@
 	  doing
 	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (scene-sync scene)
-    (loop until (renderer-should-close-p)
-	  for dt = (renderer-dt)
+    (loop until (input-should-close-p)
+	  for dt = (time-dt)
 	  doing
-	     (renderer-poll-events)
-	     (let* ((wheel-y (renderer-mouse-wheel-y))
-		    (wheel-x (renderer-mouse-wheel-x))
-		    (dx (renderer-mouse-dx))
-		    (dy (renderer-mouse-dy))
-		    (w-down (renderer-key-down-p +key-w+))
-		    (a-down (renderer-key-down-p +key-a+))
-		    (s-down (renderer-key-down-p +key-s+))
-		    (d-down (renderer-key-down-p +key-d+))
-		    (space-down (renderer-key-down-p +key-space+))
-		    (ctrl-down (renderer-key-down-p +key-left-ctrl+))
+	     (input-poll)
+	     (let* ((wheel-y (input-mouse-wheel-y))
+		    (wheel-x (input-mouse-wheel-x))
+		    (dx (input-mouse-dx))
+		    (dy (input-mouse-dy))
+		    (w-down (input-key-down-p +key-w+))
+		    (a-down (input-key-down-p +key-a+))
+		    (s-down (input-key-down-p +key-s+))
+		    (d-down (input-key-down-p +key-d+))
+		    (space-down (input-key-down-p +key-space+))
+		    (ctrl-down (input-key-down-p +key-left-ctrl+))
 		    (move-speed (* *keyboard-sensitivity* dt))
 		    (look-speed (* *mouse-sensitivity* dt))
-		    (middle-click (renderer-mouse-down-p :middle)))
+		    (middle-click (input-mouse-down-p :middle)))
 	       (renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
 	       (renderer-camera-move
 		(+ (if w-down move-speed 0.0)
@@ -426,16 +428,16 @@
 	     (renderer-camera-update)
 	     (renderer-render-begin)
 	     (renderer-render)
-	     (renderer-ui-begin)
+	     (ui-begin)
 	     (ui-begin-window "Window")
 	     (loop for mesh across (scene-meshes scene)
 		   doing (when (ui-button (format nil "Mesh #~a~%" (mesh-handle mesh)))
 			   (format t "Mesh #~a clicked~%" (mesh-handle mesh))))
 	     (ui-end-window)
-	     (renderer-ui-end)
+	     (ui-end)
 	     (renderer-render-end))
     (scene-destroy scene))
   (renderer-quit))
 
-(demo2)
+(demo)
 ;; (setf (instance-transform (aref (mesh-instances (aref (scene-meshes *scene*) 0)) 0)) (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))

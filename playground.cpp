@@ -19,18 +19,18 @@ int main(int argc, char* argv[]) {
 
   renderer_init();
 
-  SceneHandle sh = renderer_scene_create();
+  SceneHandle sh = scene_create();
 
-  renderer_scene_load_obj(sh, "models/bmw.obj");
-  std::cout << "Length " << renderer_scene_mesh_count(sh) << '\n';
+  scene_load_obj(sh, "models/bmw.obj");
+  std::cout << "Length " << scene_mesh_count(sh) << '\n';
 
-  u64 meshCount = renderer_scene_mesh_count(sh);
+  u64 meshCount = scene_mesh_count(sh);
   for (u64 i = 0; i < meshCount; i++) {
-    MeshHandle mh = renderer_scene_mesh_at(sh, i);
-    renderer_scene_add_instance(sh, mh,
-                                0.0f, 0.0f, 0.0f,   // position
-                                1.0f, 1.0f, 1.0f,   // scale
-                                0.0f, 0.0f, 0.0f);  // rotation
+    MeshHandle mh = scene_mesh_at(sh, i);
+    scene_add_instance(sh, mh,
+                       0.0f, 0.0f, 0.0f,   // position
+                       1.0f, 1.0f, 1.0f,   // scale
+                       0.0f, 0.0f, 0.0f);  // rotation
   }
 
   // for (u32 x = 0; x < GRID_SIZE; x++){
@@ -51,7 +51,7 @@ int main(int argc, char* argv[]) {
   
   float delta_x, delta_y;
   while (running) {
-    const f32 dt = renderer_dt();
+    const f32 dt = time_dt();
 
     const bool* keys =  SDL_GetKeyboardState(nullptr);
     
@@ -65,7 +65,7 @@ int main(int argc, char* argv[]) {
     glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
     rendererConfig.camera.right = right;
 
-    renderer_poll_events();
+    input_poll();
 
     if (keys[SDL_SCANCODE_ESCAPE]) {
       running = false;
@@ -104,15 +104,15 @@ int main(int argc, char* argv[]) {
 
     renderer_render_begin();
     renderer_render();
-    renderer_ui_begin();
+    ui_begin();
     ui_begin_window("Hello");
     ui_button("Hi");
     ui_end_window();
-    renderer_ui_end();
+    ui_end();
     renderer_render_end();
   }
   
-  renderer_scene_destroy(sh);
+  scene_destroy(sh);
   renderer_quit();
   return 0;
 }
