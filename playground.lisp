@@ -38,8 +38,21 @@
 
 (defcfun ("renderer_sync_scene" renderer-sync-scene) :bool
   (sh scene-handle))
-
+(defcfun ("renderer_render_begin" renderer-render-begin) :void)
 (defcfun ("renderer_render" renderer-render) :void)
+(defcfun ("renderer_render_end" renderer-render-end) :void)
+
+(defcfun ("renderer_ui_begin" renderer-ui-begin) :void)
+(defcfun ("renderer_ui_end" renderer-ui-end) :void)
+
+(defcfun ("ui_begin_window" ui-begin-window)
+  :void
+  (name :string))
+(defcfun ("ui_end_window" ui-end-window)
+  :void)
+(defcfun ("ui_button" ui-button)
+  :bool
+  (label :string))
 
 (defcfun ("renderer_clear" renderer-clear) :bool)
 
@@ -179,27 +192,6 @@
                       :scene scene)
        v))
     v))
-
-(defmacro with-transform ((px py pz sx sy sz rx ry rz) transform &body body)
-  `(let ((,px (elt ,transform 0))
-         (,py (elt ,transform 1))
-         (,pz (elt ,transform 2))
-         (,sx (elt ,transform 3))
-         (,sy (elt ,transform 4))
-         (,sz (elt ,transform 5))
-         (,rx (elt ,transform 6))
-         (,ry (elt ,transform 7))
-         (,rz (elt ,transform 8)))
-     ,@body))
-
-(defmethod scene-add-instance ((scene scene) (mesh mesh) (inst instance))
-  (with-transform (px py pz sx sy sz rx ry rz) (instance-transform inst)
-    (setf (slot-value inst 'handle)
-          (renderer-scene-add-instance
-           (scene-handle scene) (mesh-handle mesh)
-           px py pz sx sy sz rx ry rz)))
-  (vector-push-extend inst (slot-value mesh 'instances))
-  inst)
 
 (defmethod scene-sync ((scene scene))
   (renderer-sync-scene (scene-handle scene)))
@@ -348,17 +340,6 @@
 
 (cffi:defcfun ("renderer_dt" renderer-dt) :float)
 
-(cffi:defcfun ("ui_begin_window" ui-begin-window)
-    :void
-  (name :string))
-
-(cffi:defcfun ("ui_end_window" ui-end-window)
-    :void)
-
-(cffi:defcfun ("ui_button" ui-button)
-    :boolean
-  (label :string))
-
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -367,8 +348,13 @@
       0.0
       value))
 
-(defparameter *keyboard-sensitivity* 200.0);
-(defparameter *mouse-sensitivity* 50.0);
+(defparameter *keyboard-sensitivity* 200.0)
+(defparameter *mouse-sensitivity* 50.0)
+
+;; (require :sb-sprof)
+;; (defmacro sbcl-profile(&body body)
+;;   `(sb-sprof:with-profiling (:report :flat)
+;;      ,@body))
 
 (defun demo2 ()
   (renderer-init)
@@ -406,7 +392,16 @@
 		    (* dy look-speed)
 		    0.0)))
 	     (renderer-camera-update)
-	     (renderer-render))
+	     (renderer-render-begin)
+	     (renderer-render)
+	     (renderer-ui-begin)
+	     (ui-begin-window "Window")
+	     (loop for mesh across (scene-meshes scene)
+		   doing (when (ui-button (format nil "Mesh #~a~%" (mesh-handle mesh)))
+			   (format t "Mesh #~a clicked~%" (mesh-handle mesh))))
+	     (ui-end-window)
+	     (renderer-ui-end)
+	     (renderer-render-end))
     (scene-destroy scene))
   (renderer-quit))
 
