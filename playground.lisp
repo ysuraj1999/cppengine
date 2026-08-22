@@ -308,6 +308,17 @@
 
 (cffi:defcfun ("renderer_dt" renderer-dt) :float)
 
+(cffi:defcfun ("ui_begin_window" ui-begin-window)
+    :void
+  (name :string))
+
+(cffi:defcfun ("ui_end_window" ui-end-window)
+    :void)
+
+(cffi:defcfun ("ui_button" ui-button)
+    :boolean
+  (label :string))
+
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -317,7 +328,7 @@
       value))
 
 (defparameter *keyboard-sensitivity* 200.0);
-(defparameter *mouse-sensitivity* 100.0);
+(defparameter *mouse-sensitivity* 50.0);
 
 (defun demo2 ()
   (renderer-init)
@@ -334,8 +345,10 @@
 	  for dt = (renderer-dt)
 	  doing
 	     (renderer-poll-events)
-	     (let* ((dy (renderer-mouse-wheel-y))
-		    (dx (renderer-mouse-wheel-x))
+	     (let* ((wheel-y (renderer-mouse-wheel-y))
+		    (wheel-x (renderer-mouse-wheel-x))
+		    (dx (renderer-mouse-dx))
+		    (dy (renderer-mouse-dy))
 		    (w-down (renderer-key-down-p +key-w+))
 		    (a-down (renderer-key-down-p +key-a+))
 		    (s-down (renderer-key-down-p +key-s+))
@@ -343,16 +356,19 @@
 		    (space-down (renderer-key-down-p +key-space+))
 		    (ctrl-down (renderer-key-down-p +key-left-ctrl+))
 		    (move-speed (* *keyboard-sensitivity* dt))
-		    (look-speed (* *mouse-sensitivity* dt)))
-	       (renderer-camera-rotate (* (- dx) look-speed) (* dy look-speed))
+		    (look-speed (* *mouse-sensitivity* dt))
+		    (middle-click (renderer-mouse-down-p :middle)))
+	       (renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
 	       (renderer-camera-move
-		(- (if w-down move-speed 0.0)
-		   (if s-down move-speed 0.0))
-		(- (if d-down move-speed 0.0)
-		   (if a-down move-speed 0.0))
-		(- (if space-down move-speed 0.0)
-		   (if ctrl-down move-speed 0.0)))
-	       (renderer-camera-update))
+		(+ (if w-down move-speed 0.0)
+		   (if s-down (- move-speed) 0.0))
+		(if middle-click
+		    (* (- dx) look-speed)
+		    0.0)
+		(if middle-click
+		    (* dy look-speed)
+		    0.0)))
+	     (renderer-camera-update)
 	     (renderer-render))
     (scene-destroy scene))
   (renderer-quit))

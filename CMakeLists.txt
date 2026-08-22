@@ -22,11 +22,19 @@ add_library(cppengine SHARED
   obj.cpp
   utils.cpp
   stb_image.cpp
+
+  includes/imgui/imgui.cpp
+  includes/imgui/imgui_draw.cpp
+  includes/imgui/imgui_tables.cpp
+  includes/imgui/imgui_widgets.cpp
+  includes/imgui/backends/imgui_impl_sdl3.cpp
+  includes/imgui/backends/imgui_impl_sdlgpu3.cpp
 )
 
 target_include_directories(cppengine PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
-  ${CMAKE_CURRENT_SOURCE_DIR}/includes)
+  ${CMAKE_CURRENT_SOURCE_DIR}/includes
+  ${CMAKE_CURRENT_SOURCE_DIR}/includes/imgui)
 
 target_link_libraries(cppengine PUBLIC
   SDL3::SDL3

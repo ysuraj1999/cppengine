@@ -82,6 +82,10 @@ bool renderer_key_pressed(SDL_Scancode key);
 bool renderer_key_released(SDL_Scancode key);
 
 f32 renderer_dt(void);
+
+void ui_begin_window(const char* name);
+void ui_end_window();
+bool ui_button(const char* label);
   
 #ifdef __cplusplus
 }

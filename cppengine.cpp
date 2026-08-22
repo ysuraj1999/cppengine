@@ -19,6 +19,11 @@
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
+#include <format>
+
+#include "imgui/imgui.h"
+#include "imgui/backends/imgui_impl_sdl3.h"
+#include "imgui/backends/imgui_impl_sdlgpu3.h"
 
 #include "stb_image.h"
 #include "types.hpp"
@@ -189,6 +194,29 @@ bool renderer_init() {
   sdlAssert(SDL_SetGPUSwapchainParameters(gpuDevice, window,
                                           SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                                           SDL_GPU_PRESENTMODE_VSYNC));
+
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+  
+  ImGui::StyleColorsDark();
+  ImGuiStyle& style = ImGui::GetStyle();
+  style.ScaleAllSizes(1.0);
+  style.FontScaleDpi = 1.0;
+
+  // Setup Platform/Renderer backends
+  ImGui_ImplSDL3_InitForSDLGPU(window);
+  ImGui_ImplSDLGPU3_InitInfo init_info = {};
+  init_info.Device = gpuDevice;
+  init_info.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
+  init_info.MSAASamples = SDL_GPU_SAMPLECOUNT_1;                      // Only used in multi-viewports mode.
+  init_info.SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;  // Only used in multi-viewports mode.
+  init_info.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
+  ImGui_ImplSDLGPU3_Init(&init_info);
+  // IMGUI END
+  
   frame.swapchainTexture = nullptr;
   frame.swapchainWidth = 0;
   frame.swapchainHeight = 0;
@@ -751,7 +779,25 @@ void renderer_render(void) {
     MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
     draw_mesh(meshRegion, instances);
   }
-    
+
+  ImGui_ImplSDLGPU3_NewFrame();
+  ImGui_ImplSDL3_NewFrame();
+  ImGui::NewFrame();
+
+  ImGui::Begin("Scenes");
+
+  for (SceneHandle sh : sceneOrder) {
+    std::string name = std::format("Scene #{}", sh);
+    ImGui::Selectable(name.c_str());
+  }
+
+  ImGui::End();
+  
+  ImGui::Render();
+  ImDrawData *draw_data = ImGui::GetDrawData();
+  ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
+  ImGui_ImplSDLGPU3_RenderDrawData(draw_data, frame.commandBuffer, frame.renderPass);
+  
   SDL_EndGPURenderPass(frame.renderPass);
   sdlAssert(SDL_SubmitGPUCommandBuffer(frame.commandBuffer));
 }
@@ -775,6 +821,10 @@ void renderer_poll_events() {
 
   SDL_Event event;
   while (SDL_PollEvent(&event)) {
+    ImGui_ImplSDL3_ProcessEvent(&event);
+    // if (ImGui::GetIO().WantCaptureMouse)
+    //   continue;
+
     switch (event.type) {
     case SDL_EVENT_QUIT: {
       shouldClose = true;
@@ -892,6 +942,10 @@ void renderer_quit() {
   if (sampler)
     SDL_ReleaseGPUSampler(gpuDevice, sampler);
 
+  ImGui_ImplSDL3_Shutdown();
+  ImGui_ImplSDLGPU3_Shutdown();
+  ImGui::DestroyContext();
+  
   SDL_DestroyGPUDevice(gpuDevice);
   if (window)
     SDL_DestroyWindow(window);
@@ -953,3 +1007,14 @@ f32 renderer_dt(void) {
   previous = now;
   return dt;
 }
+
+void ui_begin_window(const char* name) {
+  ImGui::Begin(name);
+}
+
+void ui_end_window() { ImGui::End(); }
+
+bool ui_button(const char* label) {
+  return ImGui::Button(label);
+}
+
