@@ -171,6 +171,9 @@ bool renderer_init() {
       .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
 
+  next_scene_handle = 0;
+  next_mesh_handle = 0;
+  next_instance_handle = 0;
   shouldClose = false;
 
   rendererConfig = config;
