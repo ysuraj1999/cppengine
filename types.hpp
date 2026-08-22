@@ -95,7 +95,6 @@ struct RendererState {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
   std::unordered_map<MeshHandle, MeshRegion> meshRegions;
-  std::unordered_map<MeshHandle, Instances> objects;
 };
 
 struct RendererConfig {

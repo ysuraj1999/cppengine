@@ -558,8 +558,6 @@ bool renderer_sync_scene(SceneHandle sh) {
     indexIndexOffset += mesh.indices.size();
   }
 
-  rendererState.objects = scene->objects;
-
   SDL_GPUBufferCreateInfo vertexBufferInfo = {};
   const u32 VERTEX_BUFFER_SIZE = rendererState.vertices.size() * sizeof(Vertex);
   vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
@@ -816,7 +814,6 @@ bool renderer_clear(void) {
   rendererState.vertices.clear();
   rendererState.indices.clear();
   rendererState.meshRegions.clear();
-  rendererState.objects.clear();
   return true;
 }
 
