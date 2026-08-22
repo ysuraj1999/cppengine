@@ -86,6 +86,10 @@ void ui_end(void);
 void ui_begin_window(const char* name);
 void ui_end_window(void);
 bool ui_button(const char* label);
+bool ui_treenode(const char* label);
+void ui_treepop(void);
+bool ui_selectable(const char* label);
+void ui_sameline(void);
 
 #ifdef __cplusplus
 }

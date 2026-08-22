@@ -9,6 +9,7 @@
 #include <glm/trigonometric.hpp>
 #include <cmath>
 #include <iostream>
+#include <string>
 
 extern RendererConfig rendererConfig;
 extern glm::vec3 WORLD_UP;
@@ -32,81 +33,66 @@ int main(int argc, char* argv[]) {
                        1.0f, 1.0f, 1.0f,   // scale
                        0.0f, 0.0f, 0.0f);  // rotation
   }
-
-  // for (u32 x = 0; x < GRID_SIZE; x++){
-  //   for (u32 y = 0; y < GRID_SIZE; y++){
-  //     for (u32 z = 0; z < GRID_SIZE; z++) {
-  // 	scene_add_instance(&scene, 0, Transform{
-  //           .position = {1.0f * x, 1.0f * y, 1.0f * z},
-  //           .scale = {1.0f, 1.0f, 1.0f},
-  //           .rotation = {0.0f, 0.0f, 0.0f}
-  // 	  });
-  //     }
-  //   }
-  // }
   
   renderer_sync_scene(sh);
-
+  rendererConfig.keyboardSensitivity = 200.0;
+  rendererConfig.mouseSensitivity = 50.0;
   bool running = true;
-  
-  float delta_x, delta_y;
   while (running) {
     const f32 dt = time_dt();
 
-    const bool* keys =  SDL_GetKeyboardState(nullptr);
-    
-    glm::vec3 forward{
-      cos(glm::radians(rendererConfig.camera.pitch)) * cos(glm::radians(rendererConfig.camera.yaw)),
-      sin(glm::radians(rendererConfig.camera.pitch)),
-      cos(glm::radians(rendererConfig.camera.pitch)) * sin(glm::radians(rendererConfig.camera.yaw))};
-
-    forward = glm::normalize(forward);
-    rendererConfig.camera.forward = forward;
-    glm::vec3 right = glm::cross(WORLD_UP, forward); // reversed for Left handed
-    rendererConfig.camera.right = right;
-
     input_poll();
 
-    if (keys[SDL_SCANCODE_ESCAPE]) {
+    if (input_should_close() || input_key_down(SDL_SCANCODE_ESCAPE)) {
       running = false;
     }
 
-    if (rendererConfig.cameraEnabled){
-      u32 mouseButton = SDL_GetRelativeMouseState(&delta_x, &delta_y);
-      rendererConfig.camera.yaw -= delta_x * rendererConfig.mouseSensitivity;
-      rendererConfig.camera.yaw = std::fmod(rendererConfig.camera.yaw, 360.0f);
-      rendererConfig.camera.pitch -= delta_y * rendererConfig.mouseSensitivity;
-      rendererConfig.camera.pitch = glm::clamp(rendererConfig.camera.pitch, -90.0f, 90.0f);
+    const f32 wheel_x = input_mouse_wheel_x();
+    const f32 wheel_y = input_mouse_wheel_y();
+    const f32 dx = input_mouse_dx();
+    const f32 dy = input_mouse_dy();
 
-      f32 keyboardSensitivity = rendererConfig.keyboardSensitivity;
-      if (keys[SDL_SCANCODE_LSHIFT]) {
-	keyboardSensitivity *= 2.0f;
-      }
-      if (keys[SDL_SCANCODE_W]) {
-	rendererConfig.camera.position += forward * dt * keyboardSensitivity;
-      }
-      if (keys[SDL_SCANCODE_S]) {
-	rendererConfig.camera.position -= forward * dt * keyboardSensitivity;
-      }
-      if (keys[SDL_SCANCODE_A]) {
-	rendererConfig.camera.position -= right * dt * keyboardSensitivity;
-      }
-      if (keys[SDL_SCANCODE_D]) {
-	rendererConfig.camera.position += right * dt * keyboardSensitivity;
-      }
-      if (keys[SDL_SCANCODE_SPACE]) {
-	rendererConfig.camera.position += WORLD_UP * dt * keyboardSensitivity;
-      }
-      if (keys[SDL_SCANCODE_LCTRL]) {
-	rendererConfig.camera.position -= WORLD_UP * dt * keyboardSensitivity;
-      }
-    }
+    const bool w_down = input_key_down(SDL_SCANCODE_W);
+    const bool s_down = input_key_down(SDL_SCANCODE_S);
+    const bool middle_click = input_mouse_down(MOUSE_BUTTON_MIDDLE);
+
+    const f32 move_speed = rendererConfig.keyboardSensitivity * dt;
+    const f32 look_speed = rendererConfig.mouseSensitivity * dt;
+
+    renderer_camera_rotate(-wheel_x * look_speed, wheel_y * look_speed);
+    renderer_camera_move(
+			 (w_down ? move_speed : 0.0f) + (s_down ? -move_speed : 0.0f),
+			 middle_click ? -dx * look_speed : 0.0f,
+			 middle_click ? dy * look_speed : 0.0f
+			 );
+    renderer_camera_update();
 
     renderer_render_begin();
     renderer_render();
     ui_begin();
-    ui_begin_window("Hello");
-    ui_button("Hi");
+    ui_begin_window("Inspector");
+    u64 scCount = scene_count();
+    for (u64 s = 0; s < scCount; s++) {
+      SceneHandle sceneH = scene_at(s);
+      std::string sceneLabel = "Scene #" + std::to_string(sceneH);
+      if (ui_treenode(sceneLabel.c_str())) {
+        u64 mCount = scene_mesh_count(sceneH);
+        for (u64 m = 0; m < mCount; m++) {
+          MeshHandle mh = scene_mesh_at(sceneH, m);
+          std::string meshLabel = "Mesh #" + std::to_string(mh);
+          if (ui_treenode(meshLabel.c_str())) {
+            u64 instCount = scene_mesh_instance_count(sceneH, mh);
+            for (u64 inst = 0; inst < instCount; inst++) {
+              InstanceHandle ih = scene_mesh_instance_at(sceneH, mh, inst);
+              std::string instLabel = "Instance #" + std::to_string(ih);
+              ui_selectable(instLabel.c_str());
+            }
+            ui_treepop();
+          }
+        }
+        ui_treepop();
+      }
+    }
     ui_end_window();
     ui_end();
     renderer_render_end();

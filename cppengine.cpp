@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include <string>
+#include <unordered_set>
 #include <glm/ext/matrix_clip_space.hpp>
 #include <glm/ext/matrix_transform.hpp>
 #include <glm/geometric.hpp>
@@ -32,18 +34,17 @@
 
 #include <cfenv>
 
-// Save the caller's floating-point environment and switch to a non-stop
-// (all-exceptions-masked) mode for the duration of a foreign entry point.
-// Hosts like SBCL run with FP exception traps enabled, while SDL/GTK/libxml2
-// and friends legitimately compute NaN/Inf via 0.0/0.0 and 1.0/0.0 at init,
-// which must not trap inside our code.
-struct ScopedFpuMask {
-  std::fenv_t env;
-  ScopedFpuMask() { std::feholdexcept(&env); }
-  ~ScopedFpuMask() { std::fesetenv(&env); }
-  ScopedFpuMask(const ScopedFpuMask&) = delete;
-  ScopedFpuMask& operator=(const ScopedFpuMask&) = delete;
-};
+static std::fenv_t env;
+
+void fpu_begin()
+{
+    std::feholdexcept(&env);
+}
+
+void fpu_end()
+{
+    std::fesetenv(&env);
+}
 
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
@@ -164,9 +165,9 @@ static_internal void camera_update(Camera& cam) {
 }
 
 bool renderer_init() {
-  ScopedFpuMask fpuMask;
+  fpu_begin();
   RendererConfig config = {
-      .resolution = {1000.0f, 1000.0f},
+      .resolution = {1800.0f, 1000.0f},
       .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
                           1.0f},
       .keyboardSensitivity = 200.0f,
@@ -210,8 +211,8 @@ bool renderer_init() {
   
   ImGui::StyleColorsDark();
   ImGuiStyle& style = ImGui::GetStyle();
-  style.ScaleAllSizes(1.0);
-  style.FontScaleDpi = 1.0;
+  style.ScaleAllSizes(1.0f);
+  style.FontScaleDpi = 1.25f;
 
   // Setup Platform/Renderer backends
   ImGui_ImplSDL3_InitForSDLGPU(window);
@@ -466,7 +467,7 @@ bool renderer_init() {
     // std::cout << "width " << tWidth << " height " << tHeight << '\n';
   }
 
-  
+  fpu_end();
   return true;
 }
 
@@ -783,6 +784,7 @@ void renderer_render_begin(void) {
 }
 
 void ui_begin() {
+  fpu_begin();
   ImGui_ImplSDLGPU3_NewFrame();
   ImGui_ImplSDL3_NewFrame();
   ImGui::NewFrame();
@@ -792,7 +794,9 @@ void ui_end() {
   ImGui::Render();
   ImDrawData *draw_data = ImGui::GetDrawData();
   ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
-  ImGui_ImplSDLGPU3_RenderDrawData(draw_data, frame.commandBuffer, frame.renderPass);
+  ImGui_ImplSDLGPU3_RenderDrawData(draw_data, frame.commandBuffer,
+                                   frame.renderPass);
+  fpu_end();
 }
 
 void renderer_render(void) {
@@ -1027,6 +1031,46 @@ void ui_end_window() { ImGui::End(); }
 
 bool ui_button(const char* label) {
   return ImGui::Button(label);
+}
+
+bool ui_treenode(const char* label) {
+  return ImGui::TreeNode(label);
+}
+
+void ui_treepop() {
+  ImGui::TreePop();
+}
+
+static_global std::unordered_set<std::string> uiSelectedItems;
+
+bool ui_selectable(const char* label) {
+  std::string key(label);
+  bool isSelected = uiSelectedItems.contains(key);
+
+  if (ImGui::Selectable(label, isSelected)) {
+    ImGuiIO& io = ImGui::GetIO();
+    bool ctrlPressed = io.KeyCtrl;
+
+    if (ctrlPressed) {
+      if (isSelected) {
+        uiSelectedItems.erase(key);
+        isSelected = false;
+      } else {
+        uiSelectedItems.insert(key);
+        isSelected = true;
+      }
+    } else {
+      uiSelectedItems.clear();
+      uiSelectedItems.insert(key);
+      isSelected = true;
+    }
+  }
+
+  return isSelected;
+}
+
+void ui_sameline() {
+  ImGui::SameLine();
 }
 
 void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,

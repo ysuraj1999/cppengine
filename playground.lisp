@@ -164,6 +164,20 @@
   :bool
   (label :string))
 
+(defcfun ("ui_treenode" ui-treenode)
+  :bool
+  (label :string))
+
+(defcfun ("ui_treepop" ui-treepop)
+  :void)
+
+(defcfun ("ui_selectable" ui-selectable)
+  :bool
+  (label :string))
+
+(defcfun ("ui_sameline" ui-sameline)
+  :void)
+
 (defcfun ("renderer_clear" renderer-clear) :bool)
 
 (defcfun ("renderer_quit" renderer-quit) :void)
@@ -380,7 +394,7 @@
       value))
 
 (defparameter *keyboard-sensitivity* 10.0)
-(defparameter *mouse-sensitivity* 10.0)
+(defparameter *mouse-sensitivity* 1.0)
 
 ;; (require :sb-sprof)
 ;; (defmacro sbcl-profile(&body body)
@@ -429,10 +443,13 @@
 	     (renderer-render-begin)
 	     (renderer-render)
 	     (ui-begin)
-	     (ui-begin-window "Window")
+	     (ui-begin-window "Inspector")
 	     (loop for mesh across (scene-meshes scene)
-		   doing (when (ui-button (format nil "Mesh #~a~%" (mesh-handle mesh)))
-			   (format t "Mesh #~a clicked~%" (mesh-handle mesh))))
+		   doing (when (ui-treenode (format nil "Mesh #~a" (mesh-handle mesh)))
+			   (loop for instance across (mesh-instances mesh)
+				 for instance-alias = (format nil "Instance #~a" (instance-handle instance))
+				 doing (ui-selectable instance-alias))
+			   (ui-treepop)))
 	     (ui-end-window)
 	     (ui-end)
 	     (renderer-render-end))
