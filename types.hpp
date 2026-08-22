@@ -1,4 +1,5 @@
 #pragma once
+#include <SDL3/SDL_gpu.h>
 #include <cstdint>
 #include <glm/glm.hpp>
 #include <unordered_map>
@@ -113,4 +114,18 @@ struct MouseState {
   bool down[MOUSE_BUTTON_COUNT] = {};      // held state (persists)
   bool pressed[MOUSE_BUTTON_COUNT] = {};   // just pressed this poll
   bool released[MOUSE_BUTTON_COUNT] = {};  // just released this poll
+};
+
+struct RendererFrame {
+  SDL_GPURenderPass *renderPass;
+  SDL_GPUCommandBuffer *commandBuffer;
+  
+  SDL_GPUTexture *swapchainTexture;
+  u32 swapchainWidth;
+  u32 swapchainHeight;
+
+  SDL_GPUColorTargetInfo colorTargetInfo;
+  SDL_GPUDepthStencilTargetInfo depthTargetInfo;
+
+  u32 instanceBufferOffset;
 };

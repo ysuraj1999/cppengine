@@ -52,17 +52,10 @@ static_global std::unordered_map<SceneHandle, Scene> sceneRegistry;
 static_global std::vector<SceneHandle> sceneOrder;
 static_global SDL_Window *window;
 static_global SDL_GPUDevice *gpuDevice;
-static_global SDL_GPUTexture *swapchainTexture;
-static_global u32 swapchainWidth;
-static_global u32 swapchainHeight;
-static_global SDL_GPUCommandBuffer *commandBuffer;
-static_global SDL_GPUColorTargetInfo colorTargetInfo;
-static_global SDL_GPURenderPass *renderPass;
 static_global SDL_GPUBuffer *vertexBuffer;
 static_global SDL_GPUTexture *checkTexture;
 static_global SDL_GPUShader *vertexShader;
 static_global SDL_GPUShader *fragmentShader;
-static_global SDL_GPUDepthStencilTargetInfo depthTargetInfo;
 static_global SDL_GPUSampler *sampler;
 static_global SDL_GPUBuffer* instanceBuffer;
 static_global SDL_GPUBuffer* indexBuffer;
@@ -81,6 +74,7 @@ static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
 static_global bool currentKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
+static_global RendererFrame frame = {};
 
 static_internal void keyboard_update() {
   memcpy(
@@ -195,9 +189,9 @@ bool renderer_init() {
   sdlAssert(SDL_SetGPUSwapchainParameters(gpuDevice, window,
                                           SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
                                           SDL_GPU_PRESENTMODE_VSYNC));
-  swapchainTexture = nullptr;
-  swapchainWidth = 0;
-  swapchainHeight = 0;
+  frame.swapchainTexture = nullptr;
+  frame.swapchainWidth = 0;
+  frame.swapchainHeight = 0;
 
   std::vector<u8> vertexShaderContents =
     readFile(SHADER_BIN_DIR "/shader.vertex.spv");
@@ -407,11 +401,11 @@ bool renderer_init() {
     textureSamplerBindings[0].sampler = sampler;
     textureSamplerBindings[0].texture = checkTexture;
 
-    renderPass = nullptr;
-    colorTargetInfo = {};
-    colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
-    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
+    frame.renderPass = nullptr;
+    frame.colorTargetInfo = {};
+    frame.colorTargetInfo.clear_color = SDL_FColor{rendererConfig.backgroundColor.r, rendererConfig.backgroundColor.g, rendererConfig.backgroundColor.b, rendererConfig.backgroundColor.a};
+    frame.colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    frame.colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
 
     // make a depth texture here
     SDL_GPUTextureCreateInfo depthTextureInfo = {};
@@ -428,11 +422,11 @@ bool renderer_init() {
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
     sdlAssert(depthTexture);
   
-    depthTargetInfo = {};
-    depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-    depthTargetInfo.clear_depth = 1.0f;
-    depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
-    depthTargetInfo.texture = depthTexture;
+    frame.depthTargetInfo = {};
+    frame.depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
+    frame.depthTargetInfo.clear_depth = 1.0f;
+    frame.depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
+    frame.depthTargetInfo.texture = depthTexture;
   
     // std::cout << "width " << tWidth << " height " << tHeight << '\n';
   }
@@ -670,49 +664,9 @@ InstanceHandle renderer_scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, 
   return it->second[index].instanceHandle;
 }
 
-void renderer_render(void) {
-  if (!gpuDevice)
-    return;
-  glm::mat4 view =
-    glm::lookAtLH(rendererConfig.camera.position, rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
-  glm::mat4 projection = glm::perspectiveLH_ZO(
-					       glm::radians(60.0f),
-					       rendererConfig.resolution.x / rendererConfig.resolution.y,
-					       0.1f,
-					       10000.0f
-					       );
-  glm::mat4 viewProjection = projection * view;
-  commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
-
-  sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
-						  commandBuffer,
-						  window,
-						  &swapchainTexture,
-						  &swapchainWidth,
-						  &swapchainHeight));
-
-  colorTargetInfo.texture = swapchainTexture;
-
-  renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
-  sdlAssert(renderPass != nullptr);
-
-  SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection,
-			       (u32)sizeof(viewProjection));
-  SDL_PushGPUFragmentUniformData(commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
-				   
-  SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-  SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-  SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
-  SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding,
-			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
-  SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
-
-  u32 transferBufferOffsetPerMesh = 0;
-  for (auto& entry : rendererState.objects) {
-    auto meshHandle = entry.first;
-    auto &instances = entry.second;
-
-    SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
+  for (auto &instance : instances) {
+    SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(frame.commandBuffer);
     sdlAssert(frameCopyPass != nullptr);
 
     std::vector<glm::mat4> modelMatrices;
@@ -722,41 +676,88 @@ void renderer_render(void) {
     }
 
     const u32 requiredInstanceCopySize =
-        modelMatrices.size() * sizeof(glm::mat4);
-    assert(transferBufferOffsetPerMesh + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+      modelMatrices.size() * sizeof(glm::mat4);
+    assert(frame.instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
 
     glm::mat4 *mappedToInstanceInTransfer =
       reinterpret_cast<glm::mat4*>(
 				   SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
     sdlAssert(mappedToInstanceInTransfer != nullptr);
-    std::memcpy((u8 *)mappedToInstanceInTransfer + transferBufferOffsetPerMesh,
+    std::memcpy((u8 *)mappedToInstanceInTransfer + frame.instanceBufferOffset,
 		modelMatrices.data(), requiredInstanceCopySize);
 
     SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
-    transferToInstanceBufferLocation.offset = transferBufferOffsetPerMesh;
+    transferToInstanceBufferLocation.offset = frame.instanceBufferOffset;
     transferToInstanceBufferLocation.transfer_buffer =
       transferToInstanceBuffer;
 
     SDL_GPUBufferRegion instanceBufferRegion = {};
-    instanceBufferRegion.offset = transferBufferOffsetPerMesh;
+    instanceBufferRegion.offset = frame.instanceBufferOffset;
     instanceBufferRegion.buffer = instanceBuffer;
     instanceBufferRegion.size = requiredInstanceCopySize;
-
-    MeshRegion region = rendererState.meshRegions[meshHandle];
 
     SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
                           &instanceBufferRegion, false);
     SDL_EndGPUCopyPass(frameCopyPass);
 
-    SDL_DrawGPUIndexedPrimitives(renderPass, region.indexCount,
-				 instances.size(), region.indexOffset,
-				 region.vertexOffset, 0);
-    transferBufferOffsetPerMesh += requiredInstanceCopySize;
+    SDL_DrawGPUIndexedPrimitives(frame.renderPass, meshRegion.indexCount,
+				 instances.size(), meshRegion.indexOffset,
+				 meshRegion.vertexOffset, 0);
+    frame.instanceBufferOffset += requiredInstanceCopySize;
   }
+}
+
+void renderer_render(void) {
+  if (!gpuDevice)
+    return;
+
+  frame.instanceBufferOffset = 0;
+
+  glm::mat4 view = glm::lookAtLH(
+      rendererConfig.camera.position,
+      rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
+  // TODO move near and far into config
+  glm::mat4 projection = glm::perspectiveLH_ZO(
+					       glm::radians(60.0f),
+					       rendererConfig.resolution.x / rendererConfig.resolution.y,
+					       0.1f,
+					       10000.0f
+					       );
+  glm::mat4 viewProjection = projection * view;
+  frame.commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+
+  sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
+						  frame.commandBuffer,
+						  window,
+						  &frame.swapchainTexture,
+						  &frame.swapchainWidth,
+						  &frame.swapchainHeight));
+
+  frame.colorTargetInfo.texture = frame.swapchainTexture;
+
+  frame.renderPass = SDL_BeginGPURenderPass(frame.commandBuffer, &frame.colorTargetInfo, 1, &frame.depthTargetInfo);
+  sdlAssert(frame.renderPass != nullptr);
+
+  SDL_PushGPUVertexUniformData(frame.commandBuffer, 0, &viewProjection,
+			       (u32)sizeof(viewProjection));
+  SDL_PushGPUFragmentUniformData(frame.commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
+				   
+  SDL_BindGPUGraphicsPipeline(frame.renderPass, pipeline);
+  SDL_BindGPUVertexBuffers(frame.renderPass, 0, vertexBufferBinding, 1);
+  SDL_BindGPUVertexBuffers(frame.renderPass, 1, instanceBufferBinding, 1);
+  SDL_BindGPUIndexBuffer(frame.renderPass, indexBufferBinding,
+			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
+  SDL_BindGPUFragmentSamplers(frame.renderPass, 0, textureSamplerBindings, 1);
+
+  for (auto &[meshHandle, instances] : rendererState.objects) {
+    MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
+    draw_mesh(meshRegion, instances);
+  }
+aaaaaaaaaa
 
     
-  SDL_EndGPURenderPass(renderPass);
-  sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
+  SDL_EndGPURenderPass(frame.renderPass);
+  sdlAssert(SDL_SubmitGPUCommandBuffer(frame.commandBuffer));
 }
 
 bool renderer_clear(void) {
@@ -902,9 +903,9 @@ void renderer_quit() {
 
   gpuDevice = nullptr;
   window = nullptr;
-  swapchainTexture = nullptr;
-  commandBuffer = nullptr;
-  renderPass = nullptr;
+  frame.swapchainTexture = nullptr;
+  frame.commandBuffer = nullptr;
+  frame.renderPass = nullptr;
   vertexBuffer = nullptr;
   indexBuffer = nullptr;
   instanceBuffer = nullptr;
