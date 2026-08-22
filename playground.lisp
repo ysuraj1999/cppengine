@@ -149,7 +149,8 @@
 (defcfun ("renderer_sync_scene" renderer-sync-scene) :bool
   (sh scene-handle))
 (defcfun ("renderer_render_begin" renderer-render-begin) :void)
-(defcfun ("renderer_render" renderer-render) :void)
+(defcfun ("renderer_render_scene" renderer-render-scene) :void
+  (sh scene-handle))
 (defcfun ("renderer_render_end" renderer-render-end) :void)
 
 (defcfun ("ui_begin" ui-begin) :void)
@@ -382,6 +383,9 @@
 (defmethod scene-sync ((scene scene))
   (renderer-sync-scene (scene-handle scene)))
 
+(defmethod scene-render ((scene scene))
+  (renderer-render-scene (scene-handle scene)))
+
 (defmethod scene-destroy ((scene scene))
   (%scene-destroy (scene-handle scene)))
 
@@ -441,7 +445,7 @@
 		    0.0)))
 	     (renderer-camera-update)
 	     (renderer-render-begin)
-	     (renderer-render)
+	     (renderer-render-scene (scene-handle scene))
 	     (ui-begin)
 	     (ui-begin-window "Inspector")
 	     (loop for mesh across (scene-meshes scene)

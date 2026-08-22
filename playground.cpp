@@ -68,7 +68,7 @@ int main(int argc, char* argv[]) {
     renderer_camera_update();
 
     renderer_render_begin();
-    renderer_render();
+    renderer_render_scene(sh);
     ui_begin();
     ui_begin_window("Inspector");
     u64 scCount = scene_count();

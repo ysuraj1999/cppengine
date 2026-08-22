@@ -799,8 +799,9 @@ void ui_end() {
   fpu_end();
 }
 
-void renderer_render(void) {
-  for (auto &[meshHandle, instances] : rendererState.objects) {
+void renderer_render_scene(SceneHandle sh) {
+  Scene *scene = scene_get(sh);
+  for (auto &[meshHandle, instances] : scene->objects) {
     MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
     draw_mesh(meshRegion, instances);
   }

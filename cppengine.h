@@ -30,7 +30,7 @@ extern "C" {
 
 bool renderer_init(void);
 void renderer_render_begin(void);
-void renderer_render(void);
+void renderer_render_scene(SceneHandle sh);
 void renderer_render_end(void);
 bool renderer_clear(void);
 void renderer_quit(void);
