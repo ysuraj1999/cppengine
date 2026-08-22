@@ -107,15 +107,55 @@
 
 (deftype u64 () '(unsigned-byte 64))
 
+(defstruct transform
+  (px 0.0 :type single-float)
+  (py 0.0 :type single-float)
+  (pz 0.0 :type single-float)
+  (sx 1.0 :type single-float)
+  (sy 1.0 :type single-float)
+  (sz 1.0 :type single-float)
+  (rx 0.0 :type single-float)
+  (ry 0.0 :type single-float)
+  (rz 0.0 :type single-float))
+
+(defun transform! (px py pz sx sy sz rx ry rz)
+  (make-transform
+   :px px :py py :pz pz
+   :sx sx :sy sy :sz sz
+   :rx rx :ry ry :rz rz))
+
 (defclass instance ()
   ((handle :reader instance-handle :type u64)
-   (transform :accessor instance-transform :initarg :transform)))
+   (transform :accessor instance-transform :initarg :transform
+	      :type transform)))
 
 (defclass mesh ()
   ((handle :reader mesh-handle :type u64 :initarg :handle)
    (scene :reader mesh-scene :initarg :scene)
    (instances :reader mesh-instances
               :initform (make-array 0 :adjustable t :fill-pointer 0))))
+
+(defmethod mesh-add-instance ((mesh mesh) (transform transform))
+  (let* ((scene (mesh-scene mesh))
+         (instance
+           (make-instance 'instance
+                          :transform transform)))
+    (setf (slot-value instance 'handle)
+          (renderer-scene-add-instance
+           (scene-handle scene)
+           (mesh-handle mesh)
+           (transform-px transform)
+           (transform-py transform)
+           (transform-pz transform)
+           (transform-sx transform)
+           (transform-sy transform)
+           (transform-sz transform)
+           (transform-rx transform)
+           (transform-ry transform)
+           (transform-rz transform)))
+    (vector-push-extend instance
+                        (slot-value mesh 'instances))
+    instance))
 
 (defclass scene ()
   ((handle :reader scene-handle :type u64)
@@ -336,10 +376,7 @@
     (scene-load-obj scene "models/bmw.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
-	     (scene-add-instance
-	      scene mesh
-	      (make-instance 'instance
-			     :transform '(500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
+	     (mesh-add-instance mesh (transform! 500.0 -10.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (scene-sync scene)
     (loop until (renderer-should-close-p)
 	  for dt = (renderer-dt)
