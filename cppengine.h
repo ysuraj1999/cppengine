@@ -41,6 +41,11 @@ InstanceHandle renderer_scene_add_instance(SceneHandle sh, MeshHandle m,
                                            f32 px, f32 py, f32 pz,
                                            f32 sx, f32 sy, f32 sz,
                                            f32 rx, f32 ry, f32 rz);
+void renderer_scene_instance_set_transform(SceneHandle sh,
+					   InstanceHandle i,
+					   f32 px, f32 py, f32 pz,
+					   f32 sx, f32 sy, f32 sz,
+					   f32 rx, f32 ry, f32 rz);
 bool renderer_scene_remove_instance(SceneHandle sh, InstanceHandle i);
 
 bool renderer_sync_scene(SceneHandle sh);

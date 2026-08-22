@@ -32,6 +32,20 @@
   (sx :float) (sy :float) (sz :float)
   (rx :float) (ry :float) (rz :float))
 
+(defcfun ("renderer_scene_instance_set_transform"
+          renderer-scene-instance-set-transform) :void
+  (sh :uint64)
+  (i :uint64)
+  (px :float)
+  (py :float)
+  (pz :float)
+  (sx :float)
+  (sy :float)
+  (sz :float)
+  (rx :float)
+  (ry :float)
+  (rz :float))
+
 (defcfun ("renderer_scene_remove_instance" renderer-scene-remove-instance) :bool
   (sh scene-handle)
   (i instance-handle))
@@ -107,12 +121,12 @@
 (defcfun ("renderer_mouse_released" renderer-mouse-released-p) :bool
   (button mouse-button))
 
-(cffi:defcfun ("renderer_camera_move" renderer-camera-move) :void
+(defcfun ("renderer_camera_move" renderer-camera-move) :void
   (forward :float)
   (right :float)
   (up :float))
 
-(cffi:defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
+(defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
   (yaw :float)
   (pitch :float))
 
@@ -138,13 +152,33 @@
    :rx rx :ry ry :rz rz))
 
 (defclass instance ()
-  ((handle :reader instance-handle :type u64)
+  ((handle :reader instance-handle :type u64 :initarg :handle)
+   (mesh :reader instance-mesh :initarg :mesh)
    (transform :accessor instance-transform :initarg :transform
 	      :type transform)))
 
-(defmethod initialize-instance :after ((scene scene) &rest initargs)
-  (declare (ignore initargs))
-  (setf (slot-value scene 'handle) (renderer-scene-create)))
+(defmethod print-object ((instance instance) stream)
+  (print-unreadable-object (instance stream :type t :identity t)
+    (format stream
+            "handle=~a mesh=~a"
+            (instance-handle instance)
+            (mesh-handle (instance-mesh instance)))))
+
+(defmethod (setf instance-transform) (value (instance instance))
+  (setf (slot-value instance 'transform) value)
+  (renderer-scene-instance-set-transform
+   (scene-handle (mesh-scene (instance-mesh instance)))
+   (instance-handle instance)
+   (transform-px value)
+   (transform-py value)
+   (transform-pz value)
+   (transform-sx value)
+   (transform-sy value)
+   (transform-sz value)
+   (transform-rx value)
+   (transform-ry value)
+   (transform-rz value))
+  value)
 
 (defclass mesh ()
   ((handle :reader mesh-handle :type u64 :initarg :handle)
@@ -152,36 +186,38 @@
    (instances :reader mesh-instances
               :initform (make-array 0 :adjustable t :fill-pointer 0))))
 
+(defmethod print-object ((mesh mesh) stream)
+  (print-unreadable-object (mesh stream :type t :identity t)
+    (format stream
+            "handle=~a instances=~a"
+            (mesh-handle mesh)
+            (renderer-scene-mesh-instance-count
+             (scene-handle (mesh-scene mesh))
+             (mesh-handle mesh)))))
+
 (defmethod mesh-instances ((mesh mesh))
-  (let ((scene (mesh-scene mesh))
-        (v (slot-value mesh 'instances)))
-    (setf (fill-pointer v) 0)
-    (dotimes (i (renderer-scene-mesh-instance-count (scene-handle scene) (mesh-handle mesh)))
-      (vector-push-extend
-       (make-instance 'instance
-                      :handle (renderer-scene-mesh-instance-at
-                               (scene-handle scene) (mesh-handle mesh) i))
-       v))
-    v))
+  (slot-value mesh 'instances))
 
 (defmethod mesh-add-instance ((mesh mesh) (transform transform))
   (let* ((scene (mesh-scene mesh))
+         (handle
+           (renderer-scene-add-instance
+            (scene-handle scene)
+            (mesh-handle mesh)
+            (transform-px transform)
+            (transform-py transform)
+            (transform-pz transform)
+            (transform-sx transform)
+            (transform-sy transform)
+            (transform-sz transform)
+            (transform-rx transform)
+            (transform-ry transform)
+            (transform-rz transform)))
          (instance
            (make-instance 'instance
+                          :handle handle
+                          :mesh mesh
                           :transform transform)))
-    (setf (slot-value instance 'handle)
-          (renderer-scene-add-instance
-           (scene-handle scene)
-           (mesh-handle mesh)
-           (transform-px transform)
-           (transform-py transform)
-           (transform-pz transform)
-           (transform-sx transform)
-           (transform-sy transform)
-           (transform-sz transform)
-           (transform-rx transform)
-           (transform-ry transform)
-           (transform-rz transform)))
     (vector-push-extend instance
                         (slot-value mesh 'instances))
     instance))
@@ -191,19 +227,34 @@
    (meshes :reader scene-meshes
            :initform (make-array 0 :adjustable t :fill-pointer 0))))
 
-(defmethod scene-load-obj ((scene scene) path)
-  (renderer-scene-load-obj (scene-handle scene) path))
+(defmethod print-object ((scene scene) stream)
+  (print-unreadable-object (scene stream :type t :identity t)
+    (format stream
+            "handle=~a meshes=~a instances=~a"
+            (scene-handle scene)
+            (renderer-scene-mesh-count (scene-handle scene))
+            (loop for mesh across (scene-meshes scene)
+                  sum (renderer-scene-mesh-instance-count
+                       (scene-handle scene)
+                       (mesh-handle mesh))))))
 
-(defmethod scene-meshes ((scene scene))
+(defmethod initialize-instance :after ((scene scene) &rest initargs)
+  (declare (ignore initargs))
+  (setf (slot-value scene 'handle) (renderer-scene-create)))
+
+(defmethod scene-load-obj ((scene scene) path)
+  (renderer-scene-load-obj (scene-handle scene) path)
   (let ((v (slot-value scene 'meshes)))
-    (setf (fill-pointer v) 0)
     (dotimes (i (renderer-scene-mesh-count (scene-handle scene)))
       (vector-push-extend
        (make-instance 'mesh
-                      :handle (renderer-scene-mesh-at (scene-handle scene) i)
+                      :handle (renderer-scene-mesh-at
+                               (scene-handle scene) i)
                       :scene scene)
-       v))
-    v))
+       v))))
+
+(defmethod scene-meshes ((scene scene))
+  (slot-value scene 'meshes))
 
 (defmethod scene-sync ((scene scene))
   (renderer-sync-scene (scene-handle scene)))
@@ -307,16 +358,16 @@
 (defconstant +key-right-alt+ 230)
 (defconstant +key-right-gui+ 231)
 
-(cffi:defcfun ("renderer_key_down" renderer-key-down-p) :bool
+(defcfun ("renderer_key_down" renderer-key-down-p) :bool
   (key :int))
 
-(cffi:defcfun ("renderer_key_pressed" renderer-key-pressed-p) :bool
+(defcfun ("renderer_key_pressed" renderer-key-pressed-p) :bool
   (key :int))
 
-(cffi:defcfun ("renderer_key_released" renderer-key-released-p) :bool
+(defcfun ("renderer_key_released" renderer-key-released-p) :bool
   (key :int))
 
-(cffi:defcfun ("renderer_dt" renderer-dt) :float)
+(defcfun ("renderer_dt" renderer-dt) :float)
 
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
@@ -334,9 +385,12 @@
 ;;   `(sb-sprof:with-profiling (:report :flat)
 ;;      ,@body))
 
+(defvar *scene* nil)
+
 (defun demo2 ()
   (renderer-init)
   (let ((scene (make-instance 'scene)))
+    (setf *scene* scene)
     (scene-load-obj scene "models/cube.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
@@ -384,3 +438,4 @@
   (renderer-quit))
 
 (demo2)
+;; (setf (instance-transform (aref (mesh-instances (aref (scene-meshes *scene*) 0)) 0)) (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))

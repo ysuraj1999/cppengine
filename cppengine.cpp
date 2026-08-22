@@ -499,17 +499,23 @@ bool renderer_scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
   return true;
 }
 
+static_internal Transform make_transform(f32 px, f32 py, f32 pz, f32 sx, f32 sy, f32 sz,
+					 f32 rx, f32 ry, f32 rz) {
+  Transform t = {};
+  t.position = {px, py, pz};
+  t.scale    = {sx, sy, sz};
+  t.rotation = {rx, ry, rz};
+  return t;
+}
+
 InstanceHandle renderer_scene_add_instance(SceneHandle sh, MeshHandle m,
                                            f32 px, f32 py, f32 pz,
                                            f32 sx, f32 sy, f32 sz,
                                            f32 rx, f32 ry, f32 rz) {
   Scene* scene = scene_get(sh);
-
-  Transform t = {};
-  t.position = {px, py, pz};
-  t.scale    = {sx, sy, sz};
-  t.rotation = {rx, ry, rz};
-
+  Transform t = make_transform(px, py, pz,
+			       sx, sy, sz,
+			       rx, ry, rz);
   return instance_add(scene, m, t);
 }
 
@@ -1017,4 +1023,15 @@ void ui_end_window() { ImGui::End(); }
 
 bool ui_button(const char* label) {
   return ImGui::Button(label);
+}
+
+void renderer_scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
+                                           f32 px, f32 py, f32 pz,
+                                           f32 sx, f32 sy, f32 sz,
+                                           f32 rx, f32 ry, f32 rz) {
+  Scene *s = scene_get(sh);
+  Instance *instance = instance_get(s, i);
+  instance->transform = make_transform(px, py, pz,
+				       sx, sy, sz,
+				       rx, ry, rz);
 }
