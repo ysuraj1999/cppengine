@@ -406,6 +406,7 @@
 ;;      ,@body))
 
 (defvar *scene* nil)
+(defvar *selection* nil)
 
 (defun demo ()
   (renderer-init)
@@ -452,7 +453,8 @@
 		   doing (when (ui-treenode (format nil "Mesh #~a" (mesh-handle mesh)))
 			   (loop for instance across (mesh-instances mesh)
 				 for instance-alias = (format nil "Instance #~a" (instance-handle instance))
-				 doing (ui-selectable instance-alias))
+				 doing (when (ui-selectable instance-alias)
+					 (setf *selection* instance)))
 			   (ui-treepop)))
 	     (ui-end-window)
 	     (ui-end)
