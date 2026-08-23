@@ -8,7 +8,8 @@
   (:cffi
    :cffi-libffi
    :lparallel
-   :alexandria)
+   :alexandria
+   :my-utilities)
 
   :components
   ((:file "package")

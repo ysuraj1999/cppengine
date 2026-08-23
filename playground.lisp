@@ -292,6 +292,7 @@ REPEAT."
 
 (defvar *mesh-objects* (make-hash-table :test #'eql))
 (defvar *instance-objects* (make-hash-table :test #'eql))
+(defvar *scene-objects* (make-hash-table :test #'eql))
 
 (defun ensure-mesh (scene handle)
   (or (gethash handle *mesh-objects*)
@@ -302,6 +303,12 @@ REPEAT."
   (or (gethash handle *instance-objects*)
       (setf (gethash handle *instance-objects*)
             (make-instance 'instance :handle handle :mesh mesh))))
+
+(defun ensure-scene (handle)
+  (or (gethash handle *scene-objects*)
+      (let ((scene (allocate-instance (find-class 'scene))))
+        (setf (slot-value scene 'handle) handle)
+        (setf (gethash handle *scene-objects*) scene))))
 
 (defclass instance ()
   ((handle :reader instance-handle :type u64 :initarg :handle)
@@ -421,7 +428,12 @@ REPEAT."
                  (push instance dead-instances)))
              *instance-objects*)
     (dolist (instance dead-instances)
-      (remhash (instance-handle instance) *instance-objects*))))
+      (remhash (instance-handle instance) *instance-objects*))
+    (when (member *selection* dead-instances)
+      (setf *selection* nil))
+    (when (eq *scene* scene)
+      (setf *scene* nil))
+    (remhash (scene-handle scene) *scene-objects*)))
 
 (defmethod scene-destroy ((scene scene))
   (prog1 (%scene-destroy (scene-handle scene))
@@ -446,6 +458,24 @@ REPEAT."
     (when ok
       (remhash (instance-handle instance) *instance-objects*))
     ok))
+
+(defmacro do-scenes ((scene) &body body)
+  (mu:with-gensyms (i)
+    `(dotimes (,i (%scene-count))
+       (let ((,scene (ensure-scene (%scene-at ,i))))
+         ,@body))))
+
+(defmacro do-scene-meshes ((mesh scene) &body body)
+  `(map nil (lambda (,mesh) ,@body) (scene-meshes ,scene)))
+
+(defmacro do-mesh-instances ((instance mesh) &body body)
+  `(map nil (lambda (,instance) ,@body) (mesh-instances ,mesh)))
+
+(defmacro do-scene-instances ((instance scene) &body body)
+  (mu:with-gensyms (mesh)
+    `(do-scene-meshes (,mesh ,scene)
+       (do-mesh-instances (,instance ,mesh)
+         ,@body))))
 
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
@@ -484,8 +514,10 @@ REPEAT."
 (defun demo ()
   (%renderer-init)
   (let ((scene (make-instance 'scene)))
-    (setf *scene* scene)
-    (scene-load-obj scene "models/bmw.obj")
+    (unwind-protect
+	(progn
+	  (setf *scene* scene)
+	  (scene-load-obj scene "models/bmw.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
 	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
@@ -522,17 +554,26 @@ REPEAT."
 	     (%renderer-render-scene (scene-handle scene))
 	     (%ui-begin)
 	     (%ui-begin-window "Inspector")
-	     (loop for mesh across (scene-meshes scene)
-		   doing (when (%ui-treenode (mesh-alias mesh))
-			   (loop for instance across (mesh-instances mesh)
-				 doing (when (%ui-selectable (instance-alias instance))
-					 (setf *selection* instance)))
-			   (%ui-treepop)))
+	     (do-scenes (scene)
+	       (when (%ui-treenode (format nil "Scene"))
+		 (do-scene-meshes(mesh scene)
+		   (when (%ui-treenode (mesh-alias mesh))
+		     (do-mesh-instances(instance mesh)
+		       (when (%ui-selectable (instance-alias instance))
+	      		 (setf *selection* instance)))
+		     (%ui-treepop)))
+		 (%ui-treepop)))
+	     ;; (loop for mesh across (scene-meshes scene)
+	     ;; 	   doing (when (%ui-treenode (mesh-alias mesh))
+	     ;; 		   (loop for instance across (mesh-instances mesh)
+	     ;; 			 doing (when (%ui-selectable (instance-alias instance))
+	     ;; 				 (setf *selection* instance)))
+	     ;; 		   (%ui-treepop)))
 	     (%ui-end-window)
 	     (instance-properties-panel)
 	     (%ui-end)
-	     (%renderer-render-end))
-    (scene-destroy scene))
+	     (%renderer-render-end)))
+      (scene-destroy scene)))
   (%renderer-quit))
 
 ;; (demo)
