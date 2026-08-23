@@ -24,6 +24,7 @@ add_library(cppengine SHARED
   stb_image.cpp
 
   includes/imgui/imgui.cpp
+  includes/imgui/imgui_demo.cpp
   includes/imgui/imgui_draw.cpp
   includes/imgui/imgui_tables.cpp
   includes/imgui/imgui_widgets.cpp

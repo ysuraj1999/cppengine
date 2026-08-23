@@ -789,6 +789,9 @@ void ui_begin() {
 }
 
 void ui_end() {
+  // edit styles
+  // ImGui::ShowStyleEditor();
+  
   ImGui::Render();
   ImDrawData *draw_data = ImGui::GetDrawData();
   ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
