@@ -207,29 +207,20 @@
 (defcfun ("input_key_released" %input-key-released-p) :bool
   (key :int))
 
+(defcstruct (%keyboard-event :class cffi-keyboard-event)
+  (scancode :int)
+  (down :bool)
+  (repeat :bool))
+
+(defcfun ("input_keyboard_event_count" %input-keyboard-event-count) :uint64)
+
+(defcfun ("input_keyboard_event_at" %input-keyboard-event-at)
+    (:struct %keyboard-event)
+  (index :uint64))
+
+
+
 (defcfun ("time_dt" %time-dt) :float)
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-(deftype u64 () '(unsigned-byte 64))
-
-(defstruct transform
-  (px 0.0 :type single-float)
-  (py 0.0 :type single-float)
-  (pz 0.0 :type single-float)
-  (sx 1.0 :type single-float)
-  (sy 1.0 :type single-float)
-  (sz 1.0 :type single-float)
-  (rx 0.0 :type single-float)
-  (ry 0.0 :type single-float)
-  (rz 0.0 :type single-float))
-
-(defun transform! (px py pz sx sy sz rx ry rz)
-  (make-transform
-   :px px :py py :pz pz
-   :sx sx :sy sy :sz sz
-   :rx rx :ry ry :rz rz))
-
 (defmethod translate-into-foreign-memory ((value transform)
                                           (type cffi-transform)
                                           ptr)
@@ -254,12 +245,68 @@
               (foreign-slot-value ptr '(:struct %transform) 'ry)
               (foreign-slot-value ptr '(:struct %transform) 'rz)))
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+(defstruct keyboard-event
+  (scancode 0 :type (signed-byte 32))
+  (down nil :type boolean)
+  (repeat nil :type boolean))
+
+(defun keyboard-events ()
+  "Return a typed vector of this frame's key events in the order SDL
+delivered them; each element is a KEYBOARD-EVENT with SCANCODE, DOWN and
+REPEAT."
+  (let ((count (%input-keyboard-event-count)))
+    (loop with events = (make-array count
+                                    :element-type 'keyboard-event
+                                    :fill-pointer 0)
+          for i below count
+          for e = (%input-keyboard-event-at i)
+          do (vector-push-extend
+              (make-keyboard-event
+               :scancode (slot-value e 'scancode)
+               :down (slot-value e 'down)
+               :repeat (slot-value e 'repeat))
+              events)
+          finally (return events))))
+
+(deftype u64 () '(unsigned-byte 64))
+
+(defstruct transform
+  (px 0.0 :type single-float)
+  (py 0.0 :type single-float)
+  (pz 0.0 :type single-float)
+  (sx 1.0 :type single-float)
+  (sy 1.0 :type single-float)
+  (sz 1.0 :type single-float)
+  (rx 0.0 :type single-float)
+  (ry 0.0 :type single-float)
+  (rz 0.0 :type single-float))
+
+(defun transform! (px py pz sx sy sz rx ry rz)
+  (make-transform
+   :px px :py py :pz pz
+   :sx sx :sy sy :sz sz
+   :rx rx :ry ry :rz rz))
+
+
+
+(defvar *mesh-objects* (make-hash-table :test #'eql))
+(defvar *instance-objects* (make-hash-table :test #'eql))
+
+(defun ensure-mesh (scene handle)
+  (or (gethash handle *mesh-objects*)
+      (setf (gethash handle *mesh-objects*)
+            (make-instance 'mesh :handle handle :scene scene))))
+
+(defun ensure-instance (mesh handle)
+  (or (gethash handle *instance-objects*)
+      (setf (gethash handle *instance-objects*)
+            (make-instance 'instance :handle handle :mesh mesh))))
+
 (defclass instance ()
   ((handle :reader instance-handle :type u64 :initarg :handle)
-   (mesh :reader instance-mesh :initarg :mesh)
-   (transform :accessor instance-transform :initarg :transform
-	      :type transform)
-   (alias :reader instance-alias :type string :initarg :alias)))
+   (mesh :reader instance-mesh :initarg :mesh)))
 
 (defmethod print-object ((instance instance) stream)
   (print-unreadable-object (instance stream :type t :identity t)
@@ -268,20 +315,27 @@
             (instance-handle instance)
             (mesh-handle (instance-mesh instance)))))
 
+(defmethod instance-transform ((instance instance))
+  (%scene-instance-get-transform
+   (scene-handle (mesh-scene (instance-mesh instance)))
+   (instance-handle instance)))
+
 (defmethod (setf instance-transform) (value (instance instance))
-  (setf (slot-value instance 'transform) value)
   (%scene-instance-set-transform
    (scene-handle (mesh-scene (instance-mesh instance)))
    (instance-handle instance)
    value)
   value)
 
+(defmethod instance-alias ((instance instance))
+  (foreign-string-to-lisp
+   (%scene-instance-alias
+    (scene-handle (mesh-scene (instance-mesh instance)))
+    (instance-handle instance))))
+
 (defclass mesh ()
   ((handle :reader mesh-handle :type u64 :initarg :handle)
-   (scene :reader mesh-scene :initarg :scene)
-   (instances :reader mesh-instances
-              :initform (make-array 0 :adjustable t :fill-pointer 0))
-   (alias :reader mesh-alias :type string :initarg :alias)))
+   (scene :reader mesh-scene :initarg :scene)))
 
 (defmethod print-object ((mesh mesh) stream)
   (print-unreadable-object (mesh stream :type t :identity t)
@@ -292,32 +346,33 @@
              (scene-handle (mesh-scene mesh))
              (mesh-handle mesh)))))
 
+(defmethod mesh-alias ((mesh mesh))
+  (foreign-string-to-lisp
+   (%scene-mesh-alias
+    (scene-handle (mesh-scene mesh))
+    (mesh-handle mesh))))
+
 (defmethod mesh-instances ((mesh mesh))
-  (slot-value mesh 'instances))
+  (let ((sh (scene-handle (mesh-scene mesh)))
+        (mh (mesh-handle mesh)))
+    (loop with count = (%scene-mesh-instance-count sh mh)
+          with instances = (make-array count :fill-pointer 0)
+          for i below count
+          do (vector-push-extend
+              (ensure-instance mesh (%scene-mesh-instance-at sh mh i))
+              instances)
+          finally (return instances))))
 
 (defmethod mesh-add-instance ((mesh mesh) (transform transform))
-  (let* ((scene (mesh-scene mesh))
-         (handle
-           (%scene-add-instance
-            (scene-handle scene)
-            (mesh-handle mesh)
-            transform))
-         (instance
-           (make-instance 'instance
-                          :handle handle
-                          :mesh mesh
-                          :transform transform
-                          :alias (scene-instance-alias
-                                  (scene-handle scene)
-                                  handle))))
-    (vector-push-extend instance
-                        (slot-value mesh 'instances))
-    instance))
+  (ensure-instance
+   mesh
+   (%scene-add-instance
+    (scene-handle (mesh-scene mesh))
+    (mesh-handle mesh)
+    transform)))
 
 (defclass scene ()
-  ((handle :reader scene-handle :type u64)
-   (meshes :reader scene-meshes
-           :initform (make-array 0 :adjustable t :fill-pointer 0))))
+  ((handle :reader scene-handle :type u64)))
 
 (defmethod print-object ((scene scene) stream)
   (print-unreadable-object (scene stream :type t :identity t)
@@ -335,19 +390,15 @@
   (setf (slot-value scene 'handle) (%scene-create)))
 
 (defmethod scene-load-obj ((scene scene) path)
-  (%scene-load-obj (scene-handle scene) path)
-  (let ((v (slot-value scene 'meshes)))
-    (dotimes (i (%scene-mesh-count (scene-handle scene)))
-      (let ((mh (%scene-mesh-at (scene-handle scene) i)))
-        (vector-push-extend
-         (make-instance 'mesh
-                        :handle mh
-                        :scene scene
-                        :alias (scene-mesh-alias (scene-handle scene) mh))
-         v)))))
+  (%scene-load-obj (scene-handle scene) path))
 
 (defmethod scene-meshes ((scene scene))
-  (slot-value scene 'meshes))
+  (let ((sh (scene-handle scene)))
+    (loop with count = (%scene-mesh-count sh)
+          with meshes = (make-array count :fill-pointer 0)
+          for i below count
+          do (vector-push-extend (ensure-mesh scene (%scene-mesh-at sh i)) meshes)
+          finally (return meshes))))
 
 (defmethod scene-sync ((scene scene))
   (%renderer-sync-scene (scene-handle scene)))
@@ -355,8 +406,47 @@
 (defmethod scene-render ((scene scene))
   (%renderer-render-scene (scene-handle scene)))
 
+(defun drop-scene-proxies (scene)
+  (let ((dead-meshes ())
+        (dead-instances ()))
+    (maphash (lambda (handle mesh)
+               (declare (ignore handle))
+               (when (eq (mesh-scene mesh) scene)
+                 (push mesh dead-meshes)))
+             *mesh-objects*)
+    (dolist (mesh dead-meshes)
+      (remhash (mesh-handle mesh) *mesh-objects*))
+    (maphash (lambda (handle instance)
+               (declare (ignore handle))
+               (when (eq (mesh-scene (instance-mesh instance)) scene)
+                 (push instance dead-instances)))
+             *instance-objects*)
+    (dolist (instance dead-instances)
+      (remhash (instance-handle instance) *instance-objects*))))
+
 (defmethod scene-destroy ((scene scene))
-  (%scene-destroy (scene-handle scene)))
+  (prog1 (%scene-destroy (scene-handle scene))
+    (drop-scene-proxies scene)))
+
+(defmethod scene-remove-mesh ((scene scene) (mesh mesh))
+  (let ((ok (%scene-remove-mesh (scene-handle scene) (mesh-handle mesh))))
+    (when ok
+      (let ((dead ()))
+        (remhash (mesh-handle mesh) *mesh-objects*)
+        (maphash (lambda (handle instance)
+                   (declare (ignore handle))
+                   (when (eq (instance-mesh instance) mesh)
+                     (push instance dead)))
+                 *instance-objects*)
+        (dolist (instance dead)
+          (remhash (instance-handle instance) *instance-objects*))))
+    ok))
+
+(defmethod scene-remove-instance ((scene scene) (instance instance))
+  (let ((ok (%scene-remove-instance (scene-handle scene) (instance-handle instance))))
+    (when ok
+      (remhash (instance-handle instance) *instance-objects*))
+    ok))
 
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
