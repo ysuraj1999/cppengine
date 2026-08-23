@@ -221,30 +221,6 @@
 
 
 (defcfun ("time_dt" %time-dt) :float)
-(defmethod translate-into-foreign-memory ((value transform)
-                                          (type cffi-transform)
-                                          ptr)
-  (setf (foreign-slot-value ptr '(:struct %transform) 'px) (transform-px value)
-        (foreign-slot-value ptr '(:struct %transform) 'py) (transform-py value)
-        (foreign-slot-value ptr '(:struct %transform) 'pz) (transform-pz value)
-        (foreign-slot-value ptr '(:struct %transform) 'sx) (transform-sx value)
-        (foreign-slot-value ptr '(:struct %transform) 'sy) (transform-sy value)
-        (foreign-slot-value ptr '(:struct %transform) 'sz) (transform-sz value)
-        (foreign-slot-value ptr '(:struct %transform) 'rx) (transform-rx value)
-        (foreign-slot-value ptr '(:struct %transform) 'ry) (transform-ry value)
-        (foreign-slot-value ptr '(:struct %transform) 'rz) (transform-rz value)))
-
-(defmethod translate-from-foreign (ptr (type cffi-transform))
-  (transform! (foreign-slot-value ptr '(:struct %transform) 'px)
-              (foreign-slot-value ptr '(:struct %transform) 'py)
-              (foreign-slot-value ptr '(:struct %transform) 'pz)
-              (foreign-slot-value ptr '(:struct %transform) 'sx)
-              (foreign-slot-value ptr '(:struct %transform) 'sy)
-              (foreign-slot-value ptr '(:struct %transform) 'sz)
-              (foreign-slot-value ptr '(:struct %transform) 'rx)
-              (foreign-slot-value ptr '(:struct %transform) 'ry)
-              (foreign-slot-value ptr '(:struct %transform) 'rz)))
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defstruct keyboard-event
@@ -289,6 +265,29 @@ REPEAT."
    :sx sx :sy sy :sz sz
    :rx rx :ry ry :rz rz))
 
+(defmethod translate-into-foreign-memory ((value transform)
+                                          (type cffi-transform)
+                                          ptr)
+  (setf (foreign-slot-value ptr '(:struct %transform) 'px) (transform-px value)
+        (foreign-slot-value ptr '(:struct %transform) 'py) (transform-py value)
+        (foreign-slot-value ptr '(:struct %transform) 'pz) (transform-pz value)
+        (foreign-slot-value ptr '(:struct %transform) 'sx) (transform-sx value)
+        (foreign-slot-value ptr '(:struct %transform) 'sy) (transform-sy value)
+        (foreign-slot-value ptr '(:struct %transform) 'sz) (transform-sz value)
+        (foreign-slot-value ptr '(:struct %transform) 'rx) (transform-rx value)
+        (foreign-slot-value ptr '(:struct %transform) 'ry) (transform-ry value)
+        (foreign-slot-value ptr '(:struct %transform) 'rz) (transform-rz value)))
+
+(defmethod translate-from-foreign (ptr (type cffi-transform))
+  (transform! (foreign-slot-value ptr '(:struct %transform) 'px)
+              (foreign-slot-value ptr '(:struct %transform) 'py)
+              (foreign-slot-value ptr '(:struct %transform) 'pz)
+              (foreign-slot-value ptr '(:struct %transform) 'sx)
+              (foreign-slot-value ptr '(:struct %transform) 'sy)
+              (foreign-slot-value ptr '(:struct %transform) 'sz)
+              (foreign-slot-value ptr '(:struct %transform) 'rx)
+              (foreign-slot-value ptr '(:struct %transform) 'ry)
+              (foreign-slot-value ptr '(:struct %transform) 'rz)))
 
 
 (defvar *mesh-objects* (make-hash-table :test #'eql))
