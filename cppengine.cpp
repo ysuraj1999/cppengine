@@ -82,7 +82,7 @@ static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 static_global RendererFrame frame = {};
 
-static_internal void keyboard_events_poll() {
+static_internal inline void keyboard_state_update() {
   memcpy(
 	 previousKeyboardState,
 	 currentKeyboardState,
@@ -820,6 +820,13 @@ bool renderer_clear(void) {
   return true;
 }
 
+static_internal inline void mouse_state_update() {
+  for (int i = 0; i < MOUSE_BUTTON_COUNT; i++) {
+    mouseState.pressed[i] = mouseState.down[i] && !lastMouseDown[i];
+    mouseState.released[i] = !mouseState.down[i] && lastMouseDown[i];
+  }
+}
+
 void input_poll() {
   mouseState.dx = 0.0f;
   mouseState.dy = 0.0f;
@@ -879,12 +886,9 @@ void input_poll() {
     }
   }
 
-  for (int i = 0; i < MOUSE_BUTTON_COUNT; i++) {
-    mouseState.pressed[i]  =  mouseState.down[i] && !lastMouseDown[i];
-    mouseState.released[i] = !mouseState.down[i] &&  lastMouseDown[i];
-  }
+  mouse_state_update();
 
-  keyboard_events_poll();
+  keyboard_state_update();
 }
 
 bool input_should_close() {
