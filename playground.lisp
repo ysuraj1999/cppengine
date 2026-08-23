@@ -16,101 +16,31 @@
   (sx :float) (sy :float) (sz :float)
   (rx :float) (ry :float) (rz :float))
 
-;; Letters
-(defconstant +key-a+ 4)
-(defconstant +key-b+ 5)
-(defconstant +key-c+ 6)
-(defconstant +key-d+ 7)
-(defconstant +key-e+ 8)
-(defconstant +key-f+ 9)
-(defconstant +key-g+ 10)
-(defconstant +key-h+ 11)
-(defconstant +key-i+ 12)
-(defconstant +key-j+ 13)
-(defconstant +key-k+ 14)
-(defconstant +key-l+ 15)
-(defconstant +key-m+ 16)
-(defconstant +key-n+ 17)
-(defconstant +key-o+ 18)
-(defconstant +key-p+ 19)
-(defconstant +key-q+ 20)
-(defconstant +key-r+ 21)
-(defconstant +key-s+ 22)
-(defconstant +key-t+ 23)
-(defconstant +key-u+ 24)
-(defconstant +key-v+ 25)
-(defconstant +key-w+ 26)
-(defconstant +key-x+ 27)
-(defconstant +key-y+ 28)
-(defconstant +key-z+ 29)
-
-;; Numbers
-(defconstant +key-1+ 30)
-(defconstant +key-2+ 31)
-(defconstant +key-3+ 32)
-(defconstant +key-4+ 33)
-(defconstant +key-5+ 34)
-(defconstant +key-6+ 35)
-(defconstant +key-7+ 36)
-(defconstant +key-8+ 37)
-(defconstant +key-9+ 38)
-(defconstant +key-0+ 39)
-
-;; Common
-(defconstant +key-enter+ 40)
-(defconstant +key-escape+ 41)
-(defconstant +key-backspace+ 42)
-(defconstant +key-tab+ 43)
-(defconstant +key-space+ 44)
-
-;; Punctuation
-(defconstant +key-minus+ 45)
-(defconstant +key-equals+ 46)
-(defconstant +key-left-bracket+ 47)
-(defconstant +key-right-bracket+ 48)
-(defconstant +key-backslash+ 49)
-(defconstant +key-semicolon+ 51)
-(defconstant +key-apostrophe+ 52)
-(defconstant +key-grave+ 53)
-(defconstant +key-comma+ 54)
-(defconstant +key-period+ 55)
-(defconstant +key-slash+ 56)
-
-;; Function keys
-(defconstant +key-f1+ 58)
-(defconstant +key-f2+ 59)
-(defconstant +key-f3+ 60)
-(defconstant +key-f4+ 61)
-(defconstant +key-f5+ 62)
-(defconstant +key-f6+ 63)
-(defconstant +key-f7+ 64)
-(defconstant +key-f8+ 65)
-(defconstant +key-f9+ 66)
-(defconstant +key-f10+ 67)
-(defconstant +key-f11+ 68)
-(defconstant +key-f12+ 69)
-
-;; Navigation
-(defconstant +key-insert+ 73)
-(defconstant +key-home+ 74)
-(defconstant +key-page-up+ 75)
-(defconstant +key-delete+ 76)
-(defconstant +key-end+ 77)
-(defconstant +key-page-down+ 78)
-(defconstant +key-right+ 79)
-(defconstant +key-left+ 80)
-(defconstant +key-down+ 81)
-(defconstant +key-up+ 82)
-
-;; Modifiers
-(defconstant +key-left-ctrl+ 224)
-(defconstant +key-left-shift+ 225)
-(defconstant +key-left-alt+ 226)
-(defconstant +key-left-gui+ 227)
-(defconstant +key-right-ctrl+ 228)
-(defconstant +key-right-shift+ 229)
-(defconstant +key-right-alt+ 230)
-(defconstant +key-right-gui+ 231)
+(defun key (name)
+  (ecase name
+    ;; Letters
+    (:a 4) (:b 5) (:c 6) (:d 7) (:e 8) (:f 9) (:g 10) (:h 11)
+    (:i 12) (:j 13) (:k 14) (:l 15) (:m 16) (:n 17) (:o 18) (:p 19)
+    (:q 20) (:r 21) (:s 22) (:t 23) (:u 24) (:v 25) (:w 26) (:x 27)
+    (:y 28) (:z 29)
+    ;; Numbers
+    (:1 30) (:2 31) (:3 32) (:4 33) (:5 34)
+    (:6 35) (:7 36) (:8 37) (:9 38) (:0 39)
+    ;; Common
+    (:enter 40) (:escape 41) (:backspace 42) (:tab 43) (:space 44)
+    ;; Punctuation
+    (:minus 45) (:equals 46) (:left-bracket 47) (:right-bracket 48)
+    (:backslash 49) (:semicolon 51) (:apostrophe 52) (:grave 53)
+    (:comma 54) (:period 55) (:slash 56)
+    ;; Function keys
+    (:f1 58) (:f2 59) (:f3 60) (:f4 61) (:f5 62) (:f6 63)
+    (:f7 64) (:f8 65) (:f9 66) (:f10 67) (:f11 68) (:f12 69)
+    ;; Navigation
+    (:insert 73) (:home 74) (:page-up 75) (:delete 76) (:end 77)
+    (:page-down 78) (:right 79) (:left 80) (:down 81) (:up 82)
+    ;; Modifiers
+    (:left-ctrl 224) (:left-shift 225) (:left-alt 226) (:left-gui 227)
+    (:right-ctrl 228) (:right-shift 229) (:right-alt 230) (:right-gui 231)))
 
 (defcfun ("renderer_init" %renderer-init) :bool)
 
@@ -436,8 +366,8 @@
       0.0
       value))
 
-(defparameter *keyboard-sensitivity* 10.0)
-(defparameter *mouse-sensitivity* 1.0)
+(defparameter *keyboard-sensitivity* 200.0)
+(defparameter *mouse-sensitivity* 50.0)
 
 ;; (require :sb-sprof)
 ;; (defmacro sbcl-profile(&body body)
@@ -466,7 +396,7 @@
   (%renderer-init)
   (let ((scene (make-instance 'scene)))
     (setf *scene* scene)
-    (scene-load-obj scene "models/cube.obj")
+    (scene-load-obj scene "models/bmw.obj")
     (loop for mesh across (scene-meshes scene)
 	  doing
 	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
@@ -479,12 +409,12 @@
 		    (wheel-x (%input-mouse-wheel-x))
 		    (dx (%input-mouse-dx))
 		    (dy (%input-mouse-dy))
-		    (w-down (%input-key-down-p +key-w+))
-		    (a-down (%input-key-down-p +key-a+))
-		    (s-down (%input-key-down-p +key-s+))
-		    (d-down (%input-key-down-p +key-d+))
-		    (space-down (%input-key-down-p +key-space+))
-		    (ctrl-down (%input-key-down-p +key-left-ctrl+))
+		    (w-down (%input-key-down-p (key :w)))
+		    (a-down (%input-key-down-p (key :a)))
+		    (s-down (%input-key-down-p (key :s)))
+		    (d-down (%input-key-down-p (key :d)))
+		    (space-down (%input-key-down-p (key :space)))
+		    (ctrl-down (%input-key-down-p (key :left-ctrl)))
 		    (move-speed (* *keyboard-sensitivity* dt))
 		    (look-speed (* *mouse-sensitivity* dt))
 		    (middle-click (%input-mouse-down-p :middle)))
@@ -516,5 +446,5 @@
     (scene-destroy scene))
   (%renderer-quit))
 
-(demo)
+;; (demo)
 ;; (setf (instance-transform (aref (mesh-instances (aref (scene-meshes *scene*) 0)) 0)) (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))
