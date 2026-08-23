@@ -34,6 +34,7 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
     auto &shape = shapes[shapeIndex];
 
     Mesh mesh{};
+    mesh.alias = shape.name;
     std::map<std::tuple<int, int, int>, u32> vertexMap;
     u32 indexOffset = 0;
     for (u32 faceIndex = 0; faceIndex < shape.mesh.num_face_vertices.size();

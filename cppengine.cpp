@@ -141,17 +141,19 @@ static_internal Instance* instance_get(Scene* scene, InstanceHandle ih) {
 
 static_internal MeshHandle mesh_add(Scene* scene, Mesh m) {
   MeshHandle newMeshHandle = next_mesh_handle++;
+  m.alias = (m.alias.empty() ? "Mesh" : m.alias) + "#" + std::to_string(newMeshHandle);
   scene->meshes[newMeshHandle] = m;
   scene->meshOrder.push_back(newMeshHandle);
   return newMeshHandle;
 }
 
 static_internal InstanceHandle instance_add(Scene* scene, MeshHandle m, Transform t) {
-  mesh_get(scene, m);
+  Mesh* mesh = mesh_get(scene, m);
   Instance newInstance = {};
   newInstance.instanceHandle = next_instance_handle++;
   newInstance.mesh = m;
   newInstance.transform = t;
+  newInstance.alias = mesh->alias + "-instance#" + std::to_string(newInstance.instanceHandle);
   scene->objects[m].push_back(newInstance);
   return newInstance.instanceHandle;
 }
@@ -504,6 +506,14 @@ static_internal Transform make_transform(f32 px, f32 py, f32 pz, f32 sx, f32 sy,
 InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t) {
   Scene* scene = scene_get(sh);
   return instance_add(scene, m, t);
+}
+
+const char* scene_mesh_alias(SceneHandle sh, MeshHandle mh) {
+  return mesh_get(scene_get(sh), mh)->alias.c_str();
+}
+
+const char* scene_instance_alias(SceneHandle sh, InstanceHandle ih) {
+  return instance_get(scene_get(sh), ih)->alias.c_str();
 }
 
 bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {

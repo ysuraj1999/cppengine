@@ -2,6 +2,7 @@
 #include <SDL3/SDL_gpu.h>
 #include <cstdint>
 #include <glm/glm.hpp>
+#include <string>
 #include <unordered_map>
 #include <vector>
 #include "cppengine.h"
@@ -59,6 +60,7 @@ struct Mat4 {
 struct Mesh {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
+  std::string alias;
 };
 
 struct MeshRegion {
@@ -75,6 +77,7 @@ struct Instance {
   InstanceHandle instanceHandle;
   MeshHandle mesh; // redundant, for direct mapping
   Transform transform;
+  std::string alias;
 };
 
 using Instances = std::vector<Instance>;

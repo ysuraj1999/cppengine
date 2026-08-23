@@ -79,13 +79,12 @@ int main(int argc, char* argv[]) {
         u64 mCount = scene_mesh_count(sceneH);
         for (u64 m = 0; m < mCount; m++) {
           MeshHandle mh = scene_mesh_at(sceneH, m);
-          std::string meshLabel = "Mesh #" + std::to_string(mh);
-          if (ui_treenode(meshLabel.c_str())) {
+          const char* meshLabel = scene_mesh_alias(sceneH, mh);
+          if (ui_treenode(meshLabel)) {
             u64 instCount = scene_mesh_instance_count(sceneH, mh);
             for (u64 inst = 0; inst < instCount; inst++) {
               InstanceHandle ih = scene_mesh_instance_at(sceneH, mh, inst);
-              std::string instLabel = "Instance #" + std::to_string(ih);
-              ui_selectable(instLabel.c_str());
+              ui_selectable(scene_instance_alias(sceneH, ih));
             }
             ui_treepop();
           }

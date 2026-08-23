@@ -51,6 +51,8 @@ bool scene_destroy(SceneHandle sh);
 bool scene_load_obj(SceneHandle sh, const char *path);
 bool scene_remove_mesh(SceneHandle sh, MeshHandle mh);
 InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t);
+const char* scene_mesh_alias(SceneHandle sh, MeshHandle mh);
+const char* scene_instance_alias(SceneHandle sh, InstanceHandle ih);
 void scene_instance_set_transform(SceneHandle sh,
                                   InstanceHandle i,
                                   Transform t);

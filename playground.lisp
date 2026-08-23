@@ -23,7 +23,6 @@
 (defconstant +key-d+ 7)
 (defconstant +key-e+ 8)
 (defconstant +key-f+ 9)
-
 (defconstant +key-g+ 10)
 (defconstant +key-h+ 11)
 (defconstant +key-i+ 12)
@@ -131,6 +130,22 @@
   (sh scene-handle)
   (m mesh-handle)
   (xform (:struct transform)))
+
+;; Returns a pointer into engine-owned memory; do not free.
+(defcfun ("scene_mesh_alias" %scene-mesh-alias) :pointer
+  (sh scene-handle)
+  (mh mesh-handle))
+
+(defun scene-mesh-alias (sh mh)
+  (foreign-string-to-lisp (%scene-mesh-alias sh mh)))
+
+;; Returns a pointer into engine-owned memory; do not free.
+(defcfun ("scene_instance_alias" %scene-instance-alias) :pointer
+  (sh scene-handle)
+  (i instance-handle))
+
+(defun scene-instance-alias (sh i)
+  (foreign-string-to-lisp (%scene-instance-alias sh i)))
 
 (defcfun ("scene_instance_get_transform" scene-instance-get-transform)
     (:struct transform)
