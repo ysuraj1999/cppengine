@@ -12,20 +12,20 @@ layout(std140, set = 3, binding = 0) uniform FragmentUniforms
 };
 
 // Normal shading
-// void main()
-// {
-//   vec3 N = normalize(v_normal);
-//   FragColor = vec4(-N * 0.5 + 0.5, 1.0);
-// }
-
-// Lambert shading
 void main()
 {
-  vec3 L = vec3(-0.5, 0.8, -0.5);
-  float diffuse = max(dot(normalize(v_normal), L), 0.0);
-
-  FragColor = vec4(vec3(diffuse), 1.0);
+  vec3 N = normalize(v_normal);
+  FragColor = vec4(-N * 0.5 + 0.5, 1.0);
 }
+
+// Lambert shading
+// void main()
+// {
+//   vec3 L = vec3(-0.5, 0.8, -0.5);
+//   float diffuse = max(dot(normalize(v_normal), L), 0.0);
+
+//   FragColor = vec4(vec3(diffuse), 1.0);
+// }
 
 // Fragment playground
 // void main(){
