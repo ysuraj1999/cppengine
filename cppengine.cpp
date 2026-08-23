@@ -82,7 +82,7 @@ static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 static_global RendererFrame frame = {};
 
-static_internal void keyboard_update() {
+static_internal void keyboard_events_poll() {
   memcpy(
 	 previousKeyboardState,
 	 currentKeyboardState,
@@ -884,7 +884,7 @@ void input_poll() {
     mouseState.released[i] = !mouseState.down[i] &&  lastMouseDown[i];
   }
 
-  keyboard_update();
+  keyboard_events_poll();
 }
 
 bool input_should_close() {
