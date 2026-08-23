@@ -30,6 +30,14 @@ typedef enum MouseButton {
   MOUSE_BUTTON_COUNT = 6,   // index 0 unused
 } MouseButton;
 
+#define KEYBOARD_EVENT_CAPACITY 256
+
+typedef struct KeyboardEvent {
+  int scancode;  // SDL_Scancode value
+  bool down;     // true = KEYDOWN, false = KEYUP
+  bool repeat;   // OS auto-repeat flag (KEYDOWN only)
+} KeyboardEvent;
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -82,6 +90,9 @@ bool input_mouse_released(MouseButton button);
 bool input_key_down(SDL_Scancode key);
 bool input_key_pressed(SDL_Scancode key);
 bool input_key_released(SDL_Scancode key);
+
+u64 input_keyboard_event_count(void);
+KeyboardEvent input_keyboard_event_at(u64 index);
 
 f32 time_dt(void);
 

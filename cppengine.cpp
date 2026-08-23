@@ -76,6 +76,8 @@ static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
 static_global bool shouldClose = false;
 static_global MouseState mouseState;
+static_global KeyboardEvent keyboardEventBuffer[KEYBOARD_EVENT_CAPACITY] = {};
+static_global u32 keyboardEventCount = 0;
 static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
 static_global bool currentKeyboardState[SDL_SCANCODE_COUNT] = {};
 static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
@@ -178,9 +180,6 @@ bool renderer_init() {
       .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
 
-  next_scene_handle = 0;
-  next_mesh_handle = 0;
-  next_instance_handle = 0;
   shouldClose = false;
 
   rendererConfig = config;
@@ -832,6 +831,7 @@ void input_poll() {
   mouseState.dy = 0.0f;
   mouseState.wheel_x = 0.0f;
   mouseState.wheel_y = 0.0f;
+  keyboardEventCount = 0;
   memcpy(lastMouseDown, mouseState.down, sizeof(lastMouseDown));
   memset(mouseState.pressed, 0, sizeof(mouseState.pressed));
   memset(mouseState.released, 0, sizeof(mouseState.released));
@@ -880,6 +880,17 @@ void input_poll() {
       if (!io.WantCaptureMouse) {
         mouseState.wheel_x += event.wheel.x;
         mouseState.wheel_y += event.wheel.y;
+      }
+      break;
+    }
+    case SDL_EVENT_KEY_DOWN:
+    case SDL_EVENT_KEY_UP: {
+      // append in SDL delivery order; state snapshot is not used for ordering
+      if (!io.WantCaptureKeyboard && keyboardEventCount < KEYBOARD_EVENT_CAPACITY) {
+        KeyboardEvent& e = keyboardEventBuffer[keyboardEventCount++];
+        e.scancode = (int)event.key.scancode;
+        e.down = event.type == SDL_EVENT_KEY_DOWN;
+        e.repeat = event.key.repeat;
       }
       break;
     }
@@ -1018,6 +1029,15 @@ bool input_key_pressed(SDL_Scancode key) {
 
 bool input_key_released(SDL_Scancode key) {
   return !currentKeyboardState[key] && previousKeyboardState[key];
+}
+
+u64 input_keyboard_event_count(void) {
+  return keyboardEventCount;
+}
+
+KeyboardEvent input_keyboard_event_at(u64 index) {
+  assert(index < keyboardEventCount);
+  return keyboardEventBuffer[index];
 }
 
 f32 time_dt(void) {
