@@ -11,6 +11,11 @@
 (defctype mesh-handle :uint64)
 (defctype instance-handle :uint64)
 
+(defcstruct (transform :class cffi-transform)
+  (px :float) (py :float) (pz :float)
+  (sx :float) (sy :float) (sz :float)
+  (rx :float) (ry :float) (rz :float))
+
 ;; Letters
 (defconstant +key-a+ 4)
 (defconstant +key-b+ 5)
@@ -18,6 +23,7 @@
 (defconstant +key-d+ 7)
 (defconstant +key-e+ 8)
 (defconstant +key-f+ 9)
+
 (defconstant +key-g+ 10)
 (defconstant +key-h+ 11)
 (defconstant +key-i+ 12)
@@ -124,23 +130,18 @@
 (defcfun ("scene_add_instance" scene-add-instance) instance-handle
   (sh scene-handle)
   (m mesh-handle)
-  (px :float) (py :float) (pz :float)
-  (sx :float) (sy :float) (sz :float)
-  (rx :float) (ry :float) (rz :float))
+  (xform (:struct transform)))
+
+(defcfun ("scene_instance_get_transform" scene-instance-get-transform)
+    (:struct transform)
+  (sh scene-handle)
+  (i instance-handle))
 
 (defcfun ("scene_instance_set_transform"
           scene-instance-set-transform) :void
   (sh :uint64)
   (i :uint64)
-  (px :float)
-  (py :float)
-  (pz :float)
-  (sx :float)
-  (sy :float)
-  (sz :float)
-  (rx :float)
-  (ry :float)
-  (rz :float))
+  (xform (:struct transform)))
 
 (defcfun ("scene_remove_instance" scene-remove-instance) :bool
   (sh scene-handle)
@@ -178,6 +179,15 @@
 
 (defcfun ("ui_sameline" ui-sameline)
   :void)
+
+(defcfun ("ui_drag_float3" ui-drag-float3)
+  :bool
+  (label :string)
+  (values :pointer))
+
+(defcfun ("ui_text" ui-text)
+  :void
+  (text :string))
 
 (defcfun ("renderer_clear" renderer-clear) :bool)
 
@@ -275,6 +285,30 @@
    :sx sx :sy sy :sz sz
    :rx rx :ry ry :rz rz))
 
+(defmethod translate-into-foreign-memory ((value transform)
+                                          (type cffi-transform)
+                                          ptr)
+  (setf (foreign-slot-value ptr '(:struct transform) 'px) (transform-px value)
+        (foreign-slot-value ptr '(:struct transform) 'py) (transform-py value)
+        (foreign-slot-value ptr '(:struct transform) 'pz) (transform-pz value)
+        (foreign-slot-value ptr '(:struct transform) 'sx) (transform-sx value)
+        (foreign-slot-value ptr '(:struct transform) 'sy) (transform-sy value)
+        (foreign-slot-value ptr '(:struct transform) 'sz) (transform-sz value)
+        (foreign-slot-value ptr '(:struct transform) 'rx) (transform-rx value)
+        (foreign-slot-value ptr '(:struct transform) 'ry) (transform-ry value)
+        (foreign-slot-value ptr '(:struct transform) 'rz) (transform-rz value)))
+
+(defmethod translate-from-foreign (ptr (type cffi-transform))
+  (transform! (foreign-slot-value ptr '(:struct transform) 'px)
+              (foreign-slot-value ptr '(:struct transform) 'py)
+              (foreign-slot-value ptr '(:struct transform) 'pz)
+              (foreign-slot-value ptr '(:struct transform) 'sx)
+              (foreign-slot-value ptr '(:struct transform) 'sy)
+              (foreign-slot-value ptr '(:struct transform) 'sz)
+              (foreign-slot-value ptr '(:struct transform) 'rx)
+              (foreign-slot-value ptr '(:struct transform) 'ry)
+              (foreign-slot-value ptr '(:struct transform) 'rz)))
+
 (defclass instance ()
   ((handle :reader instance-handle :type u64 :initarg :handle)
    (mesh :reader instance-mesh :initarg :mesh)
@@ -293,15 +327,7 @@
   (scene-instance-set-transform
    (scene-handle (mesh-scene (instance-mesh instance)))
    (instance-handle instance)
-   (transform-px value)
-   (transform-py value)
-   (transform-pz value)
-   (transform-sx value)
-   (transform-sy value)
-   (transform-sz value)
-   (transform-rx value)
-   (transform-ry value)
-   (transform-rz value))
+   value)
   value)
 
 (defclass mesh ()
@@ -328,15 +354,7 @@
            (scene-add-instance
             (scene-handle scene)
             (mesh-handle mesh)
-            (transform-px transform)
-            (transform-py transform)
-            (transform-pz transform)
-            (transform-sx transform)
-            (transform-sy transform)
-            (transform-sz transform)
-            (transform-rx transform)
-            (transform-ry transform)
-            (transform-rz transform)))
+            transform))
          (instance
            (make-instance 'instance
                           :handle handle
@@ -408,6 +426,21 @@
 (defvar *scene* nil)
 (defvar *selection* nil)
 
+(defun instance-properties-panel ()
+  (when *selection*
+    (ui-begin-window "Instance Properties")
+    (let* ((sel *selection*)
+           (tr (scene-instance-get-transform
+                (scene-handle (mesh-scene (instance-mesh sel)))
+                (instance-handle sel))))
+      (ui-text (format nil "Position: ~,2f ~,2f ~,2f"
+                       (slot-value tr 'px) (slot-value tr 'py) (slot-value tr 'pz)))
+      (ui-text (format nil "Rotation: ~,2f ~,2f ~,2f"
+                       (slot-value tr 'rx) (slot-value tr 'ry) (slot-value tr 'rz)))
+      (ui-text (format nil "Scale: ~,2f ~,2f ~,2f"
+                       (slot-value tr 'sx) (slot-value tr 'sy) (slot-value tr 'sz))))
+    (ui-end-window)))
+
 (defun demo ()
   (renderer-init)
   (let ((scene (make-instance 'scene)))
@@ -457,6 +490,7 @@
 					 (setf *selection* instance)))
 			   (ui-treepop)))
 	     (ui-end-window)
+	     (instance-properties-panel)
 	     (ui-end)
 	     (renderer-render-end))
     (scene-destroy scene))

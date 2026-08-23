@@ -29,9 +29,9 @@ int main(int argc, char* argv[]) {
   for (u64 i = 0; i < meshCount; i++) {
     MeshHandle mh = scene_mesh_at(sh, i);
     scene_add_instance(sh, mh,
-                       0.0f, 0.0f, 0.0f,   // position
-                       1.0f, 1.0f, 1.0f,   // scale
-                       0.0f, 0.0f, 0.0f);  // rotation
+                       {/*position*/ 0.0f, 0.0f, 0.0f,
+                        /*scale*/    1.0f, 1.0f, 1.0f,
+                        /*rotation*/ 0.0f, 0.0f, 0.0f});
   }
   
   renderer_sync_scene(sh);

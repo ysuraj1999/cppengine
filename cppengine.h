@@ -9,6 +9,12 @@ typedef u64 SceneHandle;
 typedef u64 MeshHandle;
 typedef u64 InstanceHandle;
 
+typedef struct Transform {
+  f32 px; f32 py; f32 pz;
+  f32 sx; f32 sy; f32 sz;
+  f32 rx; f32 ry; f32 rz;
+} Transform;
+
 // #define SDL_BUTTON_LEFT 1
 // #define SDL_BUTTON_MIDDLE 2
 // #define SDL_BUTTON_RIGHT 3
@@ -44,15 +50,11 @@ SceneHandle scene_create(void);
 bool scene_destroy(SceneHandle sh);
 bool scene_load_obj(SceneHandle sh, const char *path);
 bool scene_remove_mesh(SceneHandle sh, MeshHandle mh);
-InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m,
-                                  f32 px, f32 py, f32 pz,
-                                  f32 sx, f32 sy, f32 sz,
-                                  f32 rx, f32 ry, f32 rz);
+InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t);
 void scene_instance_set_transform(SceneHandle sh,
                                   InstanceHandle i,
-                                  f32 px, f32 py, f32 pz,
-                                  f32 sx, f32 sy, f32 sz,
-                                  f32 rx, f32 ry, f32 rz);
+                                  Transform t);
+Transform scene_instance_get_transform(SceneHandle sh, InstanceHandle i);
 bool scene_remove_instance(SceneHandle sh, InstanceHandle i);
 
 u64 scene_count(void);
@@ -90,6 +92,8 @@ bool ui_treenode(const char* label);
 void ui_treepop(void);
 bool ui_selectable(const char* label);
 void ui_sameline(void);
+bool ui_drag_float3(const char* label, f32 *v);
+void ui_text(const char* text);
 
 #ifdef __cplusplus
 }

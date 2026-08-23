@@ -58,14 +58,14 @@ float degToRad(float deg) {
 }
 
 glm::mat4 transformToMat4(const Transform& t) {
-  glm::mat4 translation = glm::translate(glm::mat4(1.0f), t.position);
-  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.x),
+  glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(t.px, t.py, t.pz));
+  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rx),
                                     glm::vec3(1.0f, 0.0f, 0.0f));
-  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.y),
+  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.ry),
                                     glm::vec3(0.0f, 1.0f, 0.0f));
-  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rotation.z),
+  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rz),
                                     glm::vec3(0.0f, 0.0f, 1.0f));
-  glm::mat4 scale = glm::scale(glm::mat4(1.0f), t.scale);
+  glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(t.sx, t.sy, t.sz));
   return translation * rotationZ * rotationY * rotationX * scale;
 }
 

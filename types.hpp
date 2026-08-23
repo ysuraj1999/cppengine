@@ -61,12 +61,6 @@ struct Mesh {
   std::vector<u32> indices;
 };
 
-struct Transform {
-  glm::vec3 position;
-  glm::vec3 scale;
-  glm::vec3 rotation; // roll, yaw, pitch
-};
-
 struct MeshRegion {
     u32 vertexOffset;
     u32 indexOffset;
