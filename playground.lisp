@@ -7,11 +7,11 @@
 (unless (foreign-library-loaded-p 'libcppengine)
     (use-foreign-library libcppengine))
 
-(defctype scene-handle :uint64)
-(defctype mesh-handle :uint64)
-(defctype instance-handle :uint64)
+(defctype %scene-handle :uint64)
+(defctype %mesh-handle :uint64)
+(defctype %instance-handle :uint64)
 
-(defcstruct (transform :class cffi-transform)
+(defcstruct (%transform :class cffi-transform)
   (px :float) (py :float) (pz :float)
   (sx :float) (sy :float) (sz :float)
   (rx :float) (ry :float) (rz :float))
@@ -112,172 +112,172 @@
 (defconstant +key-right-alt+ 230)
 (defconstant +key-right-gui+ 231)
 
-(defcfun ("renderer_init" renderer-init) :bool)
+(defcfun ("renderer_init" %renderer-init) :bool)
 
-(defcfun ("scene_create" scene-create) scene-handle)
+(defcfun ("scene_create" %scene-create) %scene-handle)
 (defcfun ("scene_destroy" %scene-destroy) :bool
-  (sh scene-handle))
+  (sh %scene-handle))
 
 (defcfun ("scene_load_obj" %scene-load-obj) :bool
-  (sh scene-handle)
+  (sh %scene-handle)
   (path :string))
 
-(defcfun ("scene_remove_mesh" scene-remove-mesh) :bool
-  (sh scene-handle)
-  (mh mesh-handle))
+(defcfun ("scene_remove_mesh" %scene-remove-mesh) :bool
+  (sh %scene-handle)
+  (mh %mesh-handle))
 
-(defcfun ("scene_add_instance" scene-add-instance) instance-handle
-  (sh scene-handle)
-  (m mesh-handle)
-  (xform (:struct transform)))
+(defcfun ("scene_add_instance" %scene-add-instance) %instance-handle
+  (sh %scene-handle)
+  (m %mesh-handle)
+  (xform (:struct %transform)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
 (defcfun ("scene_mesh_alias" %scene-mesh-alias) :pointer
-  (sh scene-handle)
-  (mh mesh-handle))
+  (sh %scene-handle)
+  (mh %mesh-handle))
 
 (defun scene-mesh-alias (sh mh)
   (foreign-string-to-lisp (%scene-mesh-alias sh mh)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
 (defcfun ("scene_instance_alias" %scene-instance-alias) :pointer
-  (sh scene-handle)
-  (i instance-handle))
+  (sh %scene-handle)
+  (i %instance-handle))
 
 (defun scene-instance-alias (sh i)
   (foreign-string-to-lisp (%scene-instance-alias sh i)))
 
-(defcfun ("scene_instance_get_transform" scene-instance-get-transform)
-    (:struct transform)
-  (sh scene-handle)
-  (i instance-handle))
+(defcfun ("scene_instance_get_transform" %scene-instance-get-transform)
+    (:struct %transform)
+  (sh %scene-handle)
+  (i %instance-handle))
 
 (defcfun ("scene_instance_set_transform"
-          scene-instance-set-transform) :void
+          %scene-instance-set-transform) :void
   (sh :uint64)
   (i :uint64)
-  (xform (:struct transform)))
+  (xform (:struct %transform)))
 
-(defcfun ("scene_remove_instance" scene-remove-instance) :bool
-  (sh scene-handle)
-  (i instance-handle))
+(defcfun ("scene_remove_instance" %scene-remove-instance) :bool
+  (sh %scene-handle)
+  (i %instance-handle))
 
-(defcfun ("renderer_sync_scene" renderer-sync-scene) :bool
-  (sh scene-handle))
-(defcfun ("renderer_render_begin" renderer-render-begin) :void)
-(defcfun ("renderer_render_scene" renderer-render-scene) :void
-  (sh scene-handle))
-(defcfun ("renderer_render_end" renderer-render-end) :void)
+(defcfun ("renderer_sync_scene" %renderer-sync-scene) :bool
+  (sh %scene-handle))
+(defcfun ("renderer_render_begin" %renderer-render-begin) :void)
+(defcfun ("renderer_render_scene" %renderer-render-scene) :void
+  (sh %scene-handle))
+(defcfun ("renderer_render_end" %renderer-render-end) :void)
 
-(defcfun ("ui_begin" ui-begin) :void)
-(defcfun ("ui_end" ui-end) :void)
+(defcfun ("ui_begin" %ui-begin) :void)
+(defcfun ("ui_end" %ui-end) :void)
 
-(defcfun ("ui_begin_window" ui-begin-window)
+(defcfun ("ui_begin_window" %ui-begin-window)
   :void
   (name :string))
-(defcfun ("ui_end_window" ui-end-window)
+(defcfun ("ui_end_window" %ui-end-window)
   :void)
-(defcfun ("ui_button" ui-button)
+(defcfun ("ui_button" %ui-button)
   :bool
   (label :string))
 
-(defcfun ("ui_treenode" ui-treenode)
+(defcfun ("ui_treenode" %ui-treenode)
   :bool
   (label :string))
 
-(defcfun ("ui_treepop" ui-treepop)
+(defcfun ("ui_treepop" %ui-treepop)
   :void)
 
-(defcfun ("ui_selectable" ui-selectable)
+(defcfun ("ui_selectable" %ui-selectable)
   :bool
   (label :string))
 
-(defcfun ("ui_sameline" ui-sameline)
+(defcfun ("ui_sameline" %ui-sameline)
   :void)
 
-(defcfun ("ui_drag_float3" ui-drag-float3)
+(defcfun ("ui_drag_float3" %ui-drag-float3)
   :bool
   (label :string)
   (values :pointer))
 
-(defcfun ("ui_text" ui-text)
+(defcfun ("ui_text" %ui-text)
   :void
   (text :string))
 
-(defcfun ("renderer_clear" renderer-clear) :bool)
+(defcfun ("renderer_clear" %renderer-clear) :bool)
 
-(defcfun ("renderer_quit" renderer-quit) :void)
+(defcfun ("renderer_quit" %renderer-quit) :void)
 
-(defcfun ("input_poll" input-poll) :void)
+(defcfun ("input_poll" %input-poll) :void)
 
-(defcfun ("input_should_close" input-should-close-p) :bool)
+(defcfun ("input_should_close" %input-should-close-p) :bool)
 
-(defcfun ("scene_count" scene-count) :uint64)
+(defcfun ("scene_count" %scene-count) :uint64)
 
-(defcfun ("scene_at" scene-at) scene-handle
+(defcfun ("scene_at" %scene-at) %scene-handle
   (index :uint64))
 
-(defcfun ("scene_mesh_count" scene-mesh-count) :uint64
-  (sh scene-handle))
+(defcfun ("scene_mesh_count" %scene-mesh-count) :uint64
+  (sh %scene-handle))
 
-(defcfun ("scene_mesh_at" scene-mesh-at) mesh-handle
-  (sh scene-handle)
+(defcfun ("scene_mesh_at" %scene-mesh-at) %mesh-handle
+  (sh %scene-handle)
   (index :uint64))
 
-(defcfun ("scene_mesh_instance_count" scene-mesh-instance-count) :uint64
-  (sh scene-handle)
-  (mesh mesh-handle))
+(defcfun ("scene_mesh_instance_count" %scene-mesh-instance-count) :uint64
+  (sh %scene-handle)
+  (mesh %mesh-handle))
 
-(defcfun ("scene_mesh_instance_at" scene-mesh-instance-at) instance-handle
-  (sh scene-handle)
-  (mesh mesh-handle)
+(defcfun ("scene_mesh_instance_at" %scene-mesh-instance-at) %instance-handle
+  (sh %scene-handle)
+  (mesh %mesh-handle)
   (index :uint64))
 
-(defcfun ("renderer_camera_set" renderer-camera-set) :void
+(defcfun ("renderer_camera_set" %renderer-camera-set) :void
   (px :float) (py :float) (pz :float)
   (yaw :float) (pitch :float))
 
-(defcenum (mouse-button :int)
+(defcenum (%mouse-button :int)
   (:left 1)
   (:middle 2)
   (:right 3)
   (:x1 4)
   (:x2 5))
 
-(defcfun ("input_mouse_x" input-mouse-x) :float)
-(defcfun ("input_mouse_y" input-mouse-y) :float)
-(defcfun ("input_mouse_dx" input-mouse-dx) :float)
-(defcfun ("input_mouse_dy" input-mouse-dy) :float)
-(defcfun ("input_mouse_wheel_x" input-mouse-wheel-x) :float)
-(defcfun ("input_mouse_wheel_y" input-mouse-wheel-y) :float)
-(defcfun ("input_mouse_down" input-mouse-down-p) :bool
-  (button mouse-button))
-(defcfun ("input_mouse_pressed" input-mouse-pressed-p) :bool
-  (button mouse-button))
-(defcfun ("input_mouse_released" input-mouse-released-p) :bool
-  (button mouse-button))
+(defcfun ("input_mouse_x" %input-mouse-x) :float)
+(defcfun ("input_mouse_y" %input-mouse-y) :float)
+(defcfun ("input_mouse_dx" %input-mouse-dx) :float)
+(defcfun ("input_mouse_dy" %input-mouse-dy) :float)
+(defcfun ("input_mouse_wheel_x" %input-mouse-wheel-x) :float)
+(defcfun ("input_mouse_wheel_y" %input-mouse-wheel-y) :float)
+(defcfun ("input_mouse_down" %input-mouse-down-p) :bool
+  (button %mouse-button))
+(defcfun ("input_mouse_pressed" %input-mouse-pressed-p) :bool
+  (button %mouse-button))
+(defcfun ("input_mouse_released" %input-mouse-released-p) :bool
+  (button %mouse-button))
 
-(defcfun ("renderer_camera_move" renderer-camera-move) :void
+(defcfun ("renderer_camera_move" %renderer-camera-move) :void
   (forward :float)
   (right :float)
   (up :float))
 
-(defcfun ("renderer_camera_rotate" renderer-camera-rotate) :void
+(defcfun ("renderer_camera_rotate" %renderer-camera-rotate) :void
   (yaw :float)
   (pitch :float))
 
-(defcfun ("renderer_camera_update" renderer-camera-update) :void)
+(defcfun ("renderer_camera_update" %renderer-camera-update) :void)
 
-(defcfun ("input_key_down" input-key-down-p) :bool
+(defcfun ("input_key_down" %input-key-down-p) :bool
   (key :int))
 
-(defcfun ("input_key_pressed" input-key-pressed-p) :bool
+(defcfun ("input_key_pressed" %input-key-pressed-p) :bool
   (key :int))
 
-(defcfun ("input_key_released" input-key-released-p) :bool
+(defcfun ("input_key_released" %input-key-released-p) :bool
   (key :int))
 
-(defcfun ("time_dt" time-dt) :float)
+(defcfun ("time_dt" %time-dt) :float)
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
@@ -303,32 +303,33 @@
 (defmethod translate-into-foreign-memory ((value transform)
                                           (type cffi-transform)
                                           ptr)
-  (setf (foreign-slot-value ptr '(:struct transform) 'px) (transform-px value)
-        (foreign-slot-value ptr '(:struct transform) 'py) (transform-py value)
-        (foreign-slot-value ptr '(:struct transform) 'pz) (transform-pz value)
-        (foreign-slot-value ptr '(:struct transform) 'sx) (transform-sx value)
-        (foreign-slot-value ptr '(:struct transform) 'sy) (transform-sy value)
-        (foreign-slot-value ptr '(:struct transform) 'sz) (transform-sz value)
-        (foreign-slot-value ptr '(:struct transform) 'rx) (transform-rx value)
-        (foreign-slot-value ptr '(:struct transform) 'ry) (transform-ry value)
-        (foreign-slot-value ptr '(:struct transform) 'rz) (transform-rz value)))
+  (setf (foreign-slot-value ptr '(:struct %transform) 'px) (transform-px value)
+        (foreign-slot-value ptr '(:struct %transform) 'py) (transform-py value)
+        (foreign-slot-value ptr '(:struct %transform) 'pz) (transform-pz value)
+        (foreign-slot-value ptr '(:struct %transform) 'sx) (transform-sx value)
+        (foreign-slot-value ptr '(:struct %transform) 'sy) (transform-sy value)
+        (foreign-slot-value ptr '(:struct %transform) 'sz) (transform-sz value)
+        (foreign-slot-value ptr '(:struct %transform) 'rx) (transform-rx value)
+        (foreign-slot-value ptr '(:struct %transform) 'ry) (transform-ry value)
+        (foreign-slot-value ptr '(:struct %transform) 'rz) (transform-rz value)))
 
 (defmethod translate-from-foreign (ptr (type cffi-transform))
-  (transform! (foreign-slot-value ptr '(:struct transform) 'px)
-              (foreign-slot-value ptr '(:struct transform) 'py)
-              (foreign-slot-value ptr '(:struct transform) 'pz)
-              (foreign-slot-value ptr '(:struct transform) 'sx)
-              (foreign-slot-value ptr '(:struct transform) 'sy)
-              (foreign-slot-value ptr '(:struct transform) 'sz)
-              (foreign-slot-value ptr '(:struct transform) 'rx)
-              (foreign-slot-value ptr '(:struct transform) 'ry)
-              (foreign-slot-value ptr '(:struct transform) 'rz)))
+  (transform! (foreign-slot-value ptr '(:struct %transform) 'px)
+              (foreign-slot-value ptr '(:struct %transform) 'py)
+              (foreign-slot-value ptr '(:struct %transform) 'pz)
+              (foreign-slot-value ptr '(:struct %transform) 'sx)
+              (foreign-slot-value ptr '(:struct %transform) 'sy)
+              (foreign-slot-value ptr '(:struct %transform) 'sz)
+              (foreign-slot-value ptr '(:struct %transform) 'rx)
+              (foreign-slot-value ptr '(:struct %transform) 'ry)
+              (foreign-slot-value ptr '(:struct %transform) 'rz)))
 
 (defclass instance ()
   ((handle :reader instance-handle :type u64 :initarg :handle)
    (mesh :reader instance-mesh :initarg :mesh)
    (transform :accessor instance-transform :initarg :transform
-	      :type transform)))
+	      :type transform)
+   (alias :reader instance-alias :type string :initarg :alias)))
 
 (defmethod print-object ((instance instance) stream)
   (print-unreadable-object (instance stream :type t :identity t)
@@ -339,7 +340,7 @@
 
 (defmethod (setf instance-transform) (value (instance instance))
   (setf (slot-value instance 'transform) value)
-  (scene-instance-set-transform
+  (%scene-instance-set-transform
    (scene-handle (mesh-scene (instance-mesh instance)))
    (instance-handle instance)
    value)
@@ -349,14 +350,15 @@
   ((handle :reader mesh-handle :type u64 :initarg :handle)
    (scene :reader mesh-scene :initarg :scene)
    (instances :reader mesh-instances
-              :initform (make-array 0 :adjustable t :fill-pointer 0))))
+              :initform (make-array 0 :adjustable t :fill-pointer 0))
+   (alias :reader mesh-alias :type string :initarg :alias)))
 
 (defmethod print-object ((mesh mesh) stream)
   (print-unreadable-object (mesh stream :type t :identity t)
     (format stream
             "handle=~a instances=~a"
             (mesh-handle mesh)
-            (scene-mesh-instance-count
+            (%scene-mesh-instance-count
              (scene-handle (mesh-scene mesh))
              (mesh-handle mesh)))))
 
@@ -366,7 +368,7 @@
 (defmethod mesh-add-instance ((mesh mesh) (transform transform))
   (let* ((scene (mesh-scene mesh))
          (handle
-           (scene-add-instance
+           (%scene-add-instance
             (scene-handle scene)
             (mesh-handle mesh)
             transform))
@@ -374,7 +376,10 @@
            (make-instance 'instance
                           :handle handle
                           :mesh mesh
-                          :transform transform)))
+                          :transform transform
+                          :alias (scene-instance-alias
+                                  (scene-handle scene)
+                                  handle))))
     (vector-push-extend instance
                         (slot-value mesh 'instances))
     instance))
@@ -389,35 +394,36 @@
     (format stream
             "handle=~a meshes=~a instances=~a"
             (scene-handle scene)
-            (scene-mesh-count (scene-handle scene))
+            (%scene-mesh-count (scene-handle scene))
             (loop for mesh across (scene-meshes scene)
-                  sum (scene-mesh-instance-count
+                  sum (%scene-mesh-instance-count
                        (scene-handle scene)
                        (mesh-handle mesh))))))
 
 (defmethod initialize-instance :after ((scene scene) &rest initargs)
   (declare (ignore initargs))
-  (setf (slot-value scene 'handle) (scene-create)))
+  (setf (slot-value scene 'handle) (%scene-create)))
 
 (defmethod scene-load-obj ((scene scene) path)
   (%scene-load-obj (scene-handle scene) path)
   (let ((v (slot-value scene 'meshes)))
-    (dotimes (i (scene-mesh-count (scene-handle scene)))
-      (vector-push-extend
-       (make-instance 'mesh
-                      :handle (scene-mesh-at
-                               (scene-handle scene) i)
-                      :scene scene)
-       v))))
+    (dotimes (i (%scene-mesh-count (scene-handle scene)))
+      (let ((mh (%scene-mesh-at (scene-handle scene) i)))
+        (vector-push-extend
+         (make-instance 'mesh
+                        :handle mh
+                        :scene scene
+                        :alias (scene-mesh-alias (scene-handle scene) mh))
+         v)))))
 
 (defmethod scene-meshes ((scene scene))
   (slot-value scene 'meshes))
 
 (defmethod scene-sync ((scene scene))
-  (renderer-sync-scene (scene-handle scene)))
+  (%renderer-sync-scene (scene-handle scene)))
 
 (defmethod scene-render ((scene scene))
-  (renderer-render-scene (scene-handle scene)))
+  (%renderer-render-scene (scene-handle scene)))
 
 (defmethod scene-destroy ((scene scene))
   (%scene-destroy (scene-handle scene)))
@@ -443,21 +449,21 @@
 
 (defun instance-properties-panel ()
   (when *selection*
-    (ui-begin-window "Instance Properties")
+    (%ui-begin-window "Instance Properties")
     (let* ((sel *selection*)
-           (tr (scene-instance-get-transform
+           (tr (%scene-instance-get-transform
                 (scene-handle (mesh-scene (instance-mesh sel)))
                 (instance-handle sel))))
-      (ui-text (format nil "Position: ~,2f ~,2f ~,2f"
+      (%ui-text (format nil "Position: ~,2f ~,2f ~,2f"
                        (slot-value tr 'px) (slot-value tr 'py) (slot-value tr 'pz)))
-      (ui-text (format nil "Rotation: ~,2f ~,2f ~,2f"
+      (%ui-text (format nil "Rotation: ~,2f ~,2f ~,2f"
                        (slot-value tr 'rx) (slot-value tr 'ry) (slot-value tr 'rz)))
-      (ui-text (format nil "Scale: ~,2f ~,2f ~,2f"
+      (%ui-text (format nil "Scale: ~,2f ~,2f ~,2f"
                        (slot-value tr 'sx) (slot-value tr 'sy) (slot-value tr 'sz))))
-    (ui-end-window)))
+    (%ui-end-window)))
 
 (defun demo ()
-  (renderer-init)
+  (%renderer-init)
   (let ((scene (make-instance 'scene)))
     (setf *scene* scene)
     (scene-load-obj scene "models/cube.obj")
@@ -465,25 +471,25 @@
 	  doing
 	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (scene-sync scene)
-    (loop until (input-should-close-p)
-	  for dt = (time-dt)
+    (loop until (%input-should-close-p)
+	  for dt = (%time-dt)
 	  doing
-	     (input-poll)
-	     (let* ((wheel-y (input-mouse-wheel-y))
-		    (wheel-x (input-mouse-wheel-x))
-		    (dx (input-mouse-dx))
-		    (dy (input-mouse-dy))
-		    (w-down (input-key-down-p +key-w+))
-		    (a-down (input-key-down-p +key-a+))
-		    (s-down (input-key-down-p +key-s+))
-		    (d-down (input-key-down-p +key-d+))
-		    (space-down (input-key-down-p +key-space+))
-		    (ctrl-down (input-key-down-p +key-left-ctrl+))
+	     (%input-poll)
+	     (let* ((wheel-y (%input-mouse-wheel-y))
+		    (wheel-x (%input-mouse-wheel-x))
+		    (dx (%input-mouse-dx))
+		    (dy (%input-mouse-dy))
+		    (w-down (%input-key-down-p +key-w+))
+		    (a-down (%input-key-down-p +key-a+))
+		    (s-down (%input-key-down-p +key-s+))
+		    (d-down (%input-key-down-p +key-d+))
+		    (space-down (%input-key-down-p +key-space+))
+		    (ctrl-down (%input-key-down-p +key-left-ctrl+))
 		    (move-speed (* *keyboard-sensitivity* dt))
 		    (look-speed (* *mouse-sensitivity* dt))
-		    (middle-click (input-mouse-down-p :middle)))
-	       (renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
-	       (renderer-camera-move
+		    (middle-click (%input-mouse-down-p :middle)))
+	       (%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
+	       (%renderer-camera-move
 		(+ (if w-down move-speed 0.0)
 		   (if s-down (- move-speed) 0.0))
 		(if middle-click
@@ -492,24 +498,23 @@
 		(if middle-click
 		    (* dy look-speed)
 		    0.0)))
-	     (renderer-camera-update)
-	     (renderer-render-begin)
-	     (renderer-render-scene (scene-handle scene))
-	     (ui-begin)
-	     (ui-begin-window "Inspector")
+	     (%renderer-camera-update)
+	     (%renderer-render-begin)
+	     (%renderer-render-scene (scene-handle scene))
+	     (%ui-begin)
+	     (%ui-begin-window "Inspector")
 	     (loop for mesh across (scene-meshes scene)
-		   doing (when (ui-treenode (format nil "Mesh #~a" (mesh-handle mesh)))
+		   doing (when (%ui-treenode (mesh-alias mesh))
 			   (loop for instance across (mesh-instances mesh)
-				 for instance-alias = (format nil "Instance #~a" (instance-handle instance))
-				 doing (when (ui-selectable instance-alias)
+				 doing (when (%ui-selectable (instance-alias instance))
 					 (setf *selection* instance)))
-			   (ui-treepop)))
-	     (ui-end-window)
+			   (%ui-treepop)))
+	     (%ui-end-window)
 	     (instance-properties-panel)
-	     (ui-end)
-	     (renderer-render-end))
+	     (%ui-end)
+	     (%renderer-render-end))
     (scene-destroy scene))
-  (renderer-quit))
+  (%renderer-quit))
 
 (demo)
 ;; (setf (instance-transform (aref (mesh-instances (aref (scene-meshes *scene*) 0)) 0)) (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))
