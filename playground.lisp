@@ -2,19 +2,19 @@
 
 (define-foreign-library libcppengine
     (:unix (:default "./build/libcppengine"))
-    (t (:default "./build/libcppengine")))
+  (t (:default "./build/libcppengine")))
 
 (unless (foreign-library-loaded-p 'libcppengine)
-    (use-foreign-library libcppengine))
+  (use-foreign-library libcppengine))
 
 (defctype %scene-handle :uint64)
 (defctype %mesh-handle :uint64)
 (defctype %instance-handle :uint64)
 
 (defcstruct (%transform :class cffi-transform)
-  (px :float) (py :float) (pz :float)
-  (sx :float) (sy :float) (sz :float)
-  (rx :float) (ry :float) (rz :float))
+    (px :float) (py :float) (pz :float)
+    (sx :float) (sy :float) (sz :float)
+    (rx :float) (ry :float) (rz :float))
 
 (defun key (name)
   (ecase name
@@ -40,7 +40,9 @@
     (:page-down 78) (:right 79) (:left 80) (:down 81) (:up 82)
     ;; Modifiers
     (:left-ctrl 224) (:left-shift 225) (:left-alt 226) (:left-gui 227)
-    (:right-ctrl 228) (:right-shift 229) (:right-alt 230) (:right-gui 231)))
+    (:right-ctrl 228) (:right-shift 229) (:right-alt 230) (:right-gui 231)
+    ;; Convenience to combine righ and left modifiers, use left
+    (:ctrl 224) (:shift 225) (:alt 226) (:gui 227)))
 
 (defcfun ("renderer_init" %renderer-init) :bool)
 
@@ -103,35 +105,35 @@
 (defcfun ("ui_end" %ui-end) :void)
 
 (defcfun ("ui_begin_window" %ui-begin-window)
-  :void
+    :void
   (name :string))
 (defcfun ("ui_end_window" %ui-end-window)
-  :void)
+    :void)
 (defcfun ("ui_button" %ui-button)
-  :bool
+    :bool
   (label :string))
 
 (defcfun ("ui_treenode" %ui-treenode)
-  :bool
+    :bool
   (label :string))
 
 (defcfun ("ui_treepop" %ui-treepop)
-  :void)
+    :void)
 
 (defcfun ("ui_selectable" %ui-selectable)
-  :bool
+    :bool
   (label :string))
 
 (defcfun ("ui_sameline" %ui-sameline)
-  :void)
+    :void)
 
 (defcfun ("ui_drag_float3" %ui-drag-float3)
-  :bool
+    :bool
   (label :string)
   (values :pointer))
 
 (defcfun ("ui_text" %ui-text)
-  :void
+    :void
   (text :string))
 
 (defcfun ("renderer_clear" %renderer-clear) :bool)
@@ -168,7 +170,7 @@
   (yaw :float) (pitch :float))
 
 (defcenum (%mouse-button :int)
-  (:left 1)
+    (:left 1)
   (:middle 2)
   (:right 3)
   (:x1 4)
@@ -208,7 +210,7 @@
   (key :int))
 
 (defcstruct (%keyboard-event :class cffi-keyboard-event)
-  (scancode :int)
+    (scancode :int)
   (down :bool)
   (repeat :bool))
 
@@ -218,15 +220,20 @@
     (:struct %keyboard-event)
   (index :uint64))
 
-
-
 (defcfun ("time_dt" %time-dt) :float)
+
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 (defstruct keyboard-event
   (scancode 0 :type (signed-byte 32))
   (down nil :type boolean)
   (repeat nil :type boolean))
+
+(defmethod translate-from-foreign (ptr (type cffi-keyboard-event))
+  (make-keyboard-event
+   :scancode (foreign-slot-value ptr '(:struct %keyboard-event) 'scancode)
+   :down     (foreign-slot-value ptr '(:struct %keyboard-event) 'down)
+   :repeat   (foreign-slot-value ptr '(:struct %keyboard-event) 'repeat)))
 
 (defun keyboard-events ()
   "Return a typed vector of this frame's key events in the order SDL
@@ -237,13 +244,7 @@ REPEAT."
                                     :element-type 'keyboard-event
                                     :fill-pointer 0)
           for i below count
-          for e = (%input-keyboard-event-at i)
-          do (vector-push-extend
-              (make-keyboard-event
-               :scancode (slot-value e 'scancode)
-               :down (slot-value e 'down)
-               :repeat (slot-value e 'repeat))
-              events)
+          do (vector-push-extend (%input-keyboard-event-at i) events)
           finally (return events))))
 
 (deftype u64 () '(unsigned-byte 64))
@@ -477,6 +478,126 @@ REPEAT."
        (do-mesh-instances (,instance ,mesh)
          ,@body))))
 
+(defmacro do-keyboard-events ((event) &body body)
+  (mu:with-gensyms (i)
+    `(dotimes (,i (%input-keyboard-event-count))
+       (let ((,event (%input-keyboard-event-at ,i)))
+         ,@body))))
+
+(defstruct prefix-node
+  (table (make-hash-table :test #'equal))
+  function)
+
+
+(defun make-prefix-machine()
+  (let* ((prefix-root (make-prefix-node))
+	 (prefix-cursor prefix-root))
+    (labels ((shortcut(keychords)
+	       "Convert ((:ctrl x) (:ctrl :f)) => ((9 224) (27 224))"
+
+	       (mapcar #'(lambda(chord)
+			   (sort (mapcar #'key chord) #'<))
+		       keychords))
+	     (add-shortcut(shortcut function)
+	       "Attach ((0 1) (2 3)) with function"
+	       
+	       (let ((cursor prefix-root))
+		 (dolist (chord shortcut)
+		   (let ((next-node))
+		     (setf next-node (or ; existing node or create one
+				      (gethash chord (prefix-node-table cursor))
+				      (setf (gethash chord (prefix-node-table cursor)) (make-prefix-node))))
+		     (setf cursor next-node)))
+		 (setf (prefix-node-function cursor) function)))
+	     (reset-cursor()
+	       (setf prefix-cursor prefix-root))
+	     (cancel-action()
+	       (reset-cursor)
+	       (print "Cancelled"))
+	     (move-cursor(node)
+	       (setf prefix-cursor node))
+	     (invalid-chord()
+	       (cancel-action)))
+      (values
+       (lambda (shortcut-list-expr function) ;; add shortcut
+	 (add-shortcut (shortcut shortcut-list-expr) function))
+       (lambda (chord) ;; chord feeder
+	 (if (equal chord (list (key :escape)))
+	     (cancel-action)
+	     (let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
+	       (if next-node
+		   (progn (move-cursor next-node) ;; when function found for the node, call it
+			  (when (prefix-node-function prefix-cursor)
+			    (funcall (prefix-node-function prefix-cursor))
+			    (reset-cursor)))
+		   (invalid-chord)))))
+       (lambda()
+	 (setf prefix-cursor prefix-root))
+       ;; Debug
+       (lambda () prefix-root)))))
+	 
+	     
+(defparameter *modifier-keys* (mapcar #'key '(:left-ctrl :left-shift :left-alt :left-gui
+					      :right-ctrl :right-shift :right-alt :right-gui
+					      :ctrl :shift :alt :gui)))
+(defun modifier-key-p(scancode)
+  (member scancode *modifier-keys*))
+
+(defun make-chord-machine(on-chord)
+  (let ((held-keys)
+	(held-modifiers)
+	(chord-keys)
+	(has-key))
+    (flet ((add-key(scancode)
+	     (if (modifier-key-p scancode)
+		 (pushnew scancode held-modifiers)
+		 (progn (pushnew scancode held-keys)
+			(setf has-key t)))
+	     (pushnew scancode chord-keys))
+	   (remove-key(scancode)
+	     (if (modifier-key-p scancode)
+		 (setf held-modifiers (delete scancode held-modifiers))
+		 (setf held-keys (delete scancode held-keys)))
+	     (when (and (null held-keys) has-key)
+	       (setf chord-keys
+		     (union held-modifiers chord-keys))
+	       (funcall on-chord (sort chord-keys #'<))
+	       (setf chord-keys nil
+		     has-key nil))))
+      (values (lambda (key-event) ;; you feed keyboard-events into it
+	       (mu:with-members (scancode down repeat) key-event keyboard-event
+		 (if down
+		     (add-key scancode)
+		     (remove-key scancode))))
+	      (lambda()
+		(setf held-keys nil
+		      held-modifiers nil
+		      chord-keys nil 
+		      has-key nil))))))
+
+(defvar *prefix-machine*)
+(defvar *dispatch-chord*)
+(defvar *add-shortcut*)
+(defvar *debug-root*)
+(defvar *prefix-machine-reset*)
+(multiple-value-bind (add-shortcut dispatch-chord reset debug-root) (make-prefix-machine)
+  (setf *add-shortcut* add-shortcut
+	*dispatch-chord* dispatch-chord
+	*prefix-machine-reset* reset
+	*debug-root* debug-root))
+	
+  
+(defvar *chord-feeder*)
+(defvar *chord-machine-reset*)
+(multiple-value-bind (chord-feeder reset) (make-chord-machine *dispatch-chord*)
+  (setf *chord-feeder* chord-feeder
+	*chord-machine-reset* reset))
+
+;; Adding shortcuts
+(funcall *add-shortcut* '((:ctrl :s)) #'(lambda()(print "Save")))
+(funcall *add-shortcut* '((:ctrl :k)) #'(lambda()(print "Kill")))
+(funcall *add-shortcut* '((:ctrl :p)) #'(lambda()(print "Print")))
+
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -484,9 +605,6 @@ REPEAT."
   (if (>= value maximum)
       0.0
       value))
-
-(defparameter *keyboard-sensitivity* 200.0)
-(defparameter *mouse-sensitivity* 50.0)
 
 ;; (require :sb-sprof)
 ;; (defmacro sbcl-profile(&body body)
@@ -504,77 +622,79 @@ REPEAT."
                 (scene-handle (mesh-scene (instance-mesh sel)))
                 (instance-handle sel))))
       (%ui-text (format nil "Position: ~,2f ~,2f ~,2f"
-                       (slot-value tr 'px) (slot-value tr 'py) (slot-value tr 'pz)))
+			(slot-value tr 'px) (slot-value tr 'py) (slot-value tr 'pz)))
       (%ui-text (format nil "Rotation: ~,2f ~,2f ~,2f"
-                       (slot-value tr 'rx) (slot-value tr 'ry) (slot-value tr 'rz)))
+			(slot-value tr 'rx) (slot-value tr 'ry) (slot-value tr 'rz)))
       (%ui-text (format nil "Scale: ~,2f ~,2f ~,2f"
-                       (slot-value tr 'sx) (slot-value tr 'sy) (slot-value tr 'sz))))
+			(slot-value tr 'sx) (slot-value tr 'sy) (slot-value tr 'sz))))
     (%ui-end-window)))
+
+(defparameter *keyboard-sensitivity* 10.0)
+(defparameter *mouse-sensitivity* 10.0)
 
 (defun demo ()
   (%renderer-init)
   (let ((scene (make-instance 'scene)))
     (unwind-protect
-	(progn
-	  (setf *scene* scene)
-	  (scene-load-obj scene "models/bmw.obj")
-    (loop for mesh across (scene-meshes scene)
-	  doing
-	     (mesh-add-instance mesh (transform! 10.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
-    (scene-sync scene)
-    (loop until (%input-should-close-p)
-	  for dt = (%time-dt)
-	  doing
-	     (%input-poll)
-	     (let* ((wheel-y (%input-mouse-wheel-y))
-		    (wheel-x (%input-mouse-wheel-x))
-		    (dx (%input-mouse-dx))
-		    (dy (%input-mouse-dy))
-		    (w-down (%input-key-down-p (key :w)))
-		    (a-down (%input-key-down-p (key :a)))
-		    (s-down (%input-key-down-p (key :s)))
-		    (d-down (%input-key-down-p (key :d)))
-		    (space-down (%input-key-down-p (key :space)))
-		    (ctrl-down (%input-key-down-p (key :left-ctrl)))
-		    (move-speed (* *keyboard-sensitivity* dt))
-		    (look-speed (* *mouse-sensitivity* dt))
-		    (middle-click (%input-mouse-down-p :middle)))
-	       (%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
-	       (%renderer-camera-move
-		(+ (if w-down move-speed 0.0)
-		   (if s-down (- move-speed) 0.0))
-		(if middle-click
-		    (* (- dx) look-speed)
-		    0.0)
-		(if middle-click
-		    (* dy look-speed)
-		    0.0)))
-	     (%renderer-camera-update)
-	     (%renderer-render-begin)
-	     (%renderer-render-scene (scene-handle scene))
-	     (%ui-begin)
-	     (%ui-begin-window "Inspector")
-	     (do-scenes (scene)
-	       (when (%ui-treenode (format nil "Scene"))
-		 (do-scene-meshes(mesh scene)
-		   (when (%ui-treenode (mesh-alias mesh))
-		     (do-mesh-instances(instance mesh)
-		       (when (%ui-selectable (instance-alias instance))
-	      		 (setf *selection* instance)))
+	 (progn
+	   (setf *scene* scene)
+	   (scene-load-obj scene "models/cube.obj")
+	   (loop for mesh across (scene-meshes scene)
+		 doing
+		 (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+	   (scene-sync scene)
+	   (loop until (%input-should-close-p)
+		 for dt = (%time-dt)
+		 with feed-chord-machine = (make-chord-machine #'(lambda(x)(format t "Chord ~a~%" x)))
+		 doing
+		 (%input-poll)
+		 (do-keyboard-events (ev)
+		   (funcall *chord-feeder* ev))
+		 (let* ((wheel-y (%input-mouse-wheel-y))
+			(wheel-x (%input-mouse-wheel-x))
+			(dx (%input-mouse-dx))
+			(dy (%input-mouse-dy))
+			(w-down (%input-key-down-p (key :w)))
+			(a-down (%input-key-down-p (key :a)))
+			(s-down (%input-key-down-p (key :s)))
+			(d-down (%input-key-down-p (key :d)))
+			(space-down (%input-key-down-p (key :space)))
+			(ctrl-down (%input-key-down-p (key :left-ctrl)))
+			(move-speed (* *keyboard-sensitivity* dt))
+			(look-speed (* *mouse-sensitivity* dt))
+			(middle-click (%input-mouse-down-p :middle)))
+		   (%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
+		   (%renderer-camera-move
+		    (+ (if w-down move-speed 0.0)
+		       (if s-down (- move-speed) 0.0))
+		    (if middle-click
+			(* (- dx) look-speed)
+			0.0)
+		    (if middle-click
+			(* dy look-speed)
+			0.0)))
+		 (%renderer-camera-update)
+		 (%renderer-render-begin)
+		 (%renderer-render-scene (scene-handle scene))
+		 (%ui-begin)
+		 (%ui-begin-window "Inspector")
+
+		 (do-scenes (scene)
+		   (when (%ui-treenode (format nil "Scene"))
+		     (do-scene-meshes(mesh scene)
+		       (when (%ui-treenode (mesh-alias mesh))
+			 (do-mesh-instances(instance mesh)
+			   (when (%ui-selectable (instance-alias instance))
+	      		     (setf *selection* instance)))
+			 (%ui-treepop)))
 		     (%ui-treepop)))
-		 (%ui-treepop)))
-	     ;; (loop for mesh across (scene-meshes scene)
-	     ;; 	   doing (when (%ui-treenode (mesh-alias mesh))
-	     ;; 		   (loop for instance across (mesh-instances mesh)
-	     ;; 			 doing (when (%ui-selectable (instance-alias instance))
-	     ;; 				 (setf *selection* instance)))
-	     ;; 		   (%ui-treepop)))
-	     (%ui-end-window)
-	     (instance-properties-panel)
-	     (%ui-end)
-	     (%renderer-render-end)))
+		 (%ui-end-window)
+		 (instance-properties-panel)
+		 (%ui-end)
+		 (%renderer-render-end)))
       (scene-destroy scene)))
+  (funcall *chord-machine-reset*)
+  (funcall *prefix-machine-reset*)
   (%renderer-quit))
 
 ;; (demo)
-;; (setf (instance-transform (aref (mesh-instances (aref (scene-meshes *scene*) 0)) 0)) (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))
