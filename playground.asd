@@ -13,4 +13,6 @@
 
   :components
   ((:file "package")
+   (:file "library")
+   (:file "macros")
    (:file "playground")))

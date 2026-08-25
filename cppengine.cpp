@@ -696,6 +696,29 @@ InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index
 }
 
 static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
+  glm::mat4 view = glm::lookAtLH(
+				 rendererConfig.camera.position,
+				 rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
+  // TODO move near and far into config
+  glm::mat4 projection = glm::perspectiveLH_ZO(
+					       glm::radians(60.0f),
+					       rendererConfig.resolution.x / rendererConfig.resolution.y,
+					       0.1f,
+					       10000.0f
+					       );
+  glm::mat4 viewProjection = projection * view;
+
+  SDL_PushGPUVertexUniformData(frame.commandBuffer, 0, &viewProjection,
+			       (u32)sizeof(viewProjection));
+  SDL_PushGPUFragmentUniformData(frame.commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
+				   
+  SDL_BindGPUGraphicsPipeline(frame.renderPass, pipeline);
+  SDL_BindGPUVertexBuffers(frame.renderPass, 0, vertexBufferBinding, 1);
+  SDL_BindGPUVertexBuffers(frame.renderPass, 1, instanceBufferBinding, 1);
+  SDL_BindGPUIndexBuffer(frame.renderPass, indexBufferBinding,
+			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
+  SDL_BindGPUFragmentSamplers(frame.renderPass, 0, textureSamplerBindings, 1);
+
   SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(frame.commandBuffer);
   sdlAssert(frameCopyPass != nullptr);
 
@@ -742,18 +765,6 @@ void renderer_render_begin(void) {
     return;
 
   frame.instanceBufferOffset = 0;
-
-  glm::mat4 view = glm::lookAtLH(
-				 rendererConfig.camera.position,
-				 rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
-  // TODO move near and far into config
-  glm::mat4 projection = glm::perspectiveLH_ZO(
-					       glm::radians(60.0f),
-					       rendererConfig.resolution.x / rendererConfig.resolution.y,
-					       0.1f,
-					       10000.0f
-					       );
-  glm::mat4 viewProjection = projection * view;
   frame.commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
 
   sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
@@ -767,17 +778,6 @@ void renderer_render_begin(void) {
 
   frame.renderPass = SDL_BeginGPURenderPass(frame.commandBuffer, &frame.colorTargetInfo, 1, &frame.depthTargetInfo);
   sdlAssert(frame.renderPass != nullptr);
-
-  SDL_PushGPUVertexUniformData(frame.commandBuffer, 0, &viewProjection,
-			       (u32)sizeof(viewProjection));
-  SDL_PushGPUFragmentUniformData(frame.commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution));
-				   
-  SDL_BindGPUGraphicsPipeline(frame.renderPass, pipeline);
-  SDL_BindGPUVertexBuffers(frame.renderPass, 0, vertexBufferBinding, 1);
-  SDL_BindGPUVertexBuffers(frame.renderPass, 1, instanceBufferBinding, 1);
-  SDL_BindGPUIndexBuffer(frame.renderPass, indexBufferBinding,
-			 SDL_GPU_INDEXELEMENTSIZE_32BIT);
-  SDL_BindGPUFragmentSamplers(frame.renderPass, 0, textureSamplerBindings, 1);
 }
 
 void ui_begin() {
