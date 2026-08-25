@@ -184,6 +184,9 @@
 (defcfun ("input_mouse_wheel_y" %input-mouse-wheel-y) :float)
 (defcfun ("input_mouse_down" %input-mouse-down-p) :bool
   (button %mouse-button))
+(defun %input-mouse-up-p(button)
+  (not (%input-mouse-down-p button)))
+
 (defcfun ("input_mouse_pressed" %input-mouse-pressed-p) :bool
   (button %mouse-button))
 (defcfun ("input_mouse_released" %input-mouse-released-p) :bool
@@ -202,6 +205,8 @@
 
 (defcfun ("input_key_down" %input-key-down-p) :bool
   (key :int))
+(defun %input-key-up-p(key)
+  (not (%input-key-down-p key)))
 
 (defcfun ("input_key_pressed" %input-key-pressed-p) :bool
   (key :int))
@@ -598,6 +603,95 @@ REPEAT."
 (funcall *add-shortcut* '((:ctrl :k)) #'(lambda()(print "Kill")))
 (funcall *add-shortcut* '((:ctrl :p)) #'(lambda()(print "Print")))
 
+
+(defun mouse-button-p(pred)
+  (member pred '(:left :middle :right :x1 :x2)))
+
+(defun mouse-action-p(pred)
+  (member pred '(:down :up :pressed :released)))
+
+(defun mouse-axis-p(pred)
+  (member pred '(:x :y)))
+
+(defun mouse-position-property-p (property)
+  (mouse-axis-p property))
+
+(defun mouse-delta-property-p (property)
+  (mouse-axis-p property))
+
+(defun mouse-wheel-property-p (property)
+  (mouse-axis-p property))
+
+(defun button-action-to-function(action)
+  (ecase action
+    (:down (quote %input-mouse-down-p))
+    (:up (quote %input-mouse-up-p))
+    (:pressed (quote %input-mouse-pressed-p))
+    (:released (quote %input-mouse-released-p))))
+
+(defun axis-to-position-function(axis)
+  (ecase axis
+    (:x (quote %input-mouse-x))
+    (:y (quote %input-mouse-y))))
+
+(defun axis-to-delta-function(axis)
+  (ecase axis
+    (:x (quote %input-mouse-dx))
+    (:y (quote %input-mouse-dy))))
+
+(defun axis-to-wheel-function(axis)
+  (ecase axis
+    (:x (quote %input-mouse-wheel-x))
+    (:y (quote %input-mouse-wheel-y))))
+
+(defmacro with-mouse-state(bindings &body body)
+  (let ((mouse-bindings))
+    (dolist (binding bindings)
+      (destructuring-bind (type &rest args) binding
+	(case type
+	  (:button
+	   (destructuring-bind (button action name) args
+	     (unless (mouse-button-p button)
+	       (error "Button isn't valid: ~S" button))
+	     (unless (mouse-action-p action)
+	       (error "Button action isn't valid: ~S" action))
+	     (push `(,name (funcall ',(button-action-to-function action) ,button)) mouse-bindings)))
+	  (:position
+	   (destructuring-bind (axis name) args
+	     (unless (mouse-position-property-p axis)
+	       (error "Axis not valid ~S" axis))
+	     (push `(,name (funcall ',(axis-to-position-function axis))) mouse-bindings)))
+	  (:wheel
+	   (destructuring-bind (axis name) args
+	     (unless (mouse-wheel-property-p axis)
+	       (error "Axis not valid ~S" axis))
+	     (push `(,name (funcall ',(axis-to-wheel-function axis))) mouse-bindings)))
+	  (:delta
+	   (destructuring-bind (axis name) args
+	     (unless (mouse-delta-property-p axis)
+	       (error "Axis not valid ~S" axis))
+	     (push `(,name (funcall ',(axis-to-delta-function axis))) mouse-bindings)))
+	  (otherwise (error "Not a valid mouse binding: ~S" binding)))))
+    `(mu:with-let ,(nreverse mouse-bindings) ,@body)))
+
+(defun key-action-to-function(action)
+  (ecase action
+    (:down (quote %input-key-down-p))
+    (:up (quote %input-key-up-p))
+    (:pressed (quote %input-key-pressed-p))
+    (:released (quote %input-key-released-p))))
+
+(defmacro with-keyboard-state(bindings &body body)
+  (let ((key-bindings))
+    (dolist (binding bindings)
+      (destructuring-bind (keyname action name) binding
+	(unless (mouse-action-p action)
+	  (error "Key action isn't valid: ~S" action))
+	(push `(,name (funcall ',(key-action-to-function action) (key ,keyname)))
+	      key-bindings)))
+    `(mu:with-let ,(nreverse key-bindings) ,@body)))
+		    
+
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
 
@@ -650,48 +744,48 @@ REPEAT."
 		 (%input-poll)
 		 (do-keyboard-events (ev)
 		   (funcall *chord-feeder* ev))
-		 (let* ((wheel-y (%input-mouse-wheel-y))
-			(wheel-x (%input-mouse-wheel-x))
-			(dx (%input-mouse-dx))
-			(dy (%input-mouse-dy))
-			(w-down (%input-key-down-p (key :w)))
-			(a-down (%input-key-down-p (key :a)))
-			(s-down (%input-key-down-p (key :s)))
-			(d-down (%input-key-down-p (key :d)))
-			(space-down (%input-key-down-p (key :space)))
-			(ctrl-down (%input-key-down-p (key :left-ctrl)))
-			(move-speed (* *keyboard-sensitivity* dt))
-			(look-speed (* *mouse-sensitivity* dt))
-			(middle-click (%input-mouse-down-p :middle)))
-		   (%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
-		   (%renderer-camera-move
-		    (+ (if w-down move-speed 0.0)
-		       (if s-down (- move-speed) 0.0))
-		    (if middle-click
-			(* (- dx) look-speed)
-			0.0)
-		    (if middle-click
-			(* dy look-speed)
-			0.0)))
-		 (%renderer-camera-update)
-		 (%renderer-render-begin)
-		 (%renderer-render-scene (scene-handle scene))
-		 (%ui-begin)
-		 (%ui-begin-window "Inspector")
+		 (with-mouse-state ((:wheel :x wheel-x)
+				    (:wheel :y wheel-y)
+				    (:delta :x dx)
+				    (:delta :y dy)
+				    (:button :middle :down middle-click))
+		   (with-keyboard-state ((:w :down w-down)
+					 (:a :down a-down)
+					 (:s :down s-down)
+					 (:d :down d-down)
+					 (:space :down space-down)
+					 (:ctrl :down ctrl-down))
+		     (let ((move-speed (* *keyboard-sensitivity* dt))
+			   (look-speed (* *mouse-sensitivity* dt)))
+		       (%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
+		       (%renderer-camera-move
+			(+ (if w-down move-speed 0.0)
+			   (if s-down (- move-speed) 0.0))
+			(if middle-click
+			    (* (- dx) look-speed)
+			    0.0)
+			(if middle-click
+			    (* dy look-speed)
+			    0.0)))))
+		     (%renderer-camera-update)
+		     (%renderer-render-begin)
+		     (%renderer-render-scene (scene-handle scene))
+		     (%ui-begin)
+		     (%ui-begin-window "Inspector")
 
-		 (do-scenes (scene)
-		   (when (%ui-treenode (format nil "Scene"))
-		     (do-scene-meshes(mesh scene)
-		       (when (%ui-treenode (mesh-alias mesh))
-			 (do-mesh-instances(instance mesh)
-			   (when (%ui-selectable (instance-alias instance))
-	      		     (setf *selection* instance)))
+		     (do-scenes (scene)
+		       (when (%ui-treenode (format nil "Scene"))
+			 (do-scene-meshes(mesh scene)
+			   (when (%ui-treenode (mesh-alias mesh))
+			     (do-mesh-instances(instance mesh)
+			       (when (%ui-selectable (instance-alias instance))
+	      			 (setf *selection* instance)))
+			     (%ui-treepop)))
 			 (%ui-treepop)))
-		     (%ui-treepop)))
-		 (%ui-end-window)
-		 (instance-properties-panel)
-		 (%ui-end)
-		 (%renderer-render-end)))
+		     (%ui-end-window)
+		     (instance-properties-panel)
+		     (%ui-end)
+		     (%renderer-render-end)))
       (scene-destroy scene)))
   (funcall *chord-machine-reset*)
   (funcall *prefix-machine-reset*)
