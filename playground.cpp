@@ -65,8 +65,6 @@ int main(int argc, char* argv[]) {
 			 middle_click ? -dx * look_speed : 0.0f,
 			 middle_click ? dy * look_speed : 0.0f
 			 );
-    renderer_camera_update();
-
     renderer_render_begin();
     renderer_render_scene(sh);
     ui_begin();

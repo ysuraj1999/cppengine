@@ -1080,10 +1080,7 @@ void renderer_camera_rotate(f32 yaw, f32 pitch) {
 
   camera.yaw = glm::mod(camera.yaw + yaw, 360.0f);
   camera.pitch = glm::clamp(camera.pitch + pitch, -89.99f, 89.99f);
-}
-
-void renderer_camera_update(void) {
-  camera_update(rendererConfig.camera);
+  camera_update(camera);
 }
 
 bool input_key_down(SDL_Scancode key) {

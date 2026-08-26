@@ -52,7 +52,6 @@ bool renderer_sync_scene(SceneHandle sh);
 
 void renderer_camera_move(f32 forward, f32 right, f32 up);
 void renderer_camera_rotate(f32 dx, f32 dy);
-void renderer_camera_update(void);
 
 SceneHandle scene_create(void);
 bool scene_destroy(SceneHandle sh);

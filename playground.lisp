@@ -390,8 +390,7 @@ iterate while scenes are created or destroyed."
 			 (if middle-click
 			     (* dy look-speed)
 			     0.0)))))
-		  (%renderer-camera-update)
-		  (%renderer-render-begin)
+		(%renderer-render-begin)
 		  (when *current-scene*
 		    (scene-render *current-scene*))
 		  (%ui-begin)

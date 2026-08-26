@@ -201,8 +201,6 @@
   (yaw :float)
   (pitch :float))
 
-(defcfun ("renderer_camera_update" %renderer-camera-update) :void)
-
 (defcfun ("input_key_down" %input-key-down-p) :bool
   (key :int))
 (defun %input-key-up-p(key)
