@@ -244,16 +244,4 @@ struct RendererConfig {
   Camera camera;
 };
 
-struct RendererFrame {
-  SDL_GPURenderPass *renderPass;
-  SDL_GPUCommandBuffer *commandBuffer;
-  
-  SDL_GPUTexture *swapchainTexture;
-  u32 swapchainWidth;
-  u32 swapchainHeight;
 
-  SDL_GPUColorTargetInfo colorTargetInfo;
-  SDL_GPUDepthStencilTargetInfo depthTargetInfo;
-
-  u32 instanceBufferOffset;
-};
