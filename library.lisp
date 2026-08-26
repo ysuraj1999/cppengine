@@ -122,7 +122,8 @@
 
 (defcfun ("ui_selectable" %ui-selectable)
     :bool
-  (label :string))
+  (label :string)
+  (selected :bool))
 
 (defcfun ("ui_sameline" %ui-sameline)
     :void)
@@ -130,6 +131,26 @@
 (defcfun ("ui_text" %ui-text)
     :void
   (text :string))
+
+(defcfun ("ui_push_id" %ui-push-id)
+    :void
+  (id :int))
+
+(defcfun ("ui_pop_id" %ui-pop-id)
+    :void)
+
+(defcfun ("ui_begin_context_menu_item" %ui-begin-context-menu-item)
+    :bool)
+
+(defcfun ("ui_begin_context_menu_window" %ui-begin-context-menu-window)
+    :bool)
+
+(defcfun ("ui_end_context_menu" %ui-end-context-menu)
+    :void)
+
+(defcfun ("ui_menu_item" %ui-menu-item)
+    :bool
+  (label :string))
 
 (defcfun ("renderer_clear" %renderer-clear) :bool)
 

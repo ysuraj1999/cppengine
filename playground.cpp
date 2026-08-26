@@ -82,7 +82,10 @@ int main(int argc, char* argv[]) {
             u64 instCount = scene_mesh_instance_count(sceneH, mh);
             for (u64 inst = 0; inst < instCount; inst++) {
               InstanceHandle ih = scene_mesh_instance_at(sceneH, mh, inst);
-              ui_selectable(scene_instance_alias(sceneH, ih));
+              bool selected = false;
+              if (ui_selectable(scene_instance_alias(sceneH, ih), selected)) {
+                selected = true;
+              }
             }
             ui_treepop();
           }

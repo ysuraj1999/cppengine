@@ -69,7 +69,7 @@ static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
 static_global bool shouldClose = false;
-static_global std::unordered_set<std::string> uiSelectedItems;
+
 
 struct RendererFrame {
   SDL_GPURenderPass *renderPass;
@@ -979,7 +979,6 @@ void renderer_quit() {
   rendererState.vertices.clear();
   rendererState.indices.clear();
   rendererState.meshRegions.clear();
-  uiSelectedItems.clear();
   registry = SceneRegistry{};
 
   shouldClose = false;
@@ -1050,30 +1049,8 @@ void ui_treepop() {
   ImGui::TreePop();
 }
 
-bool ui_selectable(const char* label) {
-  std::string key(label);
-  bool isSelected = uiSelectedItems.contains(key);
-
-  if (ImGui::Selectable(label, isSelected)) {
-    ImGuiIO& io = ImGui::GetIO();
-    bool ctrlPressed = io.KeyCtrl;
-
-    if (ctrlPressed) {
-      if (isSelected) {
-        uiSelectedItems.erase(key);
-        isSelected = false;
-      } else {
-        uiSelectedItems.insert(key);
-        isSelected = true;
-      }
-    } else {
-      uiSelectedItems.clear();
-      uiSelectedItems.insert(key);
-      isSelected = true;
-    }
-  }
-
-  return isSelected;
+bool ui_selectable(const char* label, bool selected) {
+  return ImGui::Selectable(label, selected);
 }
 
 void ui_sameline() {
@@ -1082,6 +1059,32 @@ void ui_sameline() {
 
 void ui_text(const char* text) {
   ImGui::Text("%s", text);
+}
+
+void ui_push_id(int id) {
+  ImGui::PushID(id);
+}
+
+void ui_pop_id() {
+  ImGui::PopID();
+}
+
+bool ui_begin_context_menu_item() {
+  return ImGui::BeginPopupContextItem();
+}
+
+bool ui_begin_context_menu_window() {
+  return ImGui::BeginPopupContextWindow(
+      nullptr,
+      ImGuiPopupFlags_NoOpenOverItems);
+}
+
+void ui_end_context_menu() {
+  ImGui::EndPopup();
+}
+
+bool ui_menu_item(const char* label) {
+  return ImGui::MenuItem(label);
 }
 
 void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,

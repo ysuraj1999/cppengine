@@ -104,9 +104,15 @@ void ui_end_window(void);
 bool ui_button(const char* label);
 bool ui_treenode(const char* label);
 void ui_treepop(void);
-bool ui_selectable(const char* label);
+bool ui_selectable(const char* label, bool selected);
 void ui_sameline(void);
 void ui_text(const char* text);
+void ui_push_id(int id);
+void ui_pop_id(void);
+bool ui_begin_context_menu_item(void);
+bool ui_begin_context_menu_window(void);
+void ui_end_context_menu(void);
+bool ui_menu_item(const char* label);
 
 #ifdef __cplusplus
 }
