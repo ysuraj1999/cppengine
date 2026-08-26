@@ -138,7 +138,7 @@ iterate while scenes are created or destroyed."
         finally (return handles)))
 
 (defmethod scene-sync ((scene scene))
-  (%renderer-sync-scene (scene-handle scene)))
+  (%renderer-rebuild-scene (scene-handle scene)))
 
 (defmethod scene-render ((scene scene))
   (%renderer-render-scene (scene-handle scene)))

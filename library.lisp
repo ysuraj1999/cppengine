@@ -94,7 +94,7 @@
   (sh %scene-handle)
   (i %instance-handle))
 
-(defcfun ("renderer_sync_scene" %renderer-sync-scene) :bool
+(defcfun ("renderer_rebuild_scene" %renderer-rebuild-scene) :bool
   (sh %scene-handle))
 (defcfun ("renderer_render_begin" %renderer-render-begin) :void)
 (defcfun ("renderer_render_scene" %renderer-render-scene) :void

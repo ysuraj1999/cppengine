@@ -48,7 +48,7 @@ void renderer_render_scene(SceneHandle sh);
 void renderer_render_end(void);
 bool renderer_clear(void);
 void renderer_quit(void);
-bool renderer_sync_scene(SceneHandle sh);
+bool renderer_rebuild_scene(SceneHandle sh);
 
 void renderer_camera_move(f32 forward, f32 right, f32 up);
 void renderer_camera_rotate(f32 dx, f32 dy);

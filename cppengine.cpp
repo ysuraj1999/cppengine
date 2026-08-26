@@ -121,7 +121,7 @@ struct RendererFrame {
     for (auto &[meshHandle, instances] : scene.objects) {
       auto regionIt = rendererState.meshRegions.find(meshHandle);
       ASSERT(regionIt != rendererState.meshRegions.end(),
-             "mesh never synced - call renderer_sync_scene first");
+             "mesh never synced - call renderer_rebuild_scene first");
       MeshRegion meshRegion = regionIt->second;
       draw_mesh(meshRegion, instances);
     }
@@ -136,9 +136,7 @@ struct RendererFrame {
   void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
     ASSERT(renderPass != nullptr && commandBuffer != nullptr,
            "draw called outside renderer_render_begin/end block");
-    glm::mat4 view = glm::lookAtLH(
-                                   rendererConfig.camera.position,
-                                   rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
+    glm::mat4 view = rendererConfig.camera.getViewMatrix();
     glm::mat4 projection = glm::perspectiveLH_ZO(
                                                  glm::radians(60.0f),
                                                  rendererConfig.resolution.x / rendererConfig.resolution.y,
@@ -272,14 +270,6 @@ bool scene_destroy(SceneHandle sh) {
   return registry.destroy(sh);
 }
 
-static_internal void camera_derive_forward_and_right(Camera& cam) {
-  cam.forward = glm::normalize(glm::vec3{
-      cos(glm::radians(cam.pitch)) * cos(glm::radians(cam.yaw)),
-      sin(glm::radians(cam.pitch)),
-      cos(glm::radians(cam.pitch)) * sin(glm::radians(cam.yaw))});
-  cam.right = glm::cross(WORLD_UP, cam.forward);
-}
-
 // Lifecycle init check: log, release any partial state, fail gracefully.
 #define INIT_CHECK(cond, msg)						\
   do {									\
@@ -345,7 +335,6 @@ bool renderer_init() {
 			1.0f},
     .keyboardSensitivity = 200.0f,
     .mouseSensitivity = 0.1f,
-    .cameraEnabled = true,
     .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
 
@@ -353,16 +342,12 @@ bool renderer_init() {
 
   rendererConfig = config;
 
-  camera_derive_forward_and_right(rendererConfig.camera);
+  rendererConfig.camera.update();
 
   INIT_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL subsystem initialization");
 
   window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
   INIT_CHECK(window != nullptr, "window creation");
-
-  // TODO - flag cameraRelative
-  // if (rendererConfig.cameraEnabled)
-  //   sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
 
   gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
   INIT_CHECK(gpuDevice != nullptr, "GPU device creation");
@@ -645,7 +630,7 @@ bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
   return registry.get(sh).remove_instance(ih);
 }
 
-bool renderer_sync_scene(SceneHandle sh) {
+bool renderer_rebuild_scene(SceneHandle sh) {
   ASSERT(gpuDevice != nullptr, "renderer not initialized");
   Scene& scene = registry.get(sh);
 
@@ -986,20 +971,12 @@ void renderer_quit() {
 }
 
 void renderer_camera_move(f32 forward, f32 right, f32 up) {
-  auto &camera = rendererConfig.camera;
-  camera_derive_forward_and_right(camera);
-
-  camera.position += camera.forward * forward;
-  camera.position += camera.right * right;
-  camera.position += WORLD_UP * up;
+  rendererConfig.camera.move(forward, right, up);
 }
 
 void renderer_camera_rotate(f32 yaw, f32 pitch) {
-  auto& camera = rendererConfig.camera;
-
-  camera.yaw = glm::mod(camera.yaw + yaw, 360.0f);
-  camera.pitch = glm::clamp(camera.pitch + pitch, -89.99f, 89.99f);
-  camera_derive_forward_and_right(camera);
+  rendererConfig.camera.rotate(yaw, pitch);
+  rendererConfig.camera.update();
 }
 
 bool input_key_down(SDL_Scancode key) {

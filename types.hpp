@@ -8,6 +8,9 @@
 #include <unordered_map>
 #include <vector>
 #include "cppengine.h"
+#include <glm/ext/matrix_transform.hpp>
+#include <glm/trigonometric.hpp>
+#include <glm/geometric.hpp>
 
 #define ASSERT(cond, msg)                                          \
   do {                                                             \
@@ -46,13 +49,38 @@ struct Vertex {
   glm::vec2 uv;
 };
 
-typedef struct Camera {
-  glm::vec3 position;
+extern glm::vec3 WORLD_UP;
+
+struct Camera {
+  glm::vec3 position{0.0f, 0.0f, 0.0f};
   f32 yaw = 0.0f;
   f32 pitch = 0.0f;
-  glm::vec3 forward; // cached forward & right
-  glm::vec3 right;
-} Camera;
+  glm::vec3 forward{0.0f, 0.0f, 1.0f};
+  glm::vec3 right{1.0f, 0.0f, 0.0f};
+
+  void update() {
+    forward = glm::normalize(glm::vec3{
+        cos(glm::radians(pitch)) * cos(glm::radians(yaw)),
+        sin(glm::radians(pitch)),
+        cos(glm::radians(pitch)) * sin(glm::radians(yaw))});
+    right = glm::cross(WORLD_UP, forward);
+  }
+
+  void move(f32 fwd, f32 rght, f32 up) {
+    position += forward * fwd;
+    position += right * rght;
+    position += WORLD_UP * up;
+  }
+
+  void rotate(f32 dYaw, f32 dPitch) {
+    yaw = glm::mod(yaw + dYaw, 360.0f);
+    pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
+  }
+
+  glm::mat4 getViewMatrix() const {
+    return glm::lookAtLH(position, position + forward, WORLD_UP);
+  }
+};
 
 struct Mat4 {
   f32 m0 = 0.0f;
@@ -240,7 +268,6 @@ struct RendererConfig {
   glm::vec4 backgroundColor;
   f32 keyboardSensitivity;
   f32 mouseSensitivity;
-  bool cameraEnabled;
   Camera camera;
 };
 

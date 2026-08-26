@@ -34,7 +34,7 @@ int main(int argc, char* argv[]) {
                         /*rotation*/ 0.0f, 0.0f, 0.0f});
   }
   
-  renderer_sync_scene(sh);
+  renderer_rebuild_scene(sh);
   rendererConfig.keyboardSensitivity = 200.0;
   rendererConfig.mouseSensitivity = 50.0;
   bool running = true;
