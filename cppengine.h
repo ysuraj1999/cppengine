@@ -106,7 +106,6 @@ bool ui_treenode(const char* label);
 void ui_treepop(void);
 bool ui_selectable(const char* label);
 void ui_sameline(void);
-bool ui_drag_float3(const char* label, f32 *v);
 void ui_text(const char* text);
 
 #ifdef __cplusplus

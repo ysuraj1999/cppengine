@@ -48,13 +48,8 @@ void fpu_end()
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
-// Monotonically increasing counters
-static_global uint64_t next_mesh_handle = 0;
-static_global uint64_t next_instance_handle = 0;
-static_global uint64_t next_scene_handle = 0;
-
-static_global std::unordered_map<SceneHandle, Scene> sceneRegistry;
-static_global std::vector<SceneHandle> sceneOrder;
+// Monotonically increasing counters (owned per Scene / SceneRegistry)
+static_global SceneRegistry registry;
 static_global SDL_Window *window;
 static_global SDL_GPUDevice *gpuDevice;
 static_global SDL_GPUBuffer *vertexBuffer;
@@ -142,64 +137,14 @@ static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 static_global RendererFrame frame = {};
 
 SceneHandle scene_create() {
-  SceneHandle sh = next_scene_handle++;
-  sceneRegistry[sh] = Scene{};
-  sceneOrder.push_back(sh);
-  return sh;
+  return registry.create();
 }
 
 bool scene_destroy(SceneHandle sh) {
-  bool erased = sceneRegistry.erase(sh) > 0;
-  if (erased) {
-    auto it = std::find(sceneOrder.begin(), sceneOrder.end(), sh);
-    sceneOrder.erase(it);
-  }
-  return erased;
+  return registry.destroy(sh);
 }
 
-static_internal Scene* scene_get(SceneHandle sh) {
-  auto it = sceneRegistry.find(sh);
-  ASSERT(it != sceneRegistry.end(), "invalid scene handle");
-  return &it->second;
-}
-
-static_internal Mesh* mesh_get(Scene* scene, MeshHandle mh) {
-  auto it = scene->meshes.find(mh);
-  ASSERT(it != scene->meshes.end(), "invalid mesh handle");
-  return &it->second;
-}
-
-static_internal Instance* instance_get(Scene* scene, InstanceHandle ih) {
-  for (auto &[meshHandle, instances] : scene->objects) {
-    for (auto &inst : instances) {
-      if (inst.instanceHandle == ih)
-        return &inst;
-    }
-  }
-  ASSERT(false, "instance handle not found");
-  return nullptr;
-}
-
-static_internal MeshHandle mesh_add(Scene* scene, Mesh m) {
-  MeshHandle newMeshHandle = next_mesh_handle++;
-  m.alias = (m.alias.empty() ? "Mesh" : m.alias) + "#" + std::to_string(newMeshHandle);
-  scene->meshes[newMeshHandle] = m;
-  scene->meshOrder.push_back(newMeshHandle);
-  return newMeshHandle;
-}
-
-static_internal InstanceHandle instance_add(Scene* scene, MeshHandle m, Transform t) {
-  Mesh* mesh = mesh_get(scene, m);
-  Instance newInstance = {};
-  newInstance.instanceHandle = next_instance_handle++;
-  newInstance.mesh = m;
-  newInstance.transform = t;
-  newInstance.alias = mesh->alias + "-instance#" + std::to_string(newInstance.instanceHandle);
-  scene->objects[m].push_back(newInstance);
-  return newInstance.instanceHandle;
-}
-
-static_internal void camera_update(Camera& cam) {
+static_internal void camera_derive_forward_and_right(Camera& cam) {
   cam.forward = glm::normalize(glm::vec3{
       cos(glm::radians(cam.pitch)) * cos(glm::radians(cam.yaw)),
       sin(glm::radians(cam.pitch)),
@@ -280,7 +225,7 @@ bool renderer_init() {
 
   rendererConfig = config;
 
-  camera_update(rendererConfig.camera);
+  camera_derive_forward_and_right(rendererConfig.camera);
 
   INIT_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL subsystem initialization");
 
@@ -554,72 +499,48 @@ bool renderer_init() {
 }
 
 bool scene_load_obj(SceneHandle sh, const char *path) {
-  Scene* scene = scene_get(sh);
+  Scene& scene = registry.get(sh);
 
   std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
 
   for (const auto &m : meshCollection) {
-    mesh_add(scene, m);
+    scene.add_mesh(m);
   }
   
   return true;
 }
 
 bool scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
-  Scene* scene = scene_get(sh);
-
-  if (!scene->meshes.contains(mh)) {
-    return false;
-  }
-  scene->objects.erase(mh);
-  scene->meshes.erase(mh);
-  auto it = std::find(scene->meshOrder.begin(), scene->meshOrder.end(), mh);
-  scene->meshOrder.erase(it);
-  return true;
-}
-
-static_internal Transform make_transform(f32 px, f32 py, f32 pz, f32 sx, f32 sy, f32 sz,
-					 f32 rx, f32 ry, f32 rz) {
-  return {px, py, pz, sx, sy, sz, rx, ry, rz};
+  return registry.get(sh).remove_mesh(mh);
 }
 
 InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t) {
-  Scene* scene = scene_get(sh);
-  return instance_add(scene, m, t);
+  return registry.get(sh).add_instance(m, t);
 }
 
 const char* scene_mesh_alias(SceneHandle sh, MeshHandle mh) {
-  return mesh_get(scene_get(sh), mh)->alias.c_str();
+  return registry.get(sh).mesh_alias(mh);
 }
 
 const char* scene_instance_alias(SceneHandle sh, InstanceHandle ih) {
-  return instance_get(scene_get(sh), ih)->alias.c_str();
+  return registry.get(sh).instance_alias(ih);
 }
 
 bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
-  Scene* scene = scene_get(sh);
-
-  for (auto &[meshHandle, instances] : scene->objects) {
-    for (u64 i = 0; i < instances.size(); i++){
-      if (instances[i].instanceHandle == ih) {
-        instances.erase(instances.begin() + i);
-	return true;
-      }
-    }
-  }
-  return false;
+  return registry.get(sh).remove_instance(ih);
 }
 
 bool renderer_sync_scene(SceneHandle sh) {
   ASSERT(gpuDevice != nullptr, "renderer not initialized");
-  Scene* scene = scene_get(sh);
+  Scene& scene = registry.get(sh);
 
   renderer_clear();
   
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
-  for (MeshHandle meshHandle : scene->meshOrder) {
-    const Mesh& mesh = scene->meshes[meshHandle];
+  for (u64 i = 0; i < scene.mesh_count(); i++) {
+    MeshHandle meshHandle = scene.mesh_at(i);
+    const Mesh& mesh = scene.get_mesh(meshHandle);
     MeshRegion meshRegionStorage = {};
     meshRegionStorage.vertexOffset = vertIndexOffset;
     meshRegionStorage.indexOffset = indexIndexOffset;
@@ -740,39 +661,27 @@ bool renderer_sync_scene(SceneHandle sh) {
 }
 
 u64 scene_count() {
-  return sceneOrder.size();
+  return registry.count();
 }
 
 SceneHandle scene_at(u64 index) {
-  ASSERT(index < sceneOrder.size(), "scene index out of bounds");
-  return sceneOrder[index];
+  return registry.at(index);
 }
 
 u64 scene_mesh_count(SceneHandle sh) {
-  Scene* scene = scene_get(sh);
-  return scene->meshOrder.size();
+  return registry.get(sh).mesh_count();
 }
 
 MeshHandle scene_mesh_at(SceneHandle sh, u64 index) {
-  Scene* scene = scene_get(sh);
-  ASSERT(index < scene->meshOrder.size(), "mesh index out of bounds");
-  return scene->meshOrder[index];
+  return registry.get(sh).mesh_at(index);
 }
 
 u64 scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh) {
-  Scene* scene = scene_get(sh);
-  mesh_get(scene, mesh);
-  auto it = scene->objects.find(mesh);
-  return it == scene->objects.end() ? 0 : it->second.size();
+  return registry.get(sh).instance_count(mesh);
 }
 
 InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index) {
-  Scene* scene = scene_get(sh);
-  mesh_get(scene, mesh);
-  auto it = scene->objects.find(mesh);
-  ASSERT(it != scene->objects.end(), "mesh has no instances");
-  ASSERT(index < it->second.size(), "instance index out of bounds");
-  return it->second[index].instanceHandle;
+  return registry.get(sh).instance_at(mesh, index);
 }
 
 static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
@@ -883,8 +792,8 @@ void ui_end() {
 }
 
 void renderer_render_scene(SceneHandle sh) {
-  Scene *scene = scene_get(sh);
-  for (auto &[meshHandle, instances] : scene->objects) {
+  Scene& scene = registry.get(sh);
+  for (auto &[meshHandle, instances] : scene.objects) {
     auto regionIt = rendererState.meshRegions.find(meshHandle);
     ASSERT(regionIt != rendererState.meshRegions.end(),
            "mesh never synced - call renderer_sync_scene first");
@@ -1055,12 +964,8 @@ void renderer_quit() {
   rendererState.vertices.clear();
   rendererState.indices.clear();
   rendererState.meshRegions.clear();
-  sceneRegistry.clear();
-  sceneOrder.clear();
   uiSelectedItems.clear();
-  next_mesh_handle = 0;
-  next_instance_handle = 0;
-  next_scene_handle = 0;
+  registry = SceneRegistry{};
 
   shouldClose = false;
   input = Input{};
@@ -1068,7 +973,7 @@ void renderer_quit() {
 
 void renderer_camera_move(f32 forward, f32 right, f32 up) {
   auto &camera = rendererConfig.camera;
-  camera_update(camera);
+  camera_derive_forward_and_right(camera);
 
   camera.position += camera.forward * forward;
   camera.position += camera.right * right;
@@ -1080,7 +985,7 @@ void renderer_camera_rotate(f32 yaw, f32 pitch) {
 
   camera.yaw = glm::mod(camera.yaw + yaw, 360.0f);
   camera.pitch = glm::clamp(camera.pitch + pitch, -89.99f, 89.99f);
-  camera_update(camera);
+  camera_derive_forward_and_right(camera);
 }
 
 bool input_key_down(SDL_Scancode key) {
@@ -1160,22 +1065,15 @@ void ui_sameline() {
   ImGui::SameLine();
 }
 
-bool ui_drag_float3(const char* label, f32 *v) {
-  return ImGui::DragFloat3(label, v);
-}
-
 void ui_text(const char* text) {
   ImGui::Text("%s", text);
 }
 
 void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
 				  Transform t) {
-  Scene *s = scene_get(sh);
-  Instance *instance = instance_get(s, i);
-  instance->transform = t;
+  registry.get(sh).set_instance_transform(i, t);
 }
 
 Transform scene_instance_get_transform(SceneHandle sh, InstanceHandle i) {
-  Scene *s = scene_get(sh);
-  return instance_get(s, i)->transform;
+  return registry.get(sh).get_instance_transform(i);
 }

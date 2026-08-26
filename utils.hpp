@@ -15,15 +15,6 @@
     }							\
   } while (0)
 
-#define ASSERT(cond, msg)                                              \
-  do {                                                                 \
-    if (!(cond)) {                                                     \
-      std::fprintf(stderr, "%s:%d: ASSERT FAILED: %s - %s\n",          \
-                   __FILE__, __LINE__, #cond, msg);                    \
-      std::abort();                                                    \
-    }                                                                  \
-  } while (0)
-
 std::vector<u8> readFile(const char* path);
 
 template <typename T>

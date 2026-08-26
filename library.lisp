@@ -127,11 +127,6 @@
 (defcfun ("ui_sameline" %ui-sameline)
     :void)
 
-(defcfun ("ui_drag_float3" %ui-drag-float3)
-    :bool
-  (label :string)
-  (values :pointer))
-
 (defcfun ("ui_text" %ui-text)
     :void
   (text :string))
