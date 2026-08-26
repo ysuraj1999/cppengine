@@ -96,6 +96,8 @@ KeyboardEvent input_keyboard_event_at(u64 index);
 
 f32 time_dt(void);
 
+bool ui_init(void);
+void ui_quit(void);
 void ui_begin(void);
 void ui_end(void);
 void ui_begin_window(const char* name);

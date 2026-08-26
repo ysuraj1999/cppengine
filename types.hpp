@@ -103,15 +103,6 @@ struct RendererConfig {
   Camera camera;
 };
 
-struct MouseState {
-  f32 x = 0.0f, y = 0.0f;              // absolute position (persists)
-  f32 dx = 0.0f, dy = 0.0f;            // movement this frame (reset each poll)
-  f32 wheel_x = 0.0f, wheel_y = 0.0f;  // scroll this frame (reset each poll)
-  bool down[MOUSE_BUTTON_COUNT] = {};      // held state (persists)
-  bool pressed[MOUSE_BUTTON_COUNT] = {};   // just pressed this poll
-  bool released[MOUSE_BUTTON_COUNT] = {};  // just released this poll
-};
-
 struct RendererFrame {
   SDL_GPURenderPass *renderPass;
   SDL_GPUCommandBuffer *commandBuffer;

@@ -37,12 +37,12 @@ static std::fenv_t env;
 
 void fpu_begin()
 {
-    std::feholdexcept(&env);
+  std::feholdexcept(&env);
 }
 
 void fpu_end()
 {
-    std::fesetenv(&env);
+  std::fesetenv(&env);
 }
 
 RendererConfig rendererConfig = {};
@@ -75,32 +75,71 @@ static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
 static_global bool shouldClose = false;
 static_global std::unordered_set<std::string> uiSelectedItems;
-static_global MouseState mouseState;
-static_global KeyboardEvent keyboardEventBuffer[KEYBOARD_EVENT_CAPACITY] = {};
-static_global u32 keyboardEventCount = 0;
-static_global bool lastMouseDown[MOUSE_BUTTON_COUNT] = {};
-static_global bool currentKeyboardState[SDL_SCANCODE_COUNT] = {};
-static_global bool previousKeyboardState[SDL_SCANCODE_COUNT] = {};
+
+struct Keyboard {
+  bool current[SDL_SCANCODE_COUNT] = {};
+  bool previous[SDL_SCANCODE_COUNT] = {};
+  KeyboardEvent buffer[KEYBOARD_EVENT_CAPACITY] = {};
+  u32 count = 0;
+
+  void copy_current_state_into_previous_state() {
+    memcpy(previous, current, sizeof(current));
+  }
+  void clear_events() { count = 0; }
+
+  void begin() {
+    copy_current_state_into_previous_state();
+    clear_events();
+  }
+  void end() { memcpy(current, SDL_GetKeyboardState(nullptr), sizeof(current)); }
+  void clear_current_state() { memset(current, 0, sizeof(current)); }
+
+  void push_event(int scancode, bool down, bool repeat) {
+    if (count >= KEYBOARD_EVENT_CAPACITY) return;
+    buffer[count++] = {scancode, down, repeat};
+  }
+
+  bool down(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return current[k]; }
+  bool pressed(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return current[k] && !previous[k]; }
+  bool released(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return !current[k] && previous[k]; }
+};
+
+struct Mouse {
+  f32 x = 0, y = 0;
+  f32 dx = 0, dy = 0;
+  f32 wheel_x = 0, wheel_y = 0;
+  bool down_current[MOUSE_BUTTON_COUNT] = {};
+  bool down_previous[MOUSE_BUTTON_COUNT] = {};
+
+  void copy_current_state_into_previous_state() { memcpy(down_previous, down_current, sizeof(down_current)); }
+  void clear_transient() { dx = 0; dy = 0; wheel_x = 0; wheel_y = 0; }
+
+  void begin() {
+    copy_current_state_into_previous_state();
+    clear_transient();
+  }
+  void end() {}
+
+  void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) { x = nx; y = ny; dx += xrel; dy += yrel; }
+  void on_button_down(int button, f32 bx, f32 by, bool track) { x = bx; y = by; if (track && button > 0 && button < MOUSE_BUTTON_COUNT) down_current[button] = true; }
+  void on_button_up(int button, f32 bx, f32 by) { x = bx; y = by; if (button > 0 && button < MOUSE_BUTTON_COUNT) down_current[button] = false; }
+  void on_wheel(f32 wx, f32 wy) { wheel_x += wx; wheel_y += wy; }
+
+  bool down(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b]; }
+  bool pressed(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b] && !down_previous[b]; }
+  bool released(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return !down_current[b] && down_previous[b]; }
+};
+
+struct Input {
+  Keyboard keyboard;
+  Mouse mouse;
+  void poll();
+};
+
+static_global Input input = {};
+
 static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 static_global RendererFrame frame = {};
-
-static_internal inline void keyboard_state_update() {
-  memcpy(
-	 previousKeyboardState,
-	 currentKeyboardState,
-	 sizeof(currentKeyboardState));
-
-  ImGuiIO& io = ImGui::GetIO();
-  if (io.WantCaptureKeyboard) {
-    memset(currentKeyboardState, 0, sizeof(currentKeyboardState));
-  } else {
-    const bool* state = SDL_GetKeyboardState(nullptr);
-    memcpy(
-	 currentKeyboardState,
-	 state,
-	 sizeof(currentKeyboardState));
-  }
-}
 
 SceneHandle scene_create() {
   SceneHandle sh = next_scene_handle++;
@@ -162,27 +201,65 @@ static_internal InstanceHandle instance_add(Scene* scene, MeshHandle m, Transfor
 
 static_internal void camera_update(Camera& cam) {
   cam.forward = glm::normalize(glm::vec3{
-    cos(glm::radians(cam.pitch)) * cos(glm::radians(cam.yaw)),
-    sin(glm::radians(cam.pitch)),
-    cos(glm::radians(cam.pitch)) * sin(glm::radians(cam.yaw))});
+      cos(glm::radians(cam.pitch)) * cos(glm::radians(cam.yaw)),
+      sin(glm::radians(cam.pitch)),
+      cos(glm::radians(cam.pitch)) * sin(glm::radians(cam.yaw))});
   cam.right = glm::cross(WORLD_UP, cam.forward);
 }
 
 // Lifecycle init check: log, release any partial state, fail gracefully.
-#define INIT_CHECK(cond, msg)                                          \
-  do {                                                                 \
-    if (!(cond)) {                                                     \
-      std::fprintf(stderr, "%s:%d: renderer_init failed: %s (%s)\n",   \
-                   __FILE__, __LINE__, #cond, msg);                    \
-      fpu_end();                                                       \
-      renderer_quit();                                                 \
-      return false;                                                    \
-    }                                                                  \
+#define INIT_CHECK(cond, msg)						\
+  do {									\
+    if (!(cond)) {							\
+      std::fprintf(stderr, "%s:%d: renderer_init failed: %s (%s)\n",	\
+                   __FILE__, __LINE__, #cond, msg);			\
+      fpu_end();							\
+      renderer_quit();							\
+      return false;							\
+    }									\
   } while (0)
 
+bool ui_init() {
+  if (ImGui::GetCurrentContext() != nullptr) {
+    std::fprintf(stderr, "ui_init: already initialized (call ui_quit first)\n");
+    return false;
+  }
+  IMGUI_CHECKVERSION();
+  ImGui::CreateContext();
+  ImGuiIO& io = ImGui::GetIO(); (void)io;
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
+  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+  
+  ImGui::StyleColorsDark();
+  ImGuiStyle& style = ImGui::GetStyle();
+  style.ScaleAllSizes(1.0f);
+  style.FontScaleDpi = 1.25f;
+
+  // Setup Platform/Renderer backends
+  ImGui_ImplSDL3_InitForSDLGPU(window);
+  ImGui_ImplSDLGPU3_InitInfo init_info = {};
+  init_info.Device = gpuDevice;
+  init_info.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
+  init_info.MSAASamples = SDL_GPU_SAMPLECOUNT_1;                      // Only used in multi-viewports mode.
+  init_info.SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;  // Only used in multi-viewports mode.
+  init_info.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
+  ImGui_ImplSDLGPU3_Init(&init_info);
+  return true;
+}
+
+void ui_quit() {
+  if (!ImGui::GetCurrentContext())
+    return;
+  ImGuiIO& io = ImGui::GetIO();
+  if (io.BackendRendererUserData)
+    ImGui_ImplSDLGPU3_Shutdown();
+  if (io.BackendPlatformUserData)
+    ImGui_ImplSDL3_Shutdown();
+  ImGui::DestroyContext();
+}
+
 bool renderer_init() {
-  if (gpuDevice != nullptr || window != nullptr ||
-      ImGui::GetCurrentContext() != nullptr) {
+  if (gpuDevice != nullptr || window != nullptr) {
     std::fprintf(stderr,
                  "renderer_init: already initialized (call renderer_quit first)\n");
     return false;
@@ -190,13 +267,13 @@ bool renderer_init() {
 
   fpu_begin();
   RendererConfig config = {
-      .resolution = {1800.0f, 1000.0f},
-      .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
-                          1.0f},
-      .keyboardSensitivity = 200.0f,
-      .mouseSensitivity = 0.1f,
-      .cameraEnabled = true,
-      .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+    .resolution = {1800.0f, 1000.0f},
+    .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f,
+			1.0f},
+    .keyboardSensitivity = 200.0f,
+    .mouseSensitivity = 0.1f,
+    .cameraEnabled = true,
+    .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
   };
 
   shouldClose = false;
@@ -221,30 +298,11 @@ bool renderer_init() {
              "claim window for GPU device");
 
   INIT_CHECK(SDL_SetGPUSwapchainParameters(gpuDevice, window,
-                                          SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                                          SDL_GPU_PRESENTMODE_VSYNC),
+					   SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+					   SDL_GPU_PRESENTMODE_VSYNC),
              "swapchain configuration");
 
-  IMGUI_CHECKVERSION();
-  ImGui::CreateContext();
-  ImGuiIO& io = ImGui::GetIO(); (void)io;
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-  io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-  
-  ImGui::StyleColorsDark();
-  ImGuiStyle& style = ImGui::GetStyle();
-  style.ScaleAllSizes(1.0f);
-  style.FontScaleDpi = 1.25f;
-
-  // Setup Platform/Renderer backends
-  ImGui_ImplSDL3_InitForSDLGPU(window);
-  ImGui_ImplSDLGPU3_InitInfo init_info = {};
-  init_info.Device = gpuDevice;
-  init_info.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
-  init_info.MSAASamples = SDL_GPU_SAMPLECOUNT_1;                      // Only used in multi-viewports mode.
-  init_info.SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;  // Only used in multi-viewports mode.
-  init_info.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
-  ImGui_ImplSDLGPU3_Init(&init_info);
+  INIT_CHECK(ui_init(), "imgui initialization");
   // IMGUI END
   
   frame.swapchainTexture = nullptr;
@@ -847,22 +905,9 @@ bool renderer_clear(void) {
   return true;
 }
 
-static_internal inline void mouse_state_update() {
-  for (int i = 0; i < MOUSE_BUTTON_COUNT; i++) {
-    mouseState.pressed[i] = mouseState.down[i] && !lastMouseDown[i];
-    mouseState.released[i] = !mouseState.down[i] && lastMouseDown[i];
-  }
-}
-
-void input_poll() {
-  mouseState.dx = 0.0f;
-  mouseState.dy = 0.0f;
-  mouseState.wheel_x = 0.0f;
-  mouseState.wheel_y = 0.0f;
-  keyboardEventCount = 0;
-  memcpy(lastMouseDown, mouseState.down, sizeof(lastMouseDown));
-  memset(mouseState.pressed, 0, sizeof(mouseState.pressed));
-  memset(mouseState.released, 0, sizeof(mouseState.released));
+void Input::poll() {
+  keyboard.begin();
+  mouse.begin();
 
   ImGuiIO& io = ImGui::GetIO();
 
@@ -876,58 +921,45 @@ void input_poll() {
       break;
     }
     case SDL_EVENT_MOUSE_MOTION: {
-      mouseState.x = event.motion.x;
-      mouseState.y = event.motion.y;
-      if (!io.WantCaptureMouse) {
-        mouseState.dx += event.motion.xrel;
-        mouseState.dy += event.motion.yrel;
-      }
+      if (io.WantCaptureMouse)
+        mouse.on_motion(event.motion.x, event.motion.y, 0.0f, 0.0f);
+      else
+        mouse.on_motion(event.motion.x, event.motion.y,
+                        event.motion.xrel, event.motion.yrel);
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-      mouseState.x = event.button.x;
-      mouseState.y = event.button.y;
-      if (!io.WantCaptureMouse) {
-        int button = event.button.button;
-        if (button > 0 && button < MOUSE_BUTTON_COUNT) {
-          mouseState.down[button] = true;
-        }
-      }
+      mouse.on_button_down(event.button.button, event.button.x, event.button.y,
+                           !io.WantCaptureMouse);
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP: {
-      mouseState.x = event.button.x;
-      mouseState.y = event.button.y;
-      int button = event.button.button;
-      if (button > 0 && button < MOUSE_BUTTON_COUNT) {
-        mouseState.down[button] = false;
-      }
+      mouse.on_button_up(event.button.button, event.button.x, event.button.y);
       break;
     }
     case SDL_EVENT_MOUSE_WHEEL: {
-      if (!io.WantCaptureMouse) {
-        mouseState.wheel_x += event.wheel.x;
-        mouseState.wheel_y += event.wheel.y;
-      }
+      if (!io.WantCaptureMouse)
+        mouse.on_wheel(event.wheel.x, event.wheel.y);
       break;
     }
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
-      // append in SDL delivery order; state snapshot is not used for ordering
-      if (!io.WantCaptureKeyboard && keyboardEventCount < KEYBOARD_EVENT_CAPACITY) {
-        KeyboardEvent& e = keyboardEventBuffer[keyboardEventCount++];
-        e.scancode = (int)event.key.scancode;
-        e.down = event.type == SDL_EVENT_KEY_DOWN;
-        e.repeat = event.key.repeat;
-      }
+      if (!io.WantCaptureKeyboard)
+        keyboard.push_event((int)event.key.scancode,
+                            event.type == SDL_EVENT_KEY_DOWN,
+                            event.key.repeat);
       break;
     }
     }
   }
 
-  mouse_state_update();
+  mouse.end();
+  keyboard.end();
+  if (io.WantCaptureKeyboard) keyboard.clear_current_state();
+}
 
-  keyboard_state_update();
+void input_poll(void) {
+  input.poll();
 }
 
 bool input_should_close() {
@@ -935,45 +967,44 @@ bool input_should_close() {
 }
 
 f32 input_mouse_x(void) {
-  return mouseState.x;
+  return input.mouse.x;
 }
 
 f32 input_mouse_y(void) {
-  return mouseState.y;
+  return input.mouse.y;
 }
 
 f32 input_mouse_dx(void) {
-  return mouseState.dx;
+  return input.mouse.dx;
 }
 
 f32 input_mouse_dy(void) {
-  return mouseState.dy;
+  return input.mouse.dy;
 }
 
 f32 input_mouse_wheel_x(void) {
-  return mouseState.wheel_x;
+  return input.mouse.wheel_x;
 }
 
 f32 input_mouse_wheel_y(void) {
-  return mouseState.wheel_y;
+  return input.mouse.wheel_y;
 }
 
 bool input_mouse_down(MouseButton button) {
-  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
-  return mouseState.down[button];
+  return input.mouse.down(button);
 }
 
 bool input_mouse_pressed(MouseButton button) {
-  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
-  return mouseState.pressed[button];
+  return input.mouse.pressed(button);
 }
 
 bool input_mouse_released(MouseButton button) {
-  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
-  return mouseState.released[button];
+  return input.mouse.released(button);
 }
 
 void renderer_quit() {
+  ui_quit();
+
   if (gpuDevice) {
     if (checkTexture)
       SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
@@ -996,15 +1027,6 @@ void renderer_quit() {
     if (sampler)
       SDL_ReleaseGPUSampler(gpuDevice, sampler);
     SDL_DestroyGPUDevice(gpuDevice);
-  }
-
-  if (ImGui::GetCurrentContext()) {
-    ImGuiIO& io = ImGui::GetIO();
-    if (io.BackendPlatformUserData)
-      ImGui_ImplSDL3_Shutdown();
-    if (io.BackendRendererUserData)
-      ImGui_ImplSDLGPU3_Shutdown();
-    ImGui::DestroyContext();
   }
 
   if (window)
@@ -1041,11 +1063,7 @@ void renderer_quit() {
   next_scene_handle = 0;
 
   shouldClose = false;
-  keyboardEventCount = 0;
-  mouseState = MouseState{};
-  memset(lastMouseDown, 0, sizeof(lastMouseDown));
-  memset(currentKeyboardState, 0, sizeof(currentKeyboardState));
-  memset(previousKeyboardState, 0, sizeof(previousKeyboardState));
+  input = Input{};
 }
 
 void renderer_camera_move(f32 forward, f32 right, f32 up) {
@@ -1069,27 +1087,24 @@ void renderer_camera_update(void) {
 }
 
 bool input_key_down(SDL_Scancode key) {
-  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
-  return currentKeyboardState[key];
+  return input.keyboard.down(key);
 }
 
 bool input_key_pressed(SDL_Scancode key) {
-  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
-  return currentKeyboardState[key] && !previousKeyboardState[key];
+  return input.keyboard.pressed(key);
 }
 
 bool input_key_released(SDL_Scancode key) {
-  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
-  return !currentKeyboardState[key] && previousKeyboardState[key];
+  return input.keyboard.released(key);
 }
 
 u64 input_keyboard_event_count(void) {
-  return keyboardEventCount;
+  return input.keyboard.count;
 }
 
 KeyboardEvent input_keyboard_event_at(u64 index) {
-  ASSERT(index < keyboardEventCount, "keyboard event index out of bounds");
-  return keyboardEventBuffer[index];
+  ASSERT(index < input.keyboard.count, "keyboard event index out of bounds");
+  return input.keyboard.buffer[index];
 }
 
 f32 time_dt(void) {
@@ -1157,7 +1172,7 @@ void ui_text(const char* text) {
 }
 
 void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
-                                           Transform t) {
+				  Transform t) {
   Scene *s = scene_get(sh);
   Instance *instance = instance_get(s, i);
   instance->transform = t;
