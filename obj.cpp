@@ -2,6 +2,8 @@
 #define TINYOBJLOADER_USE_MULTITHREADING
 #define TINYOBJLOADER_USE_SIMD
 #include "tiny_obj_loader.h"
+#include <cstdio>
+#include <cstdlib>
 
 #include "obj.hpp"
 
@@ -17,10 +19,9 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
   tinyobj::ObjReader reader;
 
   if (!reader.ParseFromFile(inputfile, reader_config)) {
-    if (!reader.Error().empty()) {
-      std::cerr << "TinyObjReader: " << reader.Error();
-    }
-    exit(1);
+    std::fprintf(stderr, "%s:%d: obj load failed: '%s': %s\n",
+                 __FILE__, __LINE__, inputfile, reader.Error().c_str());
+    std::abort();
   }
 
   if (!reader.Warning().empty()) {

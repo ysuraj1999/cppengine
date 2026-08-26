@@ -358,8 +358,8 @@ iterate while scenes are created or destroyed."
 
 
 (defun editor ()
-  (%renderer-init)
-  (unwind-protect
+  (when (%renderer-init)
+    (unwind-protect
        (loop until (%input-should-close-p)
 	     for dt = (%time-dt)
 	     with feed-chord-machine = (make-chord-machine #'(lambda(x)(format t "Chord ~a~%" x)))
@@ -405,6 +405,6 @@ iterate while scenes are created or destroyed."
 	*selection* nil)
   (do-scenes(scene)
     (scene-destroy scene))
-  (%renderer-quit))
+    (%renderer-quit)))
 
 ;; (editor)

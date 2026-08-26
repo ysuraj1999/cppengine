@@ -1,5 +1,7 @@
 #include "utils.hpp"
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <fstream>
 #include <random>
 #include <glm/ext/matrix_transform.hpp>
@@ -8,9 +10,16 @@
 std::vector<u8> readFile(const char* path) {
   std::ifstream file(path, std::ios::binary | std::ios::ate);
   if (!file) {
-    return {};
+    std::fprintf(stderr, "%s:%d: readFile: cannot open '%s'\n",
+                 __FILE__, __LINE__, path);
+    std::abort();
   }
   std::streamsize size = file.tellg();
+  if (size < 0) {
+    std::fprintf(stderr, "%s:%d: readFile: cannot stat '%s'\n",
+                 __FILE__, __LINE__, path);
+    std::abort();
+  }
   file.seekg(0, std::ios::beg);
   std::vector<u8> buffer(static_cast<size_t>(size));
   if (size > 0) {

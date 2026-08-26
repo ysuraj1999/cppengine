@@ -10,7 +10,6 @@
 #include <cfloat>
 #include <cstddef>
 #include <glm/glm.hpp>
-#include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -75,6 +74,7 @@ static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
 static_global bool shouldClose = false;
+static_global std::unordered_set<std::string> uiSelectedItems;
 static_global MouseState mouseState;
 static_global KeyboardEvent keyboardEventBuffer[KEYBOARD_EVENT_CAPACITY] = {};
 static_global u32 keyboardEventCount = 0;
@@ -120,13 +120,13 @@ bool scene_destroy(SceneHandle sh) {
 
 static_internal Scene* scene_get(SceneHandle sh) {
   auto it = sceneRegistry.find(sh);
-  assert(it != sceneRegistry.end());
+  ASSERT(it != sceneRegistry.end(), "invalid scene handle");
   return &it->second;
 }
 
 static_internal Mesh* mesh_get(Scene* scene, MeshHandle mh) {
   auto it = scene->meshes.find(mh);
-  assert(it != scene->meshes.end());
+  ASSERT(it != scene->meshes.end(), "invalid mesh handle");
   return &it->second;
 }
 
@@ -137,7 +137,7 @@ static_internal Instance* instance_get(Scene* scene, InstanceHandle ih) {
         return &inst;
     }
   }
-  assert(false && "instance handle not found");
+  ASSERT(false, "instance handle not found");
   return nullptr;
 }
 
@@ -168,7 +168,26 @@ static_internal void camera_update(Camera& cam) {
   cam.right = glm::cross(WORLD_UP, cam.forward);
 }
 
+// Lifecycle init check: log, release any partial state, fail gracefully.
+#define INIT_CHECK(cond, msg)                                          \
+  do {                                                                 \
+    if (!(cond)) {                                                     \
+      std::fprintf(stderr, "%s:%d: renderer_init failed: %s (%s)\n",   \
+                   __FILE__, __LINE__, #cond, msg);                    \
+      fpu_end();                                                       \
+      renderer_quit();                                                 \
+      return false;                                                    \
+    }                                                                  \
+  } while (0)
+
 bool renderer_init() {
+  if (gpuDevice != nullptr || window != nullptr ||
+      ImGui::GetCurrentContext() != nullptr) {
+    std::fprintf(stderr,
+                 "renderer_init: already initialized (call renderer_quit first)\n");
+    return false;
+  }
+
   fpu_begin();
   RendererConfig config = {
       .resolution = {1800.0f, 1000.0f},
@@ -186,23 +205,25 @@ bool renderer_init() {
 
   camera_update(rendererConfig.camera);
 
-  sdlAssert(SDL_Init(SDL_INIT_VIDEO));
+  INIT_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL subsystem initialization");
 
   window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
-  sdlAssert(window != nullptr);
+  INIT_CHECK(window != nullptr, "window creation");
 
   // TODO - flag cameraRelative
   // if (rendererConfig.cameraEnabled)
   //   sdlAssert(SDL_SetWindowRelativeMouseMode(window, true));
 
   gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
-  sdlAssert(gpuDevice != nullptr);
+  INIT_CHECK(gpuDevice != nullptr, "GPU device creation");
 
-  sdlAssert(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
+  INIT_CHECK(SDL_ClaimWindowForGPUDevice(gpuDevice, window),
+             "claim window for GPU device");
 
-  sdlAssert(SDL_SetGPUSwapchainParameters(gpuDevice, window,
+  INIT_CHECK(SDL_SetGPUSwapchainParameters(gpuDevice, window,
                                           SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-                                          SDL_GPU_PRESENTMODE_VSYNC));
+                                          SDL_GPU_PRESENTMODE_VSYNC),
+             "swapchain configuration");
 
   IMGUI_CHECKVERSION();
   ImGui::CreateContext();
@@ -232,7 +253,8 @@ bool renderer_init() {
 
   std::vector<u8> vertexShaderContents =
     readFile(SHADER_BIN_DIR "/shader.vertex.spv");
-  assert(!vertexShaderContents.empty());
+  ASSERT(!vertexShaderContents.empty(),
+         SHADER_BIN_DIR "/shader.vertex.spv missing or empty");
 
   SDL_GPUShaderCreateInfo vertexShaderInfo = {};
   vertexShaderInfo.entrypoint = "main";
@@ -246,11 +268,12 @@ bool renderer_init() {
   vertexShaderInfo.num_uniform_buffers = 1;
 
   vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
-  sdlAssert(vertexShader != nullptr);
+  INIT_CHECK(vertexShader != nullptr, "vertex shader creation");
 
   std::vector<u8> fragmentShaderContents =
     readFile(SHADER_BIN_DIR "/shader.fragment.spv");
-  assert(!fragmentShaderContents.empty());
+  ASSERT(!fragmentShaderContents.empty(),
+         SHADER_BIN_DIR "/shader.fragment.spv missing or empty");
 
   SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
   fragmentShaderInfo.entrypoint = "main";
@@ -264,7 +287,7 @@ bool renderer_init() {
   fragmentShaderInfo.num_uniform_buffers = 1;
 
   fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
-  sdlAssert(fragmentShader != nullptr);
+  INIT_CHECK(fragmentShader != nullptr, "fragment shader creation");
 
   SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
   pipelineInfo.vertex_shader = vertexShader;
@@ -359,7 +382,7 @@ bool renderer_init() {
   pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
       
   pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
-  sdlAssert(pipeline != nullptr);
+  INIT_CHECK(pipeline != nullptr, "graphics pipeline creation");
 
   {
     SDL_GPUTextureCreateInfo textureInfo = {};
@@ -374,7 +397,7 @@ bool renderer_init() {
     int w, h, channels;
     u8 *pixels =
       stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
-    assert(pixels != nullptr);
+    ASSERT(pixels != nullptr, TEXTURE_BIN_DIR "/default.png failed to load");
     defer(stbi_image_free(pixels));
       
     u32 tWidth = static_cast<u32>(w);
@@ -384,18 +407,18 @@ bool renderer_init() {
     const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
 
     checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
-    sdlAssert(checkTexture != nullptr);
+    INIT_CHECK(checkTexture != nullptr, "default texture creation");
 
     
     SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {};
     transferToTextureInfo.size = TEXTURE_SIZE;
     transferToTextureInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
     SDL_GPUTransferBuffer* transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
-    sdlAssert(transferToTexture != nullptr);
+    INIT_CHECK(transferToTexture != nullptr, "texture transfer buffer creation");
 
     u8* mappedTransferToBytes = reinterpret_cast<u8*>(
 						      SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
-    sdlAssert(mappedTransferToBytes != nullptr);
+    INIT_CHECK(mappedTransferToBytes != nullptr, "texture transfer buffer map");
     std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
 
     SDL_GPUTextureTransferInfo textureTransferInfo = {};
@@ -415,13 +438,13 @@ bool renderer_init() {
     textureRegion.h = 512;
     textureRegion.d = 1;
     SDL_GPUCommandBuffer* initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-    sdlAssert(initCmd != nullptr);
+    INIT_CHECK(initCmd != nullptr, "texture upload command buffer acquisition");
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(initCmd);
-    sdlAssert(copyPass != nullptr);
+    INIT_CHECK(copyPass != nullptr, "texture copy pass begin");
     SDL_UploadToGPUTexture(copyPass, &textureTransferInfo,
                            &textureRegion, false);
     SDL_EndGPUCopyPass(copyPass);
-    sdlAssert(SDL_SubmitGPUCommandBuffer(initCmd));
+    INIT_CHECK(SDL_SubmitGPUCommandBuffer(initCmd), "texture upload submission");
 
     // make the sampler here
     SDL_GPUSamplerCreateInfo samplerInfo = {};
@@ -432,7 +455,7 @@ bool renderer_init() {
     samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
 
     sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
-    sdlAssert(sampler != nullptr);
+    INIT_CHECK(sampler != nullptr, "sampler creation");
     
     // bind texture and sampler here
     textureSamplerBindings[0].sampler = sampler;
@@ -457,7 +480,7 @@ bool renderer_init() {
 
     depthTexture =
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
-    sdlAssert(depthTexture);
+    INIT_CHECK(depthTexture != nullptr, "depth texture creation");
   
     frame.depthTargetInfo = {};
     frame.depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
@@ -530,8 +553,7 @@ bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
 }
 
 bool renderer_sync_scene(SceneHandle sh) {
-  if (!gpuDevice)
-    return false;
+  ASSERT(gpuDevice != nullptr, "renderer not initialized");
   Scene* scene = scene_get(sh);
 
   renderer_clear();
@@ -664,7 +686,7 @@ u64 scene_count() {
 }
 
 SceneHandle scene_at(u64 index) {
-  assert(index < sceneOrder.size());
+  ASSERT(index < sceneOrder.size(), "scene index out of bounds");
   return sceneOrder[index];
 }
 
@@ -675,7 +697,7 @@ u64 scene_mesh_count(SceneHandle sh) {
 
 MeshHandle scene_mesh_at(SceneHandle sh, u64 index) {
   Scene* scene = scene_get(sh);
-  assert(index < scene->meshOrder.size());
+  ASSERT(index < scene->meshOrder.size(), "mesh index out of bounds");
   return scene->meshOrder[index];
 }
 
@@ -690,12 +712,14 @@ InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index
   Scene* scene = scene_get(sh);
   mesh_get(scene, mesh);
   auto it = scene->objects.find(mesh);
-  assert(it != scene->objects.end());
-  assert(index < it->second.size());
+  ASSERT(it != scene->objects.end(), "mesh has no instances");
+  ASSERT(index < it->second.size(), "instance index out of bounds");
   return it->second[index].instanceHandle;
 }
 
 static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
+  ASSERT(frame.renderPass != nullptr && frame.commandBuffer != nullptr,
+         "draw called outside renderer_render_begin/end block");
   glm::mat4 view = glm::lookAtLH(
 				 rendererConfig.camera.position,
 				 rendererConfig.camera.position + rendererConfig.camera.forward, WORLD_UP);
@@ -722,22 +746,23 @@ static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
   SDL_GPUCopyPass* frameCopyPass = SDL_BeginGPUCopyPass(frame.commandBuffer);
   sdlAssert(frameCopyPass != nullptr);
 
-  std::vector<glm::mat4> modelMatrices;
-  modelMatrices.reserve(instances.size());
-  for (auto &t : instances) {
-    modelMatrices.push_back(transformToMat4(t.transform));
-  }
-
   const u32 requiredInstanceCopySize =
-    modelMatrices.size() * sizeof(glm::mat4);
-  assert(frame.instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE);
+    instances.size() * sizeof(glm::mat4);
+  ASSERT(frame.instanceBufferOffset + requiredInstanceCopySize
+	 <= INSTANCE_PREALLOCATED_SIZE,
+         "instance buffer overflow - raise INSTANCE_PREALLOCATED_SIZE");
 
   glm::mat4 *mappedToInstanceInTransfer =
     reinterpret_cast<glm::mat4*>(
 				 SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
   sdlAssert(mappedToInstanceInTransfer != nullptr);
-  std::memcpy((u8 *)mappedToInstanceInTransfer + frame.instanceBufferOffset,
-	      modelMatrices.data(), requiredInstanceCopySize);
+
+  glm::mat4* dst =
+    (glm::mat4*)((u8*)mappedToInstanceInTransfer +
+                 frame.instanceBufferOffset);
+  for (auto &t : instances) {
+    *dst++ = transformToMat4(t.transform);
+  }
 
   SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
   transferToInstanceBufferLocation.offset = frame.instanceBufferOffset;
@@ -761,11 +786,11 @@ static_internal void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
 
 
 void renderer_render_begin(void) {
-  if (!gpuDevice)
-    return;
+  ASSERT(gpuDevice != nullptr, "renderer not initialized");
 
   frame.instanceBufferOffset = 0;
   frame.commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+  sdlAssert(frame.commandBuffer != nullptr);
 
   sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
 						  frame.commandBuffer,
@@ -802,7 +827,10 @@ void ui_end() {
 void renderer_render_scene(SceneHandle sh) {
   Scene *scene = scene_get(sh);
   for (auto &[meshHandle, instances] : scene->objects) {
-    MeshRegion meshRegion = rendererState.meshRegions[meshHandle];
+    auto regionIt = rendererState.meshRegions.find(meshHandle);
+    ASSERT(regionIt != rendererState.meshRegions.end(),
+           "mesh never synced - call renderer_sync_scene first");
+    MeshRegion meshRegion = regionIt->second;
     draw_mesh(meshRegion, instances);
   }
 }
@@ -931,62 +959,60 @@ f32 input_mouse_wheel_y(void) {
 }
 
 bool input_mouse_down(MouseButton button) {
-  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
-    return false;
+  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
   return mouseState.down[button];
 }
 
 bool input_mouse_pressed(MouseButton button) {
-  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
-    return false;
+  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
   return mouseState.pressed[button];
 }
 
 bool input_mouse_released(MouseButton button) {
-  if (button <= 0 || button >= MOUSE_BUTTON_COUNT)
-    return false;
+  ASSERT(button > 0 && button < MOUSE_BUTTON_COUNT, "invalid mouse button");
   return mouseState.released[button];
 }
 
 void renderer_quit() {
-  if (!gpuDevice)
-    return;
+  if (gpuDevice) {
+    if (checkTexture)
+      SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
+    if (depthTexture)
+      SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
+    if (pipeline)
+      SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
+    if (fragmentShader)
+      SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
+    if (vertexShader)
+      SDL_ReleaseGPUShader(gpuDevice, vertexShader);
+    if (vertexBuffer)
+      SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+    if (indexBuffer)
+      SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
+    if (instanceBuffer)
+      SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
+    if (transferToInstanceBuffer)
+      SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
+    if (sampler)
+      SDL_ReleaseGPUSampler(gpuDevice, sampler);
+    SDL_DestroyGPUDevice(gpuDevice);
+  }
 
-  if (checkTexture)
-    SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
-  if (depthTexture)
-    SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
-  if (pipeline)
-    SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
-  if (fragmentShader)
-    SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
-  if (vertexShader)
-    SDL_ReleaseGPUShader(gpuDevice, vertexShader);
-  if (vertexBuffer)
-    SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
-  if (indexBuffer)
-    SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
-  if (instanceBuffer)
-    SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
-  if (transferToInstanceBuffer)
-    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
-  if (sampler)
-    SDL_ReleaseGPUSampler(gpuDevice, sampler);
+  if (ImGui::GetCurrentContext()) {
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.BackendPlatformUserData)
+      ImGui_ImplSDL3_Shutdown();
+    if (io.BackendRendererUserData)
+      ImGui_ImplSDLGPU3_Shutdown();
+    ImGui::DestroyContext();
+  }
 
-  ImGui_ImplSDL3_Shutdown();
-  ImGui_ImplSDLGPU3_Shutdown();
-  ImGui::DestroyContext();
-  
-  SDL_DestroyGPUDevice(gpuDevice);
   if (window)
     SDL_DestroyWindow(window);
   SDL_Quit();
 
   gpuDevice = nullptr;
   window = nullptr;
-  frame.swapchainTexture = nullptr;
-  frame.commandBuffer = nullptr;
-  frame.renderPass = nullptr;
   vertexBuffer = nullptr;
   indexBuffer = nullptr;
   instanceBuffer = nullptr;
@@ -997,6 +1023,29 @@ void renderer_quit() {
   sampler = nullptr;
   vertexShader = nullptr;
   fragmentShader = nullptr;
+  vertexBufferBinding[0].buffer = nullptr;
+  instanceBufferBinding[0].buffer = nullptr;
+  indexBufferBinding[0].buffer = nullptr;
+  textureSamplerBindings[0].texture = nullptr;
+  textureSamplerBindings[0].sampler = nullptr;
+  frame = RendererFrame{};
+
+  rendererState.vertices.clear();
+  rendererState.indices.clear();
+  rendererState.meshRegions.clear();
+  sceneRegistry.clear();
+  sceneOrder.clear();
+  uiSelectedItems.clear();
+  next_mesh_handle = 0;
+  next_instance_handle = 0;
+  next_scene_handle = 0;
+
+  shouldClose = false;
+  keyboardEventCount = 0;
+  mouseState = MouseState{};
+  memset(lastMouseDown, 0, sizeof(lastMouseDown));
+  memset(currentKeyboardState, 0, sizeof(currentKeyboardState));
+  memset(previousKeyboardState, 0, sizeof(previousKeyboardState));
 }
 
 void renderer_camera_move(f32 forward, f32 right, f32 up) {
@@ -1020,14 +1069,17 @@ void renderer_camera_update(void) {
 }
 
 bool input_key_down(SDL_Scancode key) {
+  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
   return currentKeyboardState[key];
 }
 
 bool input_key_pressed(SDL_Scancode key) {
+  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
   return currentKeyboardState[key] && !previousKeyboardState[key];
 }
 
 bool input_key_released(SDL_Scancode key) {
+  ASSERT(key >= 0 && key < SDL_SCANCODE_COUNT, "scancode out of range");
   return !currentKeyboardState[key] && previousKeyboardState[key];
 }
 
@@ -1036,7 +1088,7 @@ u64 input_keyboard_event_count(void) {
 }
 
 KeyboardEvent input_keyboard_event_at(u64 index) {
-  assert(index < keyboardEventCount);
+  ASSERT(index < keyboardEventCount, "keyboard event index out of bounds");
   return keyboardEventBuffer[index];
 }
 
@@ -1065,8 +1117,6 @@ bool ui_treenode(const char* label) {
 void ui_treepop() {
   ImGui::TreePop();
 }
-
-static_global std::unordered_set<std::string> uiSelectedItems;
 
 bool ui_selectable(const char* label) {
   std::string key(label);
