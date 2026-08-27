@@ -901,6 +901,15 @@ bool input_should_close() {
   return shouldClose;
 }
 
+void input_set_cursor_captured(bool captured) {
+  if (window)
+    SDL_SetWindowRelativeMouseMode(window, captured != false);
+}
+
+bool input_cursor_captured() {
+  return window && SDL_GetWindowRelativeMouseMode(window);
+}
+
 f32 input_mouse_x(void) {
   return input.mouse.x;
 }

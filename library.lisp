@@ -160,6 +160,11 @@
 
 (defcfun ("input_should_close" %input-should-close-p) :bool)
 
+(defcfun ("input_set_cursor_captured" %input-set-cursor-captured) :void
+  (captured :bool))
+
+(defcfun ("input_cursor_captured" %input-cursor-captured-p) :bool)
+
 (defcfun ("scene_count" %scene-count) :uint64)
 
 (defcfun ("scene_at" %scene-at) %scene-handle

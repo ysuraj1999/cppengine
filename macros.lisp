@@ -28,17 +28,75 @@
        (do-mesh-instances (,instance ,mesh)
          ,@body))))
 
-(defmacro do-keyboard-events ((event) &body body)
+(defmacro do-input-events ((device event) &body body)
+  "Unified discrete event iteration. DEVICE is :mouse or :keyboard.
+   Iterates the existing %input-*-event-count/at buffers - no
+   duplicated buffering or processing."
   (mu:with-gensyms (i)
-    `(dotimes (,i (%input-keyboard-event-count))
-       (let ((,event (%input-keyboard-event-at ,i)))
-         ,@body))))
+    (ecase device
+      (:mouse
+       `(dotimes (,i (%input-mouse-event-count))
+          (let ((,event (%input-mouse-event-at ,i)))
+            ,@body)))
+      (:keyboard
+       `(dotimes (,i (%input-keyboard-event-count))
+          (let ((,event (%input-keyboard-event-at ,i)))
+            ,@body))))))
 
-(defmacro do-mouse-events ((event) &body body)
-  (mu:with-gensyms (i)
-    `(dotimes (,i (%input-mouse-event-count))
-       (let ((,event (%input-mouse-event-at ,i)))
-         ,@body))))
+(defmacro input (device &rest args)
+  "Direct state query - expands at compile time to the existing %input-*
+   native functions. No runtime abstraction.
+     (input :mouse :position :x)         -> (%input-mouse-x)
+     (input :mouse :delta :x)            -> (%input-mouse-dx)
+     (input :mouse :wheel :y)            -> (%input-mouse-wheel-y)
+     (input :mouse :button :left :down)  -> (%input-mouse-down-p :left)
+     (input :keyboard :w :down)          -> (%input-key-down-p (key :w))
+     (input :cursor :captured-p)         -> (%input-cursor-captured-p)
+     (input :cursor :capture t)          -> (%input-set-cursor-captured t)"
+  (ecase device
+    (:mouse
+     (destructuring-bind (property &rest rest) args
+       (ecase property
+         (:position
+          (destructuring-bind (axis) rest
+            (unless (mouse-position-property-p axis)
+              (error "Axis not valid ~S" axis))
+            `(,(axis-to-position-function axis))))
+         (:delta
+          (destructuring-bind (axis) rest
+            (unless (mouse-delta-property-p axis)
+              (error "Axis not valid ~S" axis))
+            `(,(axis-to-delta-function axis))))
+         (:wheel
+          (destructuring-bind (axis) rest
+            (unless (mouse-wheel-property-p axis)
+              (error "Axis not valid ~S" axis))
+            `(,(axis-to-wheel-function axis))))
+         (:button
+          (destructuring-bind (button action) rest
+            (unless (mouse-button-p button)
+              (error "Button isn't valid: ~S" button))
+            (unless (mouse-action-p action)
+              (error "Button action isn't valid: ~S" action))
+            `(,(button-action-to-function action) ,button)))
+         (:captured-p
+          `(%input-cursor-captured-p))
+         (:capture
+          (destructuring-bind (flag) rest
+            `(%input-set-cursor-captured ,flag))))))
+    (:keyboard
+     (destructuring-bind (keyname action) args
+       (unless (mouse-action-p action)
+         (error "Key action isn't valid: ~S" action))
+       `(,(key-action-to-function action) (key ,keyname))))
+    (:cursor
+     (destructuring-bind (property &rest rest) args
+       (ecase property
+         (:captured-p
+          `(%input-cursor-captured-p))
+         (:capture
+          (destructuring-bind (flag) rest
+            `(%input-set-cursor-captured ,flag))))))))
 
 (defun mouse-button-p (pred)
   (member pred '(:left :middle :right :x1 :x2)))

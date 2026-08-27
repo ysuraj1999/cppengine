@@ -93,6 +93,9 @@ InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index
 void input_poll(void);
 bool input_should_close(void);
 
+void input_set_cursor_captured(bool captured);
+bool input_cursor_captured(void);
+
 f32 input_mouse_x(void);
 f32 input_mouse_y(void);
 f32 input_mouse_dx(void);

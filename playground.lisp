@@ -399,30 +399,37 @@ iterate while scenes are created or destroyed."
    input; other interactions on the stack are quiescent until targeted.")
 
 (defun push-interaction (it)
-  (push it *interaction-stack*))
+  (push it *interaction-stack*)
+  (funcall it :enter))
 
 (defun exit-interaction ()
   "Pop the top (current) interaction off the stack.
    Assumes the exiting interaction is the current one — it pops itself.
    Guarded so the bottom (fundamental) interaction is never popped."
   (when (> (length *interaction-stack*) 1)
-    (pop *interaction-stack*)))
+    (let ((it (first *interaction-stack*)))
+      (funcall it :exit)
+      (pop *interaction-stack*))))
 
 (defun current-interaction ()
   (first *interaction-stack*))
 
-(defun make-interaction (&key tick keyboard-event mouse-event)
+(defun make-interaction (&key tick keyboard-event mouse-event on-enter on-exit)
   "Build an interaction dispatch lambda (action &rest args) handling
-   :tick (dt), :keyboard-event (event), :mouse-event (event).
-   Unprovided callbacks default to no-ops."
+   :tick (dt), :keyboard-event (event), :mouse-event (event),
+   :enter, :exit. Unprovided callbacks default to no-ops."
   (let ((tick-fn   (or tick (lambda (dt) (declare (ignore dt)))))
         (key-fn    (or keyboard-event (lambda (event) (declare (ignore event)))))
-        (mouse-fn  (or mouse-event (lambda (event) (declare (ignore event))))))
+        (mouse-fn  (or mouse-event (lambda (event) (declare (ignore event)))))
+        (enter-fn  (or on-enter (lambda ())))
+        (exit-fn   (or on-exit (lambda ()))))
     (lambda (action &rest args)
       (ecase action
         (:tick           (apply tick-fn args))
         (:keyboard-event (apply key-fn args))
-        (:mouse-event    (apply mouse-fn args))))))
+        (:mouse-event    (apply mouse-fn args))
+        (:enter          (funcall enter-fn))
+        (:exit           (funcall exit-fn))))))
 
 (defun make-fundamental-2d-interaction ()
   "Return the bottom, ever-present 2D interaction. It owns the editor's
@@ -441,43 +448,39 @@ iterate while scenes are created or destroyed."
      :mouse-event nil)))
 
 (defun fps-interaction ()
-  "Return an FPS interaction dispatch lambda.
-   :tick dt — camera movement (polled state, dt arg).
-   :keyboard-event ev — Escape exits (pops itself).
-   :mouse-event ev — left-button press exits (pops itself)."
   (make-interaction
+   :on-enter (lambda () (input :cursor :capture t))
+   :on-exit (lambda () (input :cursor :capture nil))
    :tick
    (lambda (dt)
-     (with-mouse-state ((:wheel :x wheel-x)
-			(:wheel :y wheel-y)
-			(:delta :x dx)
-			(:delta :y dy))
-       (with-keyboard-state ((:w :down w-down)
-			     (:a :down a-down)
-			     (:s :down s-down)
-			     (:d :down d-down)
-			     (:space :down space-down)
-			     (:ctrl :down ctrl-down))
-	 (let ((move-speed (* *keyboard-sensitivity* dt))
-	       (look-speed (* *mouse-sensitivity* dt)))
-	   (%renderer-camera-rotate (* (- dx) look-speed) (* dy look-speed))
-	   (%renderer-camera-move
-	    (+ (if w-down move-speed 0.0)
-	       (if s-down (- move-speed) 0.0))
-	    (+ (if space-down move-speed 0.0)
-	       (if ctrl-down (- move-speed) 0.0))
-	    (+ (if a-down move-speed 0.0)
-	       (if d-down (- move-speed) 0.0)))))))
+     (let ((dx (input :mouse :delta :x))
+           (dy (input :mouse :delta :y))
+           (w-down (input :keyboard :w :down))
+           (a-down (input :keyboard :a :down))
+           (s-down (input :keyboard :s :down))
+           (d-down (input :keyboard :d :down))
+           (space-down (input :keyboard :space :down))
+           (ctrl-down (input :keyboard :ctrl :down)))
+       (let ((move-speed (* *keyboard-sensitivity* dt))
+             (look-speed (* *mouse-sensitivity* dt)))
+         (%renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
+         (%renderer-camera-move
+          (+ (if w-down move-speed 0.0)
+             (if s-down (- move-speed) 0.0))
+          (+ (if a-down (- move-speed) 0.0)
+             (if d-down move-speed 0.0))
+          (+ (if space-down move-speed 0.0)
+             (if ctrl-down (- move-speed) 0.0))))))
    :keyboard-event
    (lambda (ev)
      (when (and (keyboard-event-down ev)
-		(= (keyboard-event-scancode ev) (key :escape)))
+                (= (keyboard-event-scancode ev) (key :escape)))
        (exit-interaction)))
    :mouse-event
    (lambda (ev)
      (when (and (eq (mouse-event-type ev) :button)
-		(= (mouse-event-button ev) 1) ; MOUSE_BUTTON_LEFT
-		(mouse-event-down ev))
+                (= (mouse-event-button ev) 1) ; MOUSE_BUTTON_LEFT
+                (mouse-event-down ev))
        (exit-interaction)))))
 
 (defun editor ()
@@ -488,11 +491,13 @@ iterate while scenes are created or destroyed."
 	 (loop until (%input-should-close-p)
 	       doing
 		  (%input-poll)
-		  (let ((it (current-interaction)))
-		    (when it
-		      (funcall it :tick (%time-dt))
-		      (do-keyboard-events (ev) (funcall it :keyboard-event ev))
-		      (do-mouse-events (ev) (funcall it :mouse-event ev))))
+		  (let ((interaction (current-interaction)))
+		    (when interaction
+		      (funcall interaction :tick (%time-dt))
+		      (do-input-events (:keyboard ev)
+			(funcall interaction :keyboard-event ev))
+		      (do-input-events (:mouse ev)
+			(funcall interaction :mouse-event ev))))
 		  (%renderer-render-begin)
 		  (when *current-scene*
 		    (scene-render *current-scene*))
@@ -501,11 +506,13 @@ iterate while scenes are created or destroyed."
 		  (panel-instance-properties)
 		  (%ui-end)
 		  (%renderer-render-end))
-       (setf *interaction-stack* nil)
-       (setf *current-scene* nil
-	     *selection* nil)
-       (do-scenes(scene)
-	 (scene-destroy scene))
-       (%renderer-quit))))
+      (let ((it (current-interaction)))
+	(when it (funcall it :exit)))
+      (setf *interaction-stack* nil
+	    *current-scene* nil
+	    *selection* nil)
+      (do-scenes(scene)
+	(scene-destroy scene))
+      (%renderer-quit))))
 
 ;; (editor)
