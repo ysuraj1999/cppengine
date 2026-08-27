@@ -208,6 +208,51 @@
 (defcfun ("input_mouse_released" %input-mouse-released-p) :bool
   (button %mouse-button))
 
+(defcenum (%mouse-event-type :int)
+  (:motion 1)
+  (:button 2)
+  (:wheel 3))
+
+(defcstruct (%mouse-event :class cffi-mouse-event)
+    (type %mouse-event-type)
+  (button :int)
+  (down :bool)
+  (x :float)
+  (y :float)
+  (dx :float)
+  (dy :float)
+  (wheel-x :float)
+  (wheel-y :float))
+
+(defcfun ("input_mouse_event_count" %input-mouse-event-count) :uint64)
+
+(defcfun ("input_mouse_event_at" %input-mouse-event-at)
+    (:struct %mouse-event)
+  (index :uint64))
+
+(defstruct mouse-event
+  (type :motion :type symbol)
+  (button 0 :type (signed-byte 32))
+  (down nil :type boolean)
+  (x 0.0 :type single-float)
+  (y 0.0 :type single-float)
+  (dx 0.0 :type single-float)
+  (dy 0.0 :type single-float)
+  (wheel-x 0.0 :type single-float)
+  (wheel-y 0.0 :type single-float))
+
+(defmethod translate-from-foreign (ptr (type cffi-mouse-event))
+  (make-mouse-event
+   :type (foreign-slot-value ptr '(:struct %mouse-event) 'type)
+   :button (foreign-slot-value ptr '(:struct %mouse-event) 'button)
+   :down (foreign-slot-value ptr '(:struct %mouse-event) 'down)
+   :x (foreign-slot-value ptr '(:struct %mouse-event) 'x)
+   :y (foreign-slot-value ptr '(:struct %mouse-event) 'y)
+   :dx (foreign-slot-value ptr '(:struct %mouse-event) 'dx)
+   :dy (foreign-slot-value ptr '(:struct %mouse-event) 'dy)
+   :wheel-x (foreign-slot-value ptr '(:struct %mouse-event) 'wheel-x)
+   :wheel-y (foreign-slot-value ptr '(:struct %mouse-event) 'wheel-y)))
+
 (defcfun ("renderer_camera_move" %renderer-camera-move) :void
   (forward :float)
   (right :float)

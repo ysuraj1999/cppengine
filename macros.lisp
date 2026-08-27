@@ -34,6 +34,12 @@
        (let ((,event (%input-keyboard-event-at ,i)))
          ,@body))))
 
+(defmacro do-mouse-events ((event) &body body)
+  (mu:with-gensyms (i)
+    `(dotimes (,i (%input-mouse-event-count))
+       (let ((,event (%input-mouse-event-at ,i)))
+         ,@body))))
+
 (defun mouse-button-p (pred)
   (member pred '(:left :middle :right :x1 :x2)))
 

@@ -30,6 +30,23 @@ typedef enum MouseButton {
   MOUSE_BUTTON_COUNT = 6,   // index 0 unused
 } MouseButton;
 
+typedef enum MouseEventType {
+  MOUSE_EVENT_MOTION = 1,
+  MOUSE_EVENT_BUTTON,
+  MOUSE_EVENT_WHEEL,
+} MouseEventType;
+
+#define MOUSE_EVENT_CAPACITY 256
+
+typedef struct MouseEvent {
+  MouseEventType type;   // MOUSE_EVENT_*
+  int  button;           // MOUSE_BUTTON_* (button events, else 0)
+  bool down;             // true = press, false = release (button events)
+  f32  x, y;             // absolute cursor position (all events)
+  f32  dx, dy;           // motion delta (motion events)
+  f32  wheel_x, wheel_y; // wheel delta (wheel events)
+} MouseEvent;
+
 #define KEYBOARD_EVENT_CAPACITY 256
 
 typedef struct KeyboardEvent {
@@ -92,6 +109,9 @@ bool input_key_released(SDL_Scancode key);
 
 u64 input_keyboard_event_count(void);
 KeyboardEvent input_keyboard_event_at(u64 index);
+
+u64 input_mouse_event_count(void);
+MouseEvent input_mouse_event_at(u64 index);
 
 f32 time_dt(void);
 

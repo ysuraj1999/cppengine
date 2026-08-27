@@ -225,23 +225,22 @@ iterate while scenes are created or destroyed."
 	       (setf prefix-cursor node))
 	     (invalid-chord()
 	       (cancel-action)))
-      (values
-       (lambda (shortcut-list-expr function) ;; add shortcut
-	 (add-shortcut (shortcut shortcut-list-expr) function))
-       (lambda (chord) ;; chord feeder
-	 (if (equal chord (list (key :escape)))
-	     (cancel-action)
-	     (let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
-	       (if next-node
-		   (progn (move-cursor next-node) ;; when function found for the node, call it
-			  (when (prefix-node-function prefix-cursor)
-			    (funcall (prefix-node-function prefix-cursor))
-			    (reset-cursor)))
-		   (invalid-chord)))))
-       (lambda()
-	 (setf prefix-cursor prefix-root))
-       ;; Debug
-       (lambda () prefix-root)))))
+       (lambda (action &rest args)
+	 (ecase action
+	   (:add-shortcut (destructuring-bind (shortcut-list-expr function) args
+			    (add-shortcut (shortcut shortcut-list-expr) function)))
+	   (:feed (destructuring-bind (chord) args
+		    (if (equal chord (list (key :escape)))
+			(cancel-action)
+			(let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
+			  (if next-node
+			      (progn (move-cursor next-node)
+				     (when (prefix-node-function prefix-cursor)
+				       (funcall (prefix-node-function prefix-cursor))
+				       (reset-cursor)))
+			      (invalid-chord))))))
+	   (:reset (setf prefix-cursor prefix-root))
+	   (:debug-root prefix-root))))))
 	 
 (defparameter *modifier-keys* (mapcar #'key '(:left-ctrl :left-shift :left-alt :left-gui
 					      :right-ctrl :right-shift :right-alt :right-gui
@@ -270,38 +269,44 @@ iterate while scenes are created or destroyed."
 	       (funcall on-chord (sort chord-keys #'<))
 	       (setf chord-keys nil
 		     has-key nil))))
-      (values (lambda (key-event) ;; you feed keyboard-events into it
-	       (mu:with-members (scancode down repeat) key-event keyboard-event
-		 (if down
-		     (add-key scancode)
-		     (remove-key scancode))))
-	      (lambda()
-		(setf held-keys nil
-		      held-modifiers nil
-		      chord-keys nil 
-		      has-key nil))))))
+      (lambda(action &rest args)
+	(ecase action
+	  (:feed (destructuring-bind (key-event) args
+		   (mu:with-members (scancode down repeat) key-event keyboard-event
+		     (if down
+			 (add-key scancode)
+			 (remove-key scancode)))))
+	  (:reset (setf held-keys nil
+			held-modifiers nil
+			chord-keys nil 
+			has-key nil)))))))
 
-(defvar *prefix-machine*)
-(defvar *dispatch-chord*)
-(defvar *add-shortcut*)
-(defvar *debug-root*)
-(defvar *prefix-machine-reset*)
-(multiple-value-bind (add-shortcut dispatch-chord reset debug-root) (make-prefix-machine)
-  (setf *add-shortcut* add-shortcut
-	*dispatch-chord* dispatch-chord
-	*prefix-machine-reset* reset
-	*debug-root* debug-root))
-	
-(defvar *chord-feeder*)
-(defvar *chord-machine-reset*)
-(multiple-value-bind (chord-feeder reset) (make-chord-machine *dispatch-chord*)
-  (setf *chord-feeder* chord-feeder
-	*chord-machine-reset* reset))
-
-;; Adding shortcuts
-(funcall *add-shortcut* '((:ctrl :s)) #'(lambda()(print "Save")))
-(funcall *add-shortcut* '((:ctrl :k)) #'(lambda()(print "Kill")))
-(funcall *add-shortcut* '((:ctrl :p)) #'(lambda()(print "Print")))
+(defun make-command-input()
+  "Single dispatch lambda — mirrors chord/prefix machines.
+   Interfaces: :feed (keyboard-event), :reset, :add-shortcut (expr fn),
+               :debug-root, :toggle (&optional state), :enabled"
+  (let* ((prefix-machine (make-prefix-machine))
+	 (enabled t)
+	 (chord-machine (make-chord-machine
+			 (lambda (chord)
+			   (when enabled
+			     (funcall prefix-machine :feed chord))))))
+    (lambda (action &rest args)
+      (ecase action
+	(:feed (destructuring-bind (ev) args
+		 (when enabled
+		   (funcall chord-machine :feed ev))))
+	(:reset (funcall chord-machine :reset)
+	 (funcall prefix-machine :reset))
+	(:add-shortcut (destructuring-bind (expr fn) args
+			 (funcall prefix-machine :add-shortcut expr fn)))
+	(:debug-root (funcall prefix-machine :debug-root))
+	(:toggle (destructuring-bind (&optional (state nil state-supplied-p)) args
+		   (if state-supplied-p
+		       (setf enabled (if state t nil))
+		       (setf enabled (not enabled)))
+		   enabled))
+	(:enabled enabled)))))
 
 (defun clamp(val minimum maximum)
   (min (max val minimum) maximum))
@@ -387,54 +392,120 @@ iterate while scenes are created or destroyed."
 (defparameter *keyboard-sensitivity* 10.0)
 (defparameter *mouse-sensitivity* 10.0)
 
+(defvar *interaction-stack* '()
+  "Stack of active interactions; the head (car) is the current one.
+   An interaction is the interface `editor` talks to — fed tick and
+   keyboard/mouse events directly. The current interaction receives all
+   input; other interactions on the stack are quiescent until targeted.")
+
+(defun push-interaction (it)
+  (push it *interaction-stack*))
+
+(defun exit-interaction ()
+  "Pop the top (current) interaction off the stack.
+   Assumes the exiting interaction is the current one — it pops itself.
+   Guarded so the bottom (fundamental) interaction is never popped."
+  (when (> (length *interaction-stack*) 1)
+    (pop *interaction-stack*)))
+
+(defun current-interaction ()
+  (first *interaction-stack*))
+
+(defun make-interaction (&key tick keyboard-event mouse-event)
+  "Build an interaction dispatch lambda (action &rest args) handling
+   :tick (dt), :keyboard-event (event), :mouse-event (event).
+   Unprovided callbacks default to no-ops."
+  (let ((tick-fn   (or tick (lambda (dt) (declare (ignore dt)))))
+        (key-fn    (or keyboard-event (lambda (event) (declare (ignore event)))))
+        (mouse-fn  (or mouse-event (lambda (event) (declare (ignore event))))))
+    (lambda (action &rest args)
+      (ecase action
+        (:tick           (apply tick-fn args))
+        (:keyboard-event (apply key-fn args))
+        (:mouse-event    (apply mouse-fn args))))))
+
+(defun make-fundamental-2d-interaction ()
+  "Return the bottom, ever-present 2D interaction. It owns the editor's
+   command input (and thus its editor shortcuts). It has no tick logic
+   and ignores mouse events — it exists purely to own command input."
+  (let* ((command-input (make-command-input)))
+    ;; Editor shortcuts are owned by this interaction.
+    (funcall command-input :add-shortcut '((:ctrl :s)) (lambda () (print "Save")))
+    (funcall command-input :add-shortcut '((:ctrl :k)) (lambda () (print "Kill")))
+    (funcall command-input :add-shortcut '((:ctrl :p)) (lambda () (print "Print")))
+    (funcall command-input :add-shortcut '((:f))
+             (lambda () (push-interaction (fps-interaction))))
+    (make-interaction
+     :tick nil
+     :keyboard-event (lambda (ev) (funcall command-input :feed ev))
+     :mouse-event nil)))
+
+(defun fps-interaction ()
+  "Return an FPS interaction dispatch lambda.
+   :tick dt — camera movement (polled state, dt arg).
+   :keyboard-event ev — Escape exits (pops itself).
+   :mouse-event ev — left-button press exits (pops itself)."
+  (make-interaction
+   :tick
+   (lambda (dt)
+     (with-mouse-state ((:wheel :x wheel-x)
+			(:wheel :y wheel-y)
+			(:delta :x dx)
+			(:delta :y dy))
+       (with-keyboard-state ((:w :down w-down)
+			     (:a :down a-down)
+			     (:s :down s-down)
+			     (:d :down d-down)
+			     (:space :down space-down)
+			     (:ctrl :down ctrl-down))
+	 (let ((move-speed (* *keyboard-sensitivity* dt))
+	       (look-speed (* *mouse-sensitivity* dt)))
+	   (%renderer-camera-rotate (* (- dx) look-speed) (* dy look-speed))
+	   (%renderer-camera-move
+	    (+ (if w-down move-speed 0.0)
+	       (if s-down (- move-speed) 0.0))
+	    (+ (if space-down move-speed 0.0)
+	       (if ctrl-down (- move-speed) 0.0))
+	    (+ (if a-down move-speed 0.0)
+	       (if d-down (- move-speed) 0.0)))))))
+   :keyboard-event
+   (lambda (ev)
+     (when (and (keyboard-event-down ev)
+		(= (keyboard-event-scancode ev) (key :escape)))
+       (exit-interaction)))
+   :mouse-event
+   (lambda (ev)
+     (when (and (eq (mouse-event-type ev) :button)
+		(= (mouse-event-button ev) 1) ; MOUSE_BUTTON_LEFT
+		(mouse-event-down ev))
+       (exit-interaction)))))
 
 (defun editor ()
   (when (%renderer-init)
+    (setf *interaction-stack* nil)
+    (push-interaction (make-fundamental-2d-interaction))
     (unwind-protect
 	 (loop until (%input-should-close-p)
-	       for dt = (%time-dt)
-	       with feed-chord-machine = (make-chord-machine #'(lambda(x)(format t "Chord ~a~%" x)))
 	       doing
 		  (%input-poll)
-		  (do-keyboard-events (ev)
-		    (funcall *chord-feeder* ev))
-		  (with-mouse-state ((:wheel :x wheel-x)
-				     (:wheel :y wheel-y)
-				     (:delta :x dx)
-				     (:delta :y dy)
-				     (:button :middle :down middle-click))
-		    (with-keyboard-state ((:w :down w-down)
-					  (:a :down a-down)
-					  (:s :down s-down)
-					  (:d :down d-down)
-					  (:space :down space-down)
-					  (:ctrl :down ctrl-down))
-		      (let ((move-speed (* *keyboard-sensitivity* dt))
-			    (look-speed (* *mouse-sensitivity* dt)))
-			(%renderer-camera-rotate (* (- wheel-x) look-speed) (* wheel-y look-speed))
-			(%renderer-camera-move
-			 (+ (if w-down move-speed 0.0)
-			    (if s-down (- move-speed) 0.0))
-			 (if middle-click
-			     (* (- dx) look-speed)
-			     0.0)
-			 (if middle-click
-			     (* dy look-speed)
-			     0.0)))))
-		(%renderer-render-begin)
+		  (let ((it (current-interaction)))
+		    (when it
+		      (funcall it :tick (%time-dt))
+		      (do-keyboard-events (ev) (funcall it :keyboard-event ev))
+		      (do-mouse-events (ev) (funcall it :mouse-event ev))))
+		  (%renderer-render-begin)
 		  (when *current-scene*
 		    (scene-render *current-scene*))
 		  (%ui-begin)
 		  (panel-inspector)
 		  (panel-instance-properties)
 		  (%ui-end)
-		  (%renderer-render-end)))
-    (funcall *chord-machine-reset*)
-    (funcall *prefix-machine-reset*)
-    (setf *current-scene* nil
-	  *selection* nil)
-    (do-scenes(scene)
-      (scene-destroy scene))
-    (%renderer-quit)))
+		  (%renderer-render-end))
+       (setf *interaction-stack* nil)
+       (setf *current-scene* nil
+	     *selection* nil)
+       (do-scenes(scene)
+	 (scene-destroy scene))
+       (%renderer-quit))))
 
 ;; (editor)

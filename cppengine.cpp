@@ -231,20 +231,46 @@ struct Mouse {
   f32 wheel_x = 0, wheel_y = 0;
   bool down_current[MOUSE_BUTTON_COUNT] = {};
   bool down_previous[MOUSE_BUTTON_COUNT] = {};
+  MouseEvent buffer[MOUSE_EVENT_CAPACITY] = {};
+  u32 count = 0;
 
   void copy_current_state_into_previous_state() { memcpy(down_previous, down_current, sizeof(down_current)); }
   void clear_transient() { dx = 0; dy = 0; wheel_x = 0; wheel_y = 0; }
+  void clear_events() { count = 0; }
 
   void begin() {
     copy_current_state_into_previous_state();
     clear_transient();
+    clear_events();
   }
   void end() {}
 
-  void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) { x = nx; y = ny; dx += xrel; dy += yrel; }
-  void on_button_down(int button, f32 bx, f32 by, bool track) { x = bx; y = by; if (track && button > 0 && button < MOUSE_BUTTON_COUNT) down_current[button] = true; }
-  void on_button_up(int button, f32 bx, f32 by) { x = bx; y = by; if (button > 0 && button < MOUSE_BUTTON_COUNT) down_current[button] = false; }
-  void on_wheel(f32 wx, f32 wy) { wheel_x += wx; wheel_y += wy; }
+  void push_event(MouseEventType type, int button, bool down,
+                  f32 nx, f32 ny, f32 ndx, f32 ndy, f32 nwx, f32 nwy) {
+    if (count >= MOUSE_EVENT_CAPACITY) return;
+    buffer[count++] = {type, button, down, nx, ny, ndx, ndy, nwx, nwy};
+  }
+
+  void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
+    x = nx; y = ny; dx += xrel; dy += yrel;
+    push_event(MOUSE_EVENT_MOTION, 0, false, nx, ny, xrel, yrel, 0, 0);
+  }
+  void on_button_down(int button, f32 bx, f32 by, bool track) {
+    x = bx; y = by;
+    if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
+      down_current[button] = true;
+    push_event(MOUSE_EVENT_BUTTON, button, true, bx, by, 0, 0, 0, 0);
+  }
+  void on_button_up(int button, f32 bx, f32 by) {
+    x = bx; y = by;
+    if (button > 0 && button < MOUSE_BUTTON_COUNT)
+      down_current[button] = false;
+    push_event(MOUSE_EVENT_BUTTON, button, false, bx, by, 0, 0, 0, 0);
+  }
+  void on_wheel(f32 wx, f32 wy) {
+    wheel_x += wx; wheel_y += wy;
+    push_event(MOUSE_EVENT_WHEEL, 0, false, x, y, 0, 0, wx, wy);
+  }
 
   bool down(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b]; }
   bool pressed(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b] && !down_previous[b]; }
@@ -909,6 +935,15 @@ bool input_mouse_pressed(MouseButton button) {
 
 bool input_mouse_released(MouseButton button) {
   return input.mouse.released(button);
+}
+
+u64 input_mouse_event_count(void) {
+  return input.mouse.count;
+}
+
+MouseEvent input_mouse_event_at(u64 index) {
+  ASSERT(index < input.mouse.count, "mouse event index out of bounds");
+  return input.mouse.buffer[index];
 }
 
 void renderer_quit() {
