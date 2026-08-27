@@ -432,11 +432,7 @@ iterate while scenes are created or destroyed."
         (:exit           (funcall exit-fn))))))
 
 (defun make-fundamental-2d-interaction ()
-  "Return the bottom, ever-present 2D interaction. It owns the editor's
-   command input (and thus its editor shortcuts). It has no tick logic
-   and ignores mouse events — it exists purely to own command input."
   (let* ((command-input (make-command-input)))
-    ;; Editor shortcuts are owned by this interaction.
     (funcall command-input :add-shortcut '((:ctrl :s)) (lambda () (print "Save")))
     (funcall command-input :add-shortcut '((:ctrl :k)) (lambda () (print "Kill")))
     (funcall command-input :add-shortcut '((:ctrl :p)) (lambda () (print "Print")))
