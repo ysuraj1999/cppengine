@@ -1137,18 +1137,14 @@ void renderer_camera_rotate(f32 yaw, f32 pitch) {
   rendererConfig.camera.update();
 }
 
-void renderer_camera_look_at(InstanceHandle ih) {
-  for (SceneHandle sh : registry.order) {
-    Scene &scene = registry.get(sh);
-    auto it = scene.instanceIndex.find(ih);
-    if (it != scene.instanceIndex.end()) {
-      const Instance &inst = *it->second;
-      rendererConfig.camera.look_at(glm::vec3(inst.transform.px,
-                                              inst.transform.py,
-                                              inst.transform.pz));
-      return;
-    }
-  }
+void renderer_camera_look_at(SceneHandle sh, InstanceHandle ih) {
+  Scene &scene = registry.get(sh);
+  auto it = scene.instanceIndex.find(ih);
+  if (it == scene.instanceIndex.end()) return;
+  const Instance &inst = *it->second;
+  rendererConfig.camera.look_at(glm::vec3(inst.transform.px,
+                                          inst.transform.py,
+                                          inst.transform.pz));
 }
 
 bool input_key_down(Key key) {

@@ -383,7 +383,9 @@ iterate while scenes are created or destroyed."
                      (selection-get instance))
       (ui-on-click :left
         (selection-set instance)
-        (%renderer-camera-look-at (instance-handle instance)))
+        (%renderer-camera-look-at
+         (scene-handle (mesh-scene (instance-mesh instance)))
+         (instance-handle instance)))
     (ui-on-click :middle
       (scene-remove-instance (mesh-scene (instance-mesh instance)) instance))
     (ui-on-context

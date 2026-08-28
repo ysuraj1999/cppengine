@@ -345,6 +345,7 @@ item), run BODY, and close the popup."
   (pitch :float))
 
 (defcfun ("renderer_camera_look_at" %renderer-camera-look-at) :void
+  (sh %scene-handle)
   (ih %instance-handle))
 
 (defcfun ("input_key_down" %input-key-down-p) :bool
