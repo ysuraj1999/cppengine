@@ -16,33 +16,37 @@
     (sx :float) (sy :float) (sz :float)
     (rx :float) (ry :float) (rz :float))
 
-(defun key (name)
-  (ecase name
-    ;; Letters
+;; Mirrors the canonical C Key enum in cppengine.h; numeric values are
+;; carried through unchanged.
+(defcenum (%key :int)
     (:a 4) (:b 5) (:c 6) (:d 7) (:e 8) (:f 9) (:g 10) (:h 11)
-    (:i 12) (:j 13) (:k 14) (:l 15) (:m 16) (:n 17) (:o 18) (:p 19)
-    (:q 20) (:r 21) (:s 22) (:t 23) (:u 24) (:v 25) (:w 26) (:x 27)
-    (:y 28) (:z 29)
-    ;; Numbers
-    (:1 30) (:2 31) (:3 32) (:4 33) (:5 34)
-    (:6 35) (:7 36) (:8 37) (:9 38) (:0 39)
-    ;; Common
-    (:enter 40) (:escape 41) (:backspace 42) (:tab 43) (:space 44)
-    ;; Punctuation
-    (:minus 45) (:equals 46) (:left-bracket 47) (:right-bracket 48)
-    (:backslash 49) (:semicolon 51) (:apostrophe 52) (:grave 53)
-    (:comma 54) (:period 55) (:slash 56)
-    ;; Function keys
-    (:f1 58) (:f2 59) (:f3 60) (:f4 61) (:f5 62) (:f6 63)
-    (:f7 64) (:f8 65) (:f9 66) (:f10 67) (:f11 68) (:f12 69)
-    ;; Navigation
-    (:insert 73) (:home 74) (:page-up 75) (:delete 76) (:end 77)
-    (:page-down 78) (:right 79) (:left 80) (:down 81) (:up 82)
-    ;; Modifiers
-    (:left-ctrl 224) (:left-shift 225) (:left-alt 226) (:left-gui 227)
-    (:right-ctrl 228) (:right-shift 229) (:right-alt 230) (:right-gui 231)
-    ;; Convenience to combine righ and left modifiers, use left
-    (:ctrl 224) (:shift 225) (:alt 226) (:gui 227)))
+  (:i 12) (:j 13) (:k 14) (:l 15) (:m 16) (:n 17) (:o 18) (:p 19)
+  (:q 20) (:r 21) (:s 22) (:t 23) (:u 24) (:v 25) (:w 26) (:x 27)
+  (:y 28) (:z 29)
+  ;; Numbers
+  (:1 30) (:2 31) (:3 32) (:4 33) (:5 34)
+  (:6 35) (:7 36) (:8 37) (:9 38) (:0 39)
+  ;; Common
+  (:enter 40) (:escape 41) (:backspace 42) (:tab 43) (:space 44)
+  ;; Punctuation
+  (:minus 45) (:equals 46) (:left-bracket 47) (:right-bracket 48)
+  (:backslash 49) (:semicolon 51) (:apostrophe 52) (:grave 53)
+  (:comma 54) (:period 55) (:slash 56)
+  ;; Function keys
+  (:f1 58) (:f2 59) (:f3 60) (:f4 61) (:f5 62) (:f6 63)
+  (:f7 64) (:f8 65) (:f9 66) (:f10 67) (:f11 68) (:f12 69)
+  ;; Navigation
+  (:insert 73) (:home 74) (:page-up 75) (:delete 76) (:end 77)
+  (:page-down 78) (:right 79) (:left 80) (:down 81) (:up 82)
+  ;; Modifiers
+  (:left-ctrl 224) (:left-shift 225) (:left-alt 226) (:left-gui 227)
+  (:right-ctrl 228) (:right-shift 229) (:right-alt 230) (:right-gui 231)
+  ;; Convenience aliases that resolve to the left modifier
+  (:ctrl 224) (:shift 225) (:alt 226) (:gui 227))
+
+(defun key-code (key)
+  "Numeric Key code for KEY keyword; mirrors the canonical C Key enum."
+  (foreign-enum-value '%key key))
 
 (defcfun ("renderer_init" %renderer-init) :bool)
 
@@ -318,15 +322,15 @@ item), run BODY, and close the popup."
   (pitch :float))
 
 (defcfun ("input_key_down" %input-key-down-p) :bool
-  (key :int))
+  (key %key))
 (defun %input-key-up-p(key)
   (not (%input-key-down-p key)))
 
 (defcfun ("input_key_pressed" %input-key-pressed-p) :bool
-  (key :int))
+  (key %key))
 
 (defcfun ("input_key_released" %input-key-released-p) :bool
-  (key :int))
+  (key %key))
 
 (defcstruct (%keyboard-event :class cffi-keyboard-event)
     (scancode :int)

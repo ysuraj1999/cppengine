@@ -2,8 +2,6 @@
 #include "types.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
-#include <SDL3/SDL_scancode.h>
-#include <SDL3/SDL_gpu.h>
 #include <glm/glm.hpp>
 #include <glm/geometric.hpp>
 #include <glm/trigonometric.hpp>
@@ -43,7 +41,7 @@ int main(int argc, char* argv[]) {
 
     input_poll();
 
-    if (input_should_close() || input_key_down(SDL_SCANCODE_ESCAPE)) {
+    if (input_should_close() || input_key_down(KEY_ESCAPE)) {
       running = false;
     }
 
@@ -52,8 +50,8 @@ int main(int argc, char* argv[]) {
     const f32 dx = input_mouse_dx();
     const f32 dy = input_mouse_dy();
 
-    const bool w_down = input_key_down(SDL_SCANCODE_W);
-    const bool s_down = input_key_down(SDL_SCANCODE_S);
+    const bool w_down = input_key_down(KEY_W);
+    const bool s_down = input_key_down(KEY_S);
     const bool middle_click = input_mouse_down(MOUSE_BUTTON_MIDDLE);
 
     const f32 move_speed = rendererConfig.keyboardSensitivity * dt;

@@ -82,7 +82,7 @@
      (input :mouse :delta :x)            -> (%input-mouse-dx)
      (input :mouse :wheel :y)            -> (%input-mouse-wheel-y)
      (input :mouse :button :left :down)  -> (%input-mouse-down-p :left)
-     (input :keyboard :w :down)          -> (%input-key-down-p (key :w))
+       (input :keyboard :w :down)          -> (%input-key-down-p :w)
      (input :cursor :captured-p)         -> (%input-cursor-captured-p)
      (input :cursor :capture t)          -> (%input-set-cursor-captured t)"
   (ecase device
@@ -120,7 +120,7 @@
      (destructuring-bind (keyname action) args
        (unless (mouse-action-p action)
          (error "Key action isn't valid: ~S" action))
-       `(,(key-action-to-function action) (key ,keyname))))
+        `(,(key-action-to-function action) ,keyname)))
     (:cursor
      (destructuring-bind (property &rest rest) args
        (ecase property

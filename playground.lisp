@@ -200,10 +200,10 @@ iterate while scenes are created or destroyed."
   (let* ((prefix-root (make-prefix-node))
 	 (prefix-cursor prefix-root))
     (labels ((shortcut(keychords)
-	       "Convert ((:ctrl x) (:ctrl :f)) => ((9 224) (27 224))"
+	       "Convert ((:ctrl :f) (:ctrl :x)) => ((9 224) (27 224))"
 
 	       (mapcar #'(lambda(chord)
-			   (sort (mapcar #'key chord) #'<))
+			   (sort (mapcar #'key-code chord) #'<))
 		       keychords))
 	     (add-shortcut(shortcut function)
 	       "Attach ((0 1) (2 3)) with function"
@@ -230,7 +230,7 @@ iterate while scenes are created or destroyed."
 	  (:add-shortcut (destructuring-bind (shortcut-list-expr function) args
 			   (add-shortcut (shortcut shortcut-list-expr) function)))
 	  (:feed (destructuring-bind (chord) args
-		   (if (equal chord (list (key :escape)))
+		   (if (equal chord (list (key-code :escape)))
 		       (cancel-action)
 		       (let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
 			 (if next-node
@@ -242,7 +242,7 @@ iterate while scenes are created or destroyed."
 	  (:reset (setf prefix-cursor prefix-root))
 	  (:debug-root prefix-root))))))
 
-(defparameter *modifier-keys* (mapcar #'key '(:left-ctrl :left-shift :left-alt :left-gui
+(defparameter *modifier-keys* (mapcar #'key-code '(:left-ctrl :left-shift :left-alt :left-gui
 					      :right-ctrl :right-shift :right-alt :right-gui
 					      :ctrl :shift :alt :gui)))
 (defun modifier-key-p(scancode)
@@ -487,7 +487,7 @@ iterate while scenes are created or destroyed."
    :keyboard-event
    (lambda (ev)
      (when (and (keyboard-event-down ev)
-                (= (keyboard-event-scancode ev) (key :escape)))
+                (= (keyboard-event-scancode ev) (key-code :escape)))
        (exit-interaction)))
    :mouse-event
    (lambda (ev)

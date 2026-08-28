@@ -45,6 +45,107 @@ void fpu_end()
   std::fesetenv(&env);
 }
 
+// SDL boundary translation: SDL_Scancode -> canonical Key ABI value.
+static Key sdl_to_key(SDL_Scancode scancode) {
+  switch (scancode) {
+  case SDL_SCANCODE_A: return KEY_A;
+  case SDL_SCANCODE_B: return KEY_B;
+  case SDL_SCANCODE_C: return KEY_C;
+  case SDL_SCANCODE_D: return KEY_D;
+  case SDL_SCANCODE_E: return KEY_E;
+  case SDL_SCANCODE_F: return KEY_F;
+  case SDL_SCANCODE_G: return KEY_G;
+  case SDL_SCANCODE_H: return KEY_H;
+  case SDL_SCANCODE_I: return KEY_I;
+  case SDL_SCANCODE_J: return KEY_J;
+  case SDL_SCANCODE_K: return KEY_K;
+  case SDL_SCANCODE_L: return KEY_L;
+  case SDL_SCANCODE_M: return KEY_M;
+  case SDL_SCANCODE_N: return KEY_N;
+  case SDL_SCANCODE_O: return KEY_O;
+  case SDL_SCANCODE_P: return KEY_P;
+  case SDL_SCANCODE_Q: return KEY_Q;
+  case SDL_SCANCODE_R: return KEY_R;
+  case SDL_SCANCODE_S: return KEY_S;
+  case SDL_SCANCODE_T: return KEY_T;
+  case SDL_SCANCODE_U: return KEY_U;
+  case SDL_SCANCODE_V: return KEY_V;
+  case SDL_SCANCODE_W: return KEY_W;
+  case SDL_SCANCODE_X: return KEY_X;
+  case SDL_SCANCODE_Y: return KEY_Y;
+  case SDL_SCANCODE_Z: return KEY_Z;
+  case SDL_SCANCODE_1: return KEY_1;
+  case SDL_SCANCODE_2: return KEY_2;
+  case SDL_SCANCODE_3: return KEY_3;
+  case SDL_SCANCODE_4: return KEY_4;
+  case SDL_SCANCODE_5: return KEY_5;
+  case SDL_SCANCODE_6: return KEY_6;
+  case SDL_SCANCODE_7: return KEY_7;
+  case SDL_SCANCODE_8: return KEY_8;
+  case SDL_SCANCODE_9: return KEY_9;
+  case SDL_SCANCODE_0: return KEY_0;
+  case SDL_SCANCODE_RETURN: return KEY_ENTER;
+  case SDL_SCANCODE_ESCAPE: return KEY_ESCAPE;
+  case SDL_SCANCODE_BACKSPACE: return KEY_BACKSPACE;
+  case SDL_SCANCODE_TAB: return KEY_TAB;
+  case SDL_SCANCODE_SPACE: return KEY_SPACE;
+  case SDL_SCANCODE_MINUS: return KEY_MINUS;
+  case SDL_SCANCODE_EQUALS: return KEY_EQUALS;
+  case SDL_SCANCODE_LEFTBRACKET: return KEY_LEFT_BRACKET;
+  case SDL_SCANCODE_RIGHTBRACKET: return KEY_RIGHT_BRACKET;
+  case SDL_SCANCODE_BACKSLASH: return KEY_BACKSLASH;
+  case SDL_SCANCODE_SEMICOLON: return KEY_SEMICOLON;
+  case SDL_SCANCODE_APOSTROPHE: return KEY_APOSTROPHE;
+  case SDL_SCANCODE_GRAVE: return KEY_GRAVE;
+  case SDL_SCANCODE_COMMA: return KEY_COMMA;
+  case SDL_SCANCODE_PERIOD: return KEY_PERIOD;
+  case SDL_SCANCODE_SLASH: return KEY_SLASH;
+  case SDL_SCANCODE_F1: return KEY_F1;
+  case SDL_SCANCODE_F2: return KEY_F2;
+  case SDL_SCANCODE_F3: return KEY_F3;
+  case SDL_SCANCODE_F4: return KEY_F4;
+  case SDL_SCANCODE_F5: return KEY_F5;
+  case SDL_SCANCODE_F6: return KEY_F6;
+  case SDL_SCANCODE_F7: return KEY_F7;
+  case SDL_SCANCODE_F8: return KEY_F8;
+  case SDL_SCANCODE_F9: return KEY_F9;
+  case SDL_SCANCODE_F10: return KEY_F10;
+  case SDL_SCANCODE_F11: return KEY_F11;
+  case SDL_SCANCODE_F12: return KEY_F12;
+  case SDL_SCANCODE_INSERT: return KEY_INSERT;
+  case SDL_SCANCODE_HOME: return KEY_HOME;
+  case SDL_SCANCODE_PAGEUP: return KEY_PAGE_UP;
+  case SDL_SCANCODE_DELETE: return KEY_DELETE;
+  case SDL_SCANCODE_END: return KEY_END;
+  case SDL_SCANCODE_PAGEDOWN: return KEY_PAGE_DOWN;
+  case SDL_SCANCODE_RIGHT: return KEY_RIGHT;
+  case SDL_SCANCODE_LEFT: return KEY_LEFT;
+  case SDL_SCANCODE_DOWN: return KEY_DOWN;
+  case SDL_SCANCODE_UP: return KEY_UP;
+  case SDL_SCANCODE_LCTRL: return KEY_LEFT_CTRL;
+  case SDL_SCANCODE_LSHIFT: return KEY_LEFT_SHIFT;
+  case SDL_SCANCODE_LALT: return KEY_LEFT_ALT;
+  case SDL_SCANCODE_LGUI: return KEY_LEFT_GUI;
+  case SDL_SCANCODE_RCTRL: return KEY_RIGHT_CTRL;
+  case SDL_SCANCODE_RSHIFT: return KEY_RIGHT_SHIFT;
+  case SDL_SCANCODE_RALT: return KEY_RIGHT_ALT;
+  case SDL_SCANCODE_RGUI: return KEY_RIGHT_GUI;
+  default: return KEY_UNKNOWN;
+  }
+}
+
+// SDL boundary translation: SDL button number -> canonical MouseButton value.
+static MouseButton sdl_to_mouse_button(Uint8 button) {
+  switch (button) {
+  case SDL_BUTTON_LEFT:   return MOUSE_BUTTON_LEFT;
+  case SDL_BUTTON_MIDDLE: return MOUSE_BUTTON_MIDDLE;
+  case SDL_BUTTON_RIGHT:  return MOUSE_BUTTON_RIGHT;
+  case SDL_BUTTON_X1:     return MOUSE_BUTTON_X1;
+  case SDL_BUTTON_X2:     return MOUSE_BUTTON_X2;
+  default:                return (MouseButton)button;
+  }
+}
+
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
@@ -198,8 +299,8 @@ struct RendererFrame {
 };
 
 struct Keyboard {
-  bool current[SDL_SCANCODE_COUNT] = {};
-  bool previous[SDL_SCANCODE_COUNT] = {};
+  bool current[KEY_COUNT] = {};
+  bool previous[KEY_COUNT] = {};
   KeyboardEvent buffer[KEYBOARD_EVENT_CAPACITY] = {};
   u32 count = 0;
 
@@ -212,17 +313,26 @@ struct Keyboard {
     copy_current_state_into_previous_state();
     clear_events();
   }
-  void end() { memcpy(current, SDL_GetKeyboardState(nullptr), sizeof(current)); }
+  void end() {
+    const bool *sdl_state = SDL_GetKeyboardState(nullptr);
+    memset(current, 0, sizeof(current));
+    for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
+      if (sdl_state[i]) {
+        Key k = sdl_to_key((SDL_Scancode)i);
+        if (k != KEY_UNKNOWN)
+          current[k] = true;
+      }
+  }
   void clear_current_state() { memset(current, 0, sizeof(current)); }
 
-  void push_event(int scancode, bool down, bool repeat) {
+  void push_event(Key key, bool down, bool repeat) {
     if (count >= KEYBOARD_EVENT_CAPACITY) return;
-    buffer[count++] = {scancode, down, repeat};
+    buffer[count++] = {(int)key, down, repeat};
   }
 
-  bool down(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return current[k]; }
-  bool pressed(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return current[k] && !previous[k]; }
-  bool released(SDL_Scancode k) const { ASSERT(k >= 0 && k < SDL_SCANCODE_COUNT, "scancode out of range"); return !current[k] && previous[k]; }
+  bool down(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k]; }
+  bool pressed(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k] && !previous[k]; }
+  bool released(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return !current[k] && previous[k]; }
 };
 
 struct Mouse {
@@ -255,17 +365,17 @@ struct Mouse {
     x = nx; y = ny; dx += xrel; dy += yrel;
     push_event(MOUSE_EVENT_MOTION, 0, false, nx, ny, xrel, yrel, 0, 0);
   }
-  void on_button_down(int button, f32 bx, f32 by, bool track) {
+  void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
     x = bx; y = by;
     if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
       down_current[button] = true;
-    push_event(MOUSE_EVENT_BUTTON, button, true, bx, by, 0, 0, 0, 0);
+    push_event(MOUSE_EVENT_BUTTON, (int)button, true, bx, by, 0, 0, 0, 0);
   }
-  void on_button_up(int button, f32 bx, f32 by) {
+  void on_button_up(MouseButton button, f32 bx, f32 by) {
     x = bx; y = by;
     if (button > 0 && button < MOUSE_BUTTON_COUNT)
       down_current[button] = false;
-    push_event(MOUSE_EVENT_BUTTON, button, false, bx, by, 0, 0, 0, 0);
+    push_event(MOUSE_EVENT_BUTTON, (int)button, false, bx, by, 0, 0, 0, 0);
   }
   void on_wheel(f32 wx, f32 wy) {
     wheel_x += wx; wheel_y += wy;
@@ -864,12 +974,14 @@ void Input::poll() {
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-      mouse.on_button_down(event.button.button, event.button.x, event.button.y,
+      mouse.on_button_down(sdl_to_mouse_button(event.button.button),
+                           event.button.x, event.button.y,
                            !io.WantCaptureMouse);
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP: {
-      mouse.on_button_up(event.button.button, event.button.x, event.button.y);
+      mouse.on_button_up(sdl_to_mouse_button(event.button.button),
+                         event.button.x, event.button.y);
       break;
     }
     case SDL_EVENT_MOUSE_WHEEL: {
@@ -880,7 +992,7 @@ void Input::poll() {
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
       if (!io.WantCaptureKeyboard)
-        keyboard.push_event((int)event.key.scancode,
+        keyboard.push_event(sdl_to_key(event.key.scancode),
                             event.type == SDL_EVENT_KEY_DOWN,
                             event.key.repeat);
       break;
@@ -1023,15 +1135,15 @@ void renderer_camera_rotate(f32 yaw, f32 pitch) {
   rendererConfig.camera.update();
 }
 
-bool input_key_down(SDL_Scancode key) {
+bool input_key_down(Key key) {
   return input.keyboard.down(key);
 }
 
-bool input_key_pressed(SDL_Scancode key) {
+bool input_key_pressed(Key key) {
   return input.keyboard.pressed(key);
 }
 
-bool input_key_released(SDL_Scancode key) {
+bool input_key_released(Key key) {
   return input.keyboard.released(key);
 }
 

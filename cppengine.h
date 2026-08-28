@@ -1,7 +1,6 @@
 #pragma once
 #include <stdint.h>
 #include <stdbool.h>
-#include <SDL3/SDL_scancode.h>
 
 typedef uint64_t u64;
 typedef float f32;
@@ -15,11 +14,41 @@ typedef struct Transform {
   f32 rx; f32 ry; f32 rz;
 } Transform;
 
-// #define SDL_BUTTON_LEFT 1
-// #define SDL_BUTTON_MIDDLE 2
-// #define SDL_BUTTON_RIGHT 3
-// #define SDL_BUTTON_X1 4
-// #define SDL_BUTTON_X2 5
+typedef enum Key {
+  KEY_UNKNOWN = 0,           // not a supported key; index 0 unused
+  // Letters
+  KEY_A = 4, KEY_B = 5, KEY_C = 6, KEY_D = 7, KEY_E = 8, KEY_F = 9,
+  KEY_G = 10, KEY_H = 11, KEY_I = 12, KEY_J = 13, KEY_K = 14,
+  KEY_L = 15, KEY_M = 16, KEY_N = 17, KEY_O = 18, KEY_P = 19,
+  KEY_Q = 20, KEY_R = 21, KEY_S = 22, KEY_T = 23, KEY_U = 24,
+  KEY_V = 25, KEY_W = 26, KEY_X = 27, KEY_Y = 28, KEY_Z = 29,
+  // Numbers
+  KEY_1 = 30, KEY_2 = 31, KEY_3 = 32, KEY_4 = 33, KEY_5 = 34,
+  KEY_6 = 35, KEY_7 = 36, KEY_8 = 37, KEY_9 = 38, KEY_0 = 39,
+  // Common
+  KEY_ENTER = 40, KEY_ESCAPE = 41, KEY_BACKSPACE = 42, KEY_TAB = 43,
+  KEY_SPACE = 44,
+  // Punctuation
+  KEY_MINUS = 45, KEY_EQUALS = 46, KEY_LEFT_BRACKET = 47,
+  KEY_RIGHT_BRACKET = 48, KEY_BACKSLASH = 49, KEY_SEMICOLON = 51,
+  KEY_APOSTROPHE = 52, KEY_GRAVE = 53, KEY_COMMA = 54, KEY_PERIOD = 55,
+  KEY_SLASH = 56,
+  // Function keys
+  KEY_F1 = 58, KEY_F2 = 59, KEY_F3 = 60, KEY_F4 = 61, KEY_F5 = 62,
+  KEY_F6 = 63, KEY_F7 = 64, KEY_F8 = 65, KEY_F9 = 66, KEY_F10 = 67,
+  KEY_F11 = 68, KEY_F12 = 69,
+  // Navigation
+  KEY_INSERT = 73, KEY_HOME = 74, KEY_PAGE_UP = 75, KEY_DELETE = 76,
+  KEY_END = 77, KEY_PAGE_DOWN = 78, KEY_RIGHT = 79, KEY_LEFT = 80,
+  KEY_DOWN = 81, KEY_UP = 82,
+  // Modifiers
+  KEY_LEFT_CTRL = 224, KEY_LEFT_SHIFT = 225, KEY_LEFT_ALT = 226,
+  KEY_LEFT_GUI = 227, KEY_RIGHT_CTRL = 228, KEY_RIGHT_SHIFT = 229,
+  KEY_RIGHT_ALT = 230, KEY_RIGHT_GUI = 231,
+  // Convenience aliases that resolve to the left modifier
+  KEY_CTRL = 224, KEY_SHIFT = 225, KEY_ALT = 226, KEY_GUI = 227,
+  KEY_COUNT = 232,          // one past KEY_RIGHT_GUI; index 0 unused
+} Key;
 
 typedef enum MouseButton {
   MOUSE_BUTTON_LEFT = 1,
@@ -50,7 +79,7 @@ typedef struct MouseEvent {
 #define KEYBOARD_EVENT_CAPACITY 256
 
 typedef struct KeyboardEvent {
-  int scancode;  // SDL_Scancode value
+    int scancode;  // Key value
   bool down;     // true = KEYDOWN, false = KEYUP
   bool repeat;   // OS auto-repeat flag (KEYDOWN only)
 } KeyboardEvent;
@@ -106,9 +135,9 @@ bool input_mouse_down(MouseButton button);
 bool input_mouse_pressed(MouseButton button);
 bool input_mouse_released(MouseButton button);
 
-bool input_key_down(SDL_Scancode key);
-bool input_key_pressed(SDL_Scancode key);
-bool input_key_released(SDL_Scancode key);
+bool input_key_down(Key key);
+bool input_key_pressed(Key key);
+bool input_key_released(Key key);
 
 u64 input_keyboard_event_count(void);
 KeyboardEvent input_keyboard_event_at(u64 index);
