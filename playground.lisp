@@ -375,17 +375,20 @@ iterate while scenes are created or destroyed."
       (do-mesh-instances (instance mesh)
         (ui-instance instance)))))
 
+(defun look-at-instance (instance)
+  "Aim the camera at INSTANCE's position."
+  (mu:with-members (px py pz) (instance-transform instance) transform
+    (%renderer-camera-look-at px py pz)))
+
 (defun ui-instance (instance)
-    "Instance selectable. Left click selects and points the camera at the
-  instance, middle click deletes."
-    (with-ui-id (instance-handle instance)
-      (ui-selectable (instance-alias instance)
-                     (selection-get instance))
-      (ui-on-click :left
-        (selection-set instance)
-        (%renderer-camera-look-at
-         (scene-handle (mesh-scene (instance-mesh instance)))
-         (instance-handle instance)))
+  "Instance selectable. Left click selects and points the camera at the
+instance, middle click deletes."
+  (with-ui-id (instance-handle instance)
+    (ui-selectable (instance-alias instance)
+                   (selection-get instance))
+    (ui-on-click :left
+      (selection-set instance)
+      (look-at-instance instance))
     (ui-on-click :middle
       (scene-remove-instance (mesh-scene (instance-mesh instance)) instance))
     (ui-on-context
