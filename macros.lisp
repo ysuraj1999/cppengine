@@ -9,6 +9,42 @@
          (when ,ok
            (%renderer-quit))))))
 
+(defmacro with-ui-window (windowstr &body body)
+  "Begin a UI window titled WINDOWSTR, run BODY, and end the window.
+   The end runs even on a non-local exit."
+  `(progn
+     (%ui-begin-window ,windowstr)
+     (unwind-protect
+          (progn ,@body)
+       (%ui-end-window))))
+
+(defmacro with-ui-id (id &body body)
+  "Push ID onto the UI id stack, run BODY, and pop it.  The pop runs
+   even on a non-local exit."
+  `(progn
+     (%ui-push-id ,id)
+     (unwind-protect
+          (progn ,@body)
+       (%ui-pop-id))))
+
+(defmacro with-ui-treenode ((nodestring nodehandle &optional open-sym) &body body)
+  "Push NODEHANDLE onto the UI id stack, submit a tree node labeled
+   NODESTRING, run BODY, and pop the id.  BODY runs every frame so click
+   and context handlers stay attached even while the node is closed;
+   guard children with OPEN-SYM, bound to whether the node is open.  When
+   the node is open, the tree pop runs before the id pop."
+  (mu:with-gensyms (open)
+    (let ((open-sym (or open-sym open)))
+      `(progn
+         (%ui-push-id ,nodehandle)
+         (unwind-protect
+              (let ((,open-sym (%ui-treenode ,nodestring)))
+                (unwind-protect
+                     (progn ,@body)
+                  (when ,open-sym
+                    (%ui-treepop))))
+           (%ui-pop-id))))))
+
 (defmacro do-scenes ((scene) &body body)
   (mu:with-gensyms (handle)
     `(map nil (lambda (,handle)

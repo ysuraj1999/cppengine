@@ -329,13 +329,67 @@ iterate while scenes are created or destroyed."
 
 (defun panel-instance-properties ()
   (when *selection*
-    (%ui-begin-window "Instance Properties")
-    (let ((tr (instance-transform *selection*)))
-      (mu:with-members (px py pz rx ry rz sx sy sz) tr transform
-	(%ui-text (format nil "Position: ~,2f ~,2f ~,2f" px py pz))
-	(%ui-text (format nil "Rotation: ~,2f ~,2f ~,2f" rx ry rz))
-	(%ui-text (format nil "Scale: ~,2f ~,2f ~,2f" sx sy sz))))
-    (%ui-end-window)))
+    (with-ui-window "Instance Properties"
+      (let ((tr (instance-transform *selection*)))
+        (mu:with-members (px py pz rx ry rz sx sy sz) tr transform
+	  (%ui-text (format nil "Position: ~,2f ~,2f ~,2f" px py pz))
+	  (%ui-text (format nil "Rotation: ~,2f ~,2f ~,2f" rx ry rz))
+	  (%ui-text (format nil "Scale: ~,2f ~,2f ~,2f" sx sy sz)))))))
+
+(defun ui-scene (scene)
+  "Scene tree node. Double click loads an OBJ into SCENE."
+  (with-ui-treenode ((format nil "Scene ~a" (scene-handle scene))
+                     (scene-handle scene)
+                     scene-open)
+    (let ((delete-scene nil))
+      (ui-on-double-click :left
+        (let ((path (file-picker)))
+          (when path
+            (scene-load-obj scene path))))
+      (ui-on-context
+        (ui-menu-item "Push Scene"
+          (setf *current-scene* scene)
+          (scene-sync scene))
+        (ui-menu-item "Instantiate All Meshes"
+          (do-scene-meshes (mesh scene)
+            (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
+        (ui-menu-item "Load OBJ"
+          (let ((path (file-picker)))
+            (when path
+              (scene-load-obj scene path))))
+        (ui-menu-item "Delete Scene"
+          (setf delete-scene scene)))
+      (when scene-open
+        (do-scene-meshes (mesh scene)
+          (ui-mesh mesh)))
+      delete-scene)))
+
+(defun ui-mesh (mesh)
+  "Mesh tree node. Double click adds a new instance of MESH."
+  (with-ui-treenode ((mesh-alias mesh)
+                     (mesh-handle mesh)
+                     mesh-open)
+    (ui-on-double-click :left
+      (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+    (ui-on-context
+      (ui-menu-item "Instantiate"
+        (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
+    (when mesh-open
+      (do-mesh-instances (instance mesh)
+        (ui-instance instance)))))
+
+(defun ui-instance (instance)
+  "Instance selectable. Left click selects, middle click deletes."
+  (with-ui-id (instance-handle instance)
+    (ui-selectable (instance-alias instance)
+                   (selection-get instance))
+    (ui-on-click :left
+      (selection-set instance))
+    (ui-on-click :middle
+      (scene-remove-instance (mesh-scene (instance-mesh instance)) instance))
+    (ui-on-context
+      (ui-menu-item "Delete"
+        (scene-remove-instance (mesh-scene (instance-mesh instance)) instance)))))
 
 (defun panel-inspector ()
   (%ui-begin-window "Inspector")
