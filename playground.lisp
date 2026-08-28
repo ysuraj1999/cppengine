@@ -271,11 +271,12 @@ iterate while scenes are created or destroyed."
 		     has-key nil))))
       (lambda(action &rest args)
 	(ecase action
-	  (:feed (destructuring-bind (key-event) args
-		   (mu:with-members (scancode down repeat) key-event keyboard-event
-		     (if down
-			 (add-key scancode)
-			 (remove-key scancode)))))
+	  (:feed (destructuring-bind (input-event) args
+		   (mu:with-members (type key down) input-event input-event
+		     (case type
+		       (:key-down (add-key (key-code key)))
+		       (:key-up (remove-key (key-code key)))
+		       (otherwise nil)))))
 	  (:reset (setf held-keys nil
 			held-modifiers nil
 			chord-keys nil 
@@ -283,7 +284,7 @@ iterate while scenes are created or destroyed."
 
 (defun make-command-input()
   "Single dispatch lambda — mirrors chord/prefix machines.
-   Interfaces: :feed (keyboard-event), :reset, :add-shortcut (expr fn),
+     Interfaces: :feed (input-event), :reset, :add-shortcut (expr fn),
                :debug-root, :toggle (&optional state), :enabled"
   (let* ((prefix-machine (make-prefix-machine))
 	 (enabled t)
@@ -426,22 +427,20 @@ iterate while scenes are created or destroyed."
 (defun current-interaction ()
   (first *interaction-stack*))
 
-(defun make-interaction (&key tick keyboard-event mouse-event on-enter on-exit)
+(defun make-interaction (&key tick event on-enter on-exit)
   "Build an interaction dispatch lambda (action &rest args) handling
-   :tick (dt), :keyboard-event (event), :mouse-event (event),
-   :enter, :exit. Unprovided callbacks default to no-ops."
+   :tick (dt), :event (input-event), :enter, :exit. Unprovided
+   callbacks default to no-ops."
   (let ((tick-fn   (or tick (lambda (dt) (declare (ignore dt)))))
-        (key-fn    (or keyboard-event (lambda (event) (declare (ignore event)))))
-        (mouse-fn  (or mouse-event (lambda (event) (declare (ignore event)))))
+        (event-fn  (or event (lambda (event) (declare (ignore event)))))
         (enter-fn  (or on-enter (lambda ())))
         (exit-fn   (or on-exit (lambda ()))))
     (lambda (action &rest args)
       (ecase action
-        (:tick           (apply tick-fn args))
-        (:keyboard-event (apply key-fn args))
-        (:mouse-event    (apply mouse-fn args))
-        (:enter          (funcall enter-fn))
-        (:exit           (funcall exit-fn))))))
+        (:tick  (apply tick-fn args))
+        (:event (apply event-fn args))
+        (:enter (funcall enter-fn))
+        (:exit  (funcall exit-fn))))))
 
 (defun make-fundamental-2d-interaction ()
   (let* ((command-input (make-command-input)))
@@ -450,10 +449,9 @@ iterate while scenes are created or destroyed."
     (funcall command-input :add-shortcut '((:ctrl :p)) (lambda () (print "Print")))
     (funcall command-input :add-shortcut '((:f))
              (lambda () (push-interaction (fps-interaction))))
-    (make-interaction
-     :tick nil
-     :keyboard-event (lambda (ev) (funcall command-input :feed ev))
-     :mouse-event nil)))
+      (make-interaction
+       :tick nil
+       :event (lambda (ev) (funcall command-input :feed ev)))))
 
 (defun fps-interaction ()
   (make-interaction
@@ -484,17 +482,14 @@ iterate while scenes are created or destroyed."
              (if d-down move-speed 0.0))
           (+ (if space-down move-speed 0.0)
              (if ctrl-down (- move-speed) 0.0))))))
-   :keyboard-event
-   (lambda (ev)
-     (when (and (keyboard-event-down ev)
-                (= (keyboard-event-scancode ev) (key-code :escape)))
-       (exit-interaction)))
-   :mouse-event
-   (lambda (ev)
-     (when (and (eq (mouse-event-type ev) :button)
-                (= (mouse-event-button ev) 1) ; MOUSE_BUTTON_LEFT
-                (mouse-event-down ev))
-       (exit-interaction)))))
+    :event
+    (lambda (ev)
+      (mu:with-members (type key button) ev input-event
+        (when (or (and (eq type :key-down)
+                         (eq key :escape))
+                  (and (eq type :mouse-button-down)
+                         (eq button :left)))
+          (exit-interaction))))))
 
 (defun cubic-bezier (x1 y1 x2 y2 input)
   (labels ((bezier-value (p0 p1 p2 p3 parameter)
@@ -531,10 +526,8 @@ iterate while scenes are created or destroyed."
 		  (let ((interaction (current-interaction)))
 		    (when interaction
 		      (funcall interaction :tick (%time-dt))
-		      (do-input-events (:keyboard ev)
-			(funcall interaction :keyboard-event ev))
-		      (do-input-events (:mouse ev)
-			(funcall interaction :mouse-event ev))))
+		      (do-input-events (ev)
+			(funcall interaction :event ev))))
 		  (%renderer-render-begin)
 		  (when *current-scene*
 		    (scene-render *current-scene*))

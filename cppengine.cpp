@@ -301,18 +301,12 @@ struct RendererFrame {
 struct Keyboard {
   bool current[KEY_COUNT] = {};
   bool previous[KEY_COUNT] = {};
-  KeyboardEvent buffer[KEYBOARD_EVENT_CAPACITY] = {};
-  u32 count = 0;
 
   void copy_current_state_into_previous_state() {
     memcpy(previous, current, sizeof(current));
   }
-  void clear_events() { count = 0; }
 
-  void begin() {
-    copy_current_state_into_previous_state();
-    clear_events();
-  }
+  void begin() { copy_current_state_into_previous_state(); }
   void end() {
     const bool *sdl_state = SDL_GetKeyboardState(nullptr);
     memset(current, 0, sizeof(current));
@@ -325,11 +319,6 @@ struct Keyboard {
   }
   void clear_current_state() { memset(current, 0, sizeof(current)); }
 
-  void push_event(Key key, bool down, bool repeat) {
-    if (count >= KEYBOARD_EVENT_CAPACITY) return;
-    buffer[count++] = {(int)key, down, repeat};
-  }
-
   bool down(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k]; }
   bool pressed(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k] && !previous[k]; }
   bool released(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return !current[k] && previous[k]; }
@@ -341,45 +330,31 @@ struct Mouse {
   f32 wheel_x = 0, wheel_y = 0;
   bool down_current[MOUSE_BUTTON_COUNT] = {};
   bool down_previous[MOUSE_BUTTON_COUNT] = {};
-  MouseEvent buffer[MOUSE_EVENT_CAPACITY] = {};
-  u32 count = 0;
 
   void copy_current_state_into_previous_state() { memcpy(down_previous, down_current, sizeof(down_current)); }
   void clear_transient() { dx = 0; dy = 0; wheel_x = 0; wheel_y = 0; }
-  void clear_events() { count = 0; }
 
   void begin() {
     copy_current_state_into_previous_state();
     clear_transient();
-    clear_events();
   }
   void end() {}
 
-  void push_event(MouseEventType type, int button, bool down,
-                  f32 nx, f32 ny, f32 ndx, f32 ndy, f32 nwx, f32 nwy) {
-    if (count >= MOUSE_EVENT_CAPACITY) return;
-    buffer[count++] = {type, button, down, nx, ny, ndx, ndy, nwx, nwy};
-  }
-
   void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
     x = nx; y = ny; dx += xrel; dy += yrel;
-    push_event(MOUSE_EVENT_MOTION, 0, false, nx, ny, xrel, yrel, 0, 0);
   }
   void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
     x = bx; y = by;
     if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
       down_current[button] = true;
-    push_event(MOUSE_EVENT_BUTTON, (int)button, true, bx, by, 0, 0, 0, 0);
   }
   void on_button_up(MouseButton button, f32 bx, f32 by) {
     x = bx; y = by;
     if (button > 0 && button < MOUSE_BUTTON_COUNT)
       down_current[button] = false;
-    push_event(MOUSE_EVENT_BUTTON, (int)button, false, bx, by, 0, 0, 0, 0);
   }
   void on_wheel(f32 wx, f32 wy) {
     wheel_x += wx; wheel_y += wy;
-    push_event(MOUSE_EVENT_WHEEL, 0, false, x, y, 0, 0, wx, wy);
   }
 
   bool down(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b]; }
@@ -390,6 +365,20 @@ struct Mouse {
 struct Input {
   Keyboard keyboard;
   Mouse mouse;
+  InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
+  u32 count = 0;
+
+  void push_event(InputEvent e) {
+    if (count >= INPUT_EVENT_CAPACITY) return;
+    buffer[count++] = e;
+  }
+  void clear_events() { count = 0; }
+
+  void begin() {
+    keyboard.begin();
+    mouse.begin();
+    clear_events();
+  }
   void poll();
 };
 
@@ -951,8 +940,7 @@ bool renderer_clear(void) {
 }
 
 void Input::poll() {
-  keyboard.begin();
-  mouse.begin();
+  begin();
 
   ImGuiIO& io = ImGui::GetIO();
 
@@ -966,35 +954,49 @@ void Input::poll() {
       break;
     }
     case SDL_EVENT_MOUSE_MOTION: {
-      if (io.WantCaptureMouse)
-        mouse.on_motion(event.motion.x, event.motion.y, 0.0f, 0.0f);
-      else
-        mouse.on_motion(event.motion.x, event.motion.y,
-                        event.motion.xrel, event.motion.yrel);
+      const f32 xrel = io.WantCaptureMouse ? 0.0f : event.motion.xrel;
+      const f32 yrel = io.WantCaptureMouse ? 0.0f : event.motion.yrel;
+      mouse.on_motion(event.motion.x, event.motion.y, xrel, yrel);
+      push_event({INPUT_EVENT_MOUSE_MOTION, KEY_UNKNOWN, MOUSE_BUTTON_NONE,
+                  false, false, event.motion.x, event.motion.y,
+                  xrel, yrel, 0.0f, 0.0f});
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-      mouse.on_button_down(sdl_to_mouse_button(event.button.button),
-                           event.button.x, event.button.y,
+      const MouseButton button = sdl_to_mouse_button(event.button.button);
+      mouse.on_button_down(button, event.button.x, event.button.y,
                            !io.WantCaptureMouse);
+      push_event({INPUT_EVENT_MOUSE_BUTTON_DOWN, KEY_UNKNOWN, button,
+                  true, false, event.button.x, event.button.y,
+                  0.0f, 0.0f, 0.0f, 0.0f});
       break;
     }
     case SDL_EVENT_MOUSE_BUTTON_UP: {
-      mouse.on_button_up(sdl_to_mouse_button(event.button.button),
-                         event.button.x, event.button.y);
+      const MouseButton button = sdl_to_mouse_button(event.button.button);
+      mouse.on_button_up(button, event.button.x, event.button.y);
+      push_event({INPUT_EVENT_MOUSE_BUTTON_UP, KEY_UNKNOWN, button,
+                  false, false, event.button.x, event.button.y,
+                  0.0f, 0.0f, 0.0f, 0.0f});
       break;
     }
     case SDL_EVENT_MOUSE_WHEEL: {
-      if (!io.WantCaptureMouse)
+      if (!io.WantCaptureMouse) {
         mouse.on_wheel(event.wheel.x, event.wheel.y);
+        push_event({INPUT_EVENT_MOUSE_WHEEL, KEY_UNKNOWN, MOUSE_BUTTON_NONE,
+                    false, false, mouse.x, mouse.y,
+                    0.0f, 0.0f, event.wheel.x, event.wheel.y});
+      }
       break;
     }
     case SDL_EVENT_KEY_DOWN:
     case SDL_EVENT_KEY_UP: {
-      if (!io.WantCaptureKeyboard)
-        keyboard.push_event(sdl_to_key(event.key.scancode),
-                            event.type == SDL_EVENT_KEY_DOWN,
-                            event.key.repeat);
+      if (!io.WantCaptureKeyboard) {
+        const Key key = sdl_to_key(event.key.scancode);
+        const bool down = event.type == SDL_EVENT_KEY_DOWN;
+        push_event({down ? INPUT_EVENT_KEY_DOWN : INPUT_EVENT_KEY_UP, key,
+                    MOUSE_BUTTON_NONE, down, event.key.repeat,
+                    0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f});
+      }
       break;
     }
     }
@@ -1058,13 +1060,13 @@ bool input_mouse_released(MouseButton button) {
   return input.mouse.released(button);
 }
 
-u64 input_mouse_event_count(void) {
-  return input.mouse.count;
+u64 input_event_count(void) {
+  return input.count;
 }
 
-MouseEvent input_mouse_event_at(u64 index) {
-  ASSERT(index < input.mouse.count, "mouse event index out of bounds");
-  return input.mouse.buffer[index];
+InputEvent input_event_at(u64 index) {
+  ASSERT(index < input.count, "input event index out of bounds");
+  return input.buffer[index];
 }
 
 void renderer_quit() {
@@ -1146,16 +1148,6 @@ bool input_key_pressed(Key key) {
 bool input_key_released(Key key) {
   return input.keyboard.released(key);
 }
-
-u64 input_keyboard_event_count(void) {
-  return input.keyboard.count;
-}
-
-KeyboardEvent input_keyboard_event_at(u64 index) {
-  ASSERT(index < input.keyboard.count, "keyboard event index out of bounds");
-  return input.keyboard.buffer[index];
-}
-
 f32 time_dt(void) {
   static_local u64 previous = SDL_GetPerformanceCounter();
   const u64 now = SDL_GetPerformanceCounter();

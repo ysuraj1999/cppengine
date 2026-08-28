@@ -51,38 +51,36 @@ typedef enum Key {
 } Key;
 
 typedef enum MouseButton {
+  MOUSE_BUTTON_NONE = 0,       // no button; index 0 sentinel
   MOUSE_BUTTON_LEFT = 1,
   MOUSE_BUTTON_MIDDLE = 2,
   MOUSE_BUTTON_RIGHT = 3,
   MOUSE_BUTTON_X1 = 4,
   MOUSE_BUTTON_X2 = 5,
-  MOUSE_BUTTON_COUNT = 6,   // index 0 unused
+  MOUSE_BUTTON_COUNT = 6,      // one past MOUSE_BUTTON_X2
 } MouseButton;
 
-typedef enum MouseEventType {
-  MOUSE_EVENT_MOTION = 1,
-  MOUSE_EVENT_BUTTON,
-  MOUSE_EVENT_WHEEL,
-} MouseEventType;
+typedef enum InputEventType {
+  INPUT_EVENT_KEY_DOWN = 1,
+  INPUT_EVENT_KEY_UP,
+  INPUT_EVENT_MOUSE_MOTION,
+  INPUT_EVENT_MOUSE_BUTTON_DOWN,
+  INPUT_EVENT_MOUSE_BUTTON_UP,
+  INPUT_EVENT_MOUSE_WHEEL,
+} InputEventType;
 
-#define MOUSE_EVENT_CAPACITY 256
+#define INPUT_EVENT_CAPACITY 512
 
-typedef struct MouseEvent {
-  MouseEventType type;   // MOUSE_EVENT_*
-  int  button;           // MOUSE_BUTTON_* (button events, else 0)
-  bool down;             // true = press, false = release (button events)
-  f32  x, y;             // absolute cursor position (all events)
+typedef struct InputEvent {
+  InputEventType type;   // INPUT_EVENT_*
+  Key key;               // KEY_* (key events, else KEY_UNKNOWN)
+  MouseButton button;    // MOUSE_BUTTON_* (button events, else MOUSE_BUTTON_NONE)
+  bool down;             // true = press, false = release (key/button events)
+  bool repeat;           // OS auto-repeat flag (key down only)
+  f32  x, y;             // absolute cursor position (mouse events)
   f32  dx, dy;           // motion delta (motion events)
   f32  wheel_x, wheel_y; // wheel delta (wheel events)
-} MouseEvent;
-
-#define KEYBOARD_EVENT_CAPACITY 256
-
-typedef struct KeyboardEvent {
-    int scancode;  // Key value
-  bool down;     // true = KEYDOWN, false = KEYUP
-  bool repeat;   // OS auto-repeat flag (KEYDOWN only)
-} KeyboardEvent;
+} InputEvent;
 
 #ifdef __cplusplus
 extern "C" {
@@ -139,11 +137,8 @@ bool input_key_down(Key key);
 bool input_key_pressed(Key key);
 bool input_key_released(Key key);
 
-u64 input_keyboard_event_count(void);
-KeyboardEvent input_keyboard_event_at(u64 index);
-
-u64 input_mouse_event_count(void);
-MouseEvent input_mouse_event_at(u64 index);
+u64 input_event_count(void);
+InputEvent input_event_at(u64 index);
 
 f32 time_dt(void);
 

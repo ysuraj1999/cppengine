@@ -13,13 +13,14 @@
 
 (defcstruct (%transform :class cffi-transform)
     (px :float) (py :float) (pz :float)
-    (sx :float) (sy :float) (sz :float)
-    (rx :float) (ry :float) (rz :float))
+  (sx :float) (sy :float) (sz :float)
+  (rx :float) (ry :float) (rz :float))
 
 ;; Mirrors the canonical C Key enum in cppengine.h; numeric values are
 ;; carried through unchanged.
 (defcenum (%key :int)
-    (:a 4) (:b 5) (:c 6) (:d 7) (:e 8) (:f 9) (:g 10) (:h 11)
+    (:unknown 0)
+  (:a 4) (:b 5) (:c 6) (:d 7) (:e 8) (:f 9) (:g 10) (:h 11)
   (:i 12) (:j 13) (:k 14) (:l 15) (:m 16) (:n 17) (:o 18) (:p 19)
   (:q 20) (:r 21) (:s 22) (:t 23) (:u 24) (:v 25) (:w 26) (:x 27)
   (:y 28) (:z 29)
@@ -109,51 +110,51 @@
 (defcfun ("ui_end" %ui-end) :void)
 
 (defcfun ("ui_begin_window" %ui-begin-window)
-    :void
+  :void
   (name :string))
 (defcfun ("ui_end_window" %ui-end-window)
-    :void)
+  :void)
 (defcfun ("ui_button" %ui-button)
-    :bool
+  :bool
   (label :string))
 
 (defcfun ("ui_treenode" %ui-treenode)
-    :bool
+  :bool
   (label :string))
 
 (defcfun ("ui_treepop" %ui-treepop)
-    :void)
+  :void)
 
 (defcfun ("ui_selectable" %ui-selectable)
-    :bool
+  :bool
   (label :string)
   (selected :bool))
 
 (defcfun ("ui_sameline" %ui-sameline)
-    :void)
+  :void)
 
 (defcfun ("ui_text" %ui-text)
-    :void
+  :void
   (text :string))
 
 (defcfun ("ui_push_id" %ui-push-id)
-    :void
+  :void
   (id :int))
 
 (defcfun ("ui_pop_id" %ui-pop-id)
-    :void)
+  :void)
 
 (defcfun ("ui_begin_context_menu_item" %ui-begin-context-menu-item)
-    :bool)
+  :bool)
 
 (defcfun ("ui_begin_context_menu_window" %ui-begin-context-menu-window)
-    :bool)
+  :bool)
 
 (defcfun ("ui_end_context_menu" %ui-end-context-menu)
-    :void)
+  :void)
 
 (defcfun ("ui_menu_item" %ui-menu-item)
-    :bool
+  :bool
   (label :string))
 
 (defcfun ("renderer_clear" %renderer-clear) :bool)
@@ -196,17 +197,18 @@
 
 (defcenum (%mouse-button :int)
     (:left 1)
+  (:none 0)
   (:middle 2)
   (:right 3)
   (:x1 4)
-    (:x2 5))
+  (:x2 5))
 
 (defcfun ("ui_double_click" %ui-double-click)
-    :bool
+  :bool
   (button %mouse-button))
 
 (defcfun ("ui_item_clicked" %ui-item-clicked)
-    :bool
+  :bool
   (button %mouse-button))
 
 
@@ -267,15 +269,20 @@ item), run BODY, and close the popup."
 (defcfun ("input_mouse_released" %input-mouse-released-p) :bool
   (button %mouse-button))
 
-(defcenum (%mouse-event-type :int)
-  (:motion 1)
-  (:button 2)
-  (:wheel 3))
+(defcenum (%input-event-type :int)
+    (:key-down 1)
+  (:key-up 2)
+  (:mouse-motion 3)
+  (:mouse-button-down 4)
+  (:mouse-button-up 5)
+  (:mouse-wheel 6))
 
-(defcstruct (%mouse-event :class cffi-mouse-event)
-    (type %mouse-event-type)
-  (button :int)
+(defcstruct (%input-event :class cffi-input-event)
+    (type %input-event-type)
+  (key %key)
+  (button %mouse-button)
   (down :bool)
+  (repeat :bool)
   (x :float)
   (y :float)
   (dx :float)
@@ -283,16 +290,18 @@ item), run BODY, and close the popup."
   (wheel-x :float)
   (wheel-y :float))
 
-(defcfun ("input_mouse_event_count" %input-mouse-event-count) :uint64)
+(defcfun ("input_event_count" %input-event-count) :uint64)
 
-(defcfun ("input_mouse_event_at" %input-mouse-event-at)
-    (:struct %mouse-event)
+(defcfun ("input_event_at" %input-event-at)
+    (:struct %input-event)
   (index :uint64))
 
-(defstruct mouse-event
-  (type :motion :type symbol)
-  (button 0 :type (signed-byte 32))
+(defstruct input-event
+  (type :key-down :type symbol)
+  (key :unknown :type symbol)
+  (button :none :type symbol)
   (down nil :type boolean)
+  (repeat nil :type boolean)
   (x 0.0 :type single-float)
   (y 0.0 :type single-float)
   (dx 0.0 :type single-float)
@@ -300,17 +309,31 @@ item), run BODY, and close the popup."
   (wheel-x 0.0 :type single-float)
   (wheel-y 0.0 :type single-float))
 
-(defmethod translate-from-foreign (ptr (type cffi-mouse-event))
-  (make-mouse-event
-   :type (foreign-slot-value ptr '(:struct %mouse-event) 'type)
-   :button (foreign-slot-value ptr '(:struct %mouse-event) 'button)
-   :down (foreign-slot-value ptr '(:struct %mouse-event) 'down)
-   :x (foreign-slot-value ptr '(:struct %mouse-event) 'x)
-   :y (foreign-slot-value ptr '(:struct %mouse-event) 'y)
-   :dx (foreign-slot-value ptr '(:struct %mouse-event) 'dx)
-   :dy (foreign-slot-value ptr '(:struct %mouse-event) 'dy)
-   :wheel-x (foreign-slot-value ptr '(:struct %mouse-event) 'wheel-x)
-   :wheel-y (foreign-slot-value ptr '(:struct %mouse-event) 'wheel-y)))
+(defmethod translate-from-foreign (ptr (type cffi-input-event))
+  (make-input-event
+   :type    (foreign-slot-value ptr '(:struct %input-event) 'type)
+   :key     (foreign-slot-value ptr '(:struct %input-event) 'key)
+   :button  (foreign-slot-value ptr '(:struct %input-event) 'button)
+   :down    (foreign-slot-value ptr '(:struct %input-event) 'down)
+   :repeat  (foreign-slot-value ptr '(:struct %input-event) 'repeat)
+   :x       (foreign-slot-value ptr '(:struct %input-event) 'x)
+   :y       (foreign-slot-value ptr '(:struct %input-event) 'y)
+   :dx      (foreign-slot-value ptr '(:struct %input-event) 'dx)
+   :dy      (foreign-slot-value ptr '(:struct %input-event) 'dy)
+   :wheel-x (foreign-slot-value ptr '(:struct %input-event) 'wheel-x)
+   :wheel-y (foreign-slot-value ptr '(:struct %input-event) 'wheel-y)))
+
+(defun input-events ()
+  "Return a typed vector of this frame's input events in the order SDL
+    delivered them; each element is an INPUT-EVENT with TYPE, KEY, BUTTON
+    (keywords), DOWN, REPEAT and the mouse position/delta/wheel fields."
+  (let ((count (%input-event-count)))
+    (loop with events = (make-array count
+                                    :element-type 'input-event
+                                    :fill-pointer 0)
+          for i below count
+          do (vector-push-extend (%input-event-at i) events)
+          finally (return events))))
 
 (defcfun ("renderer_camera_move" %renderer-camera-move) :void
   (forward :float)
@@ -332,41 +355,9 @@ item), run BODY, and close the popup."
 (defcfun ("input_key_released" %input-key-released-p) :bool
   (key %key))
 
-(defcstruct (%keyboard-event :class cffi-keyboard-event)
-    (scancode :int)
-  (down :bool)
-  (repeat :bool))
-
-(defcfun ("input_keyboard_event_count" %input-keyboard-event-count) :uint64)
-
-(defcfun ("input_keyboard_event_at" %input-keyboard-event-at)
-    (:struct %keyboard-event)
-  (index :uint64))
 
 (defcfun ("time_dt" %time-dt) :float)
 
-(defstruct keyboard-event
-  (scancode 0 :type (signed-byte 32))
-  (down nil :type boolean)
-  (repeat nil :type boolean))
-
-(defmethod translate-from-foreign (ptr (type cffi-keyboard-event))
-  (make-keyboard-event
-   :scancode (foreign-slot-value ptr '(:struct %keyboard-event) 'scancode)
-   :down     (foreign-slot-value ptr '(:struct %keyboard-event) 'down)
-   :repeat   (foreign-slot-value ptr '(:struct %keyboard-event) 'repeat)))
-
-(defun keyboard-events ()
-  "Return a typed vector of this frame's key events in the order SDL
-delivered them; each element is a KEYBOARD-EVENT with SCANCODE, DOWN and
-REPEAT."
-  (let ((count (%input-keyboard-event-count)))
-    (loop with events = (make-array count
-                                    :element-type 'keyboard-event
-                                    :fill-pointer 0)
-          for i below count
-          do (vector-push-extend (%input-keyboard-event-at i) events)
-          finally (return events))))
 
 (defstruct transform
   (px 0.0 :type single-float)

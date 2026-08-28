@@ -60,20 +60,14 @@
        (do-mesh-instances (,instance ,mesh)
          ,@body))))
 
-(defmacro do-input-events ((device event) &body body)
-  "Unified discrete event iteration. DEVICE is :mouse or :keyboard.
-   Iterates the existing %input-*-event-count/at buffers - no
-   duplicated buffering or processing."
+(defmacro do-input-events ((event) &body body)
+  "Iterate the unified input event stream delivered this frame. BODY runs
+   once per event with EVENT bound to an INPUT-EVENT carrying TYPE, KEY,
+   BUTTON, DOWN, REPEAT and the mouse fields."
   (mu:with-gensyms (i)
-    (ecase device
-      (:mouse
-       `(dotimes (,i (%input-mouse-event-count))
-          (let ((,event (%input-mouse-event-at ,i)))
-            ,@body)))
-      (:keyboard
-       `(dotimes (,i (%input-keyboard-event-count))
-          (let ((,event (%input-keyboard-event-at ,i)))
-            ,@body))))))
+    `(dotimes (,i (%input-event-count))
+       (let ((,event (%input-event-at ,i)))
+         ,@body))))
 
 (defmacro input (device &rest args)
   "Direct state query - expands at compile time to the existing %input-*
