@@ -376,12 +376,14 @@ iterate while scenes are created or destroyed."
         (ui-instance instance)))))
 
 (defun ui-instance (instance)
-  "Instance selectable. Left click selects, middle click deletes."
-  (with-ui-id (instance-handle instance)
-    (ui-selectable (instance-alias instance)
-                   (selection-get instance))
-    (ui-on-click :left
-      (selection-set instance))
+    "Instance selectable. Left click selects and points the camera at the
+  instance, middle click deletes."
+    (with-ui-id (instance-handle instance)
+      (ui-selectable (instance-alias instance)
+                     (selection-get instance))
+      (ui-on-click :left
+        (selection-set instance)
+        (%renderer-camera-look-at (instance-handle instance)))
     (ui-on-click :middle
       (scene-remove-instance (mesh-scene (instance-mesh instance)) instance))
     (ui-on-context

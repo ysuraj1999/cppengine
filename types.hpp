@@ -77,6 +77,19 @@ struct Camera {
     pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
   }
 
+    // Aim the camera at TARGET from the current position, keeping the
+    // same distance.  No-op when the camera already sits on TARGET.
+    void look_at(glm::vec3 target) {
+      glm::vec3 dir = target - position;
+      if (glm::dot(dir, dir) < 1e-12f) return;
+      dir = glm::normalize(dir);
+      yaw = glm::mod(glm::degrees(glm::atan(dir.z, dir.x)), 360.0f);
+      pitch = glm::clamp(
+          glm::degrees(glm::asin(glm::clamp(dir.y, -1.0f, 1.0f))),
+          -89.99f, 89.99f);
+      update();
+    }
+
   glm::mat4 getViewMatrix() const {
     return glm::lookAtLH(position, position + forward, WORLD_UP);
   }
@@ -134,6 +147,10 @@ struct Scene {
   std::vector<MeshHandle> meshOrder;
   std::unordered_map<MeshHandle, Instances> objects;
 
+  // O(1) instance handle -> Instance lookup; rebuilt whenever the owning
+  // mesh's instance vector reallocates or shifts.
+  std::unordered_map<InstanceHandle, Instance*> instanceIndex;
+
   MeshHandle add_mesh(Mesh m) {
     MeshHandle h = meshCounter();
     m.alias = (m.alias.empty() ? "Mesh" : m.alias) + "#" + std::to_string(h);
@@ -143,7 +160,12 @@ struct Scene {
   }
   bool remove_mesh(MeshHandle mh) {
     if (!meshes.contains(mh)) return false;
-    objects.erase(mh);
+    auto it = objects.find(mh);
+    if (it != objects.end()) {
+      for (auto &inst : it->second)
+        instanceIndex.erase(inst.instanceHandle);
+      objects.erase(it);
+    }
     meshes.erase(mh);
     meshOrder.erase(std::find(meshOrder.begin(), meshOrder.end(), mh));
     return true;
@@ -167,27 +189,31 @@ struct Scene {
     inst.transform = t;
     inst.alias = mesh.alias + "-instance#" + std::to_string(inst.instanceHandle);
     objects[m].push_back(inst);
+    rebuild_instance_index(m);
     return inst.instanceHandle;
   }
   bool remove_instance(InstanceHandle ih) {
     for (auto &[mh, instances] : objects) {
-      (void)mh;
       for (u64 i = 0; i < instances.size(); i++)
         if (instances[i].instanceHandle == ih) {
           instances.erase(instances.begin() + i);
+          instanceIndex.erase(ih);
+          rebuild_instance_index(mh);
           return true;
         }
     }
     return false;
   }
+  void rebuild_instance_index(MeshHandle mh) {
+    auto it = objects.find(mh);
+    if (it == objects.end()) return;
+    for (auto &inst : it->second)
+      instanceIndex[inst.instanceHandle] = &inst;
+  }
   Instance& get_instance(InstanceHandle ih) {
-    for (auto &[mh, instances] : objects) {
-      (void)mh;
-      for (auto &inst : instances)
-        if (inst.instanceHandle == ih) return inst;
-    }
-    ASSERT(false, "instance handle not found");
-    return *((Instance*)nullptr);
+    auto it = instanceIndex.find(ih);
+    ASSERT(it != instanceIndex.end(), "instance handle not found");
+    return *it->second;
   }
   u64 instance_count(MeshHandle mh) const {
     auto it = objects.find(mh);
@@ -204,13 +230,9 @@ struct Scene {
     get_instance(ih).transform = t;
   }
   Transform get_instance_transform(InstanceHandle ih) const {
-    for (auto &[mh, instances] : objects) {
-      (void)mh;
-      for (auto &inst : instances)
-        if (inst.instanceHandle == ih) return inst.transform;
-    }
-    ASSERT(false, "instance handle not found");
-    return Transform{};
+    auto it = instanceIndex.find(ih);
+    ASSERT(it != instanceIndex.end(), "instance handle not found");
+    return it->second->transform;
   }
   const char* mesh_alias(MeshHandle mh) const {
     auto it = meshes.find(mh);
@@ -218,13 +240,9 @@ struct Scene {
     return it->second.alias.c_str();
   }
   const char* instance_alias(InstanceHandle ih) const {
-    for (auto &[mh, instances] : objects) {
-      (void)mh;
-      for (auto &inst : instances)
-        if (inst.instanceHandle == ih) return inst.alias.c_str();
-    }
-    ASSERT(false, "instance handle not found");
-    return nullptr;
+    auto it = instanceIndex.find(ih);
+    ASSERT(it != instanceIndex.end(), "instance handle not found");
+    return it->second->alias.c_str();
   }
 };
 
