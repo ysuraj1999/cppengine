@@ -469,7 +469,7 @@ bool renderer_init() {
 
   rendererConfig.camera.update();
 
-  INIT_CHECK(SDL_Init(SDL_INIT_VIDEO), "SDL subsystem initialization");
+  INIT_CHECK(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS), "SDL subsystem initialization");
 
   window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
   INIT_CHECK(window != nullptr, "window creation");
