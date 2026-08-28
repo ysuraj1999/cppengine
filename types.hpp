@@ -55,8 +55,8 @@ struct Camera {
   glm::vec3 position{0.0f, 0.0f, 0.0f};
   f32 yaw = 0.0f;
   f32 pitch = 0.0f;
-  glm::vec3 forward{0.0f, 0.0f, 1.0f};
-  glm::vec3 right{1.0f, 0.0f, 0.0f};
+  glm::vec3 forward{1.0f, 0.0f, 0.0f};
+  glm::vec3 right{0.0f, 0.0f, 1.0f};
 
   void update() {
     forward = glm::normalize(glm::vec3{

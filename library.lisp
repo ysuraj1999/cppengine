@@ -195,7 +195,57 @@
   (:middle 2)
   (:right 3)
   (:x1 4)
-  (:x2 5))
+    (:x2 5))
+
+(defcfun ("ui_double_click" %ui-double-click)
+    :bool
+  (button %mouse-button))
+
+(defcfun ("ui_item_clicked" %ui-item-clicked)
+    :bool
+  (button %mouse-button))
+
+
+(defun ui-button (label)
+  "Submit a button as the current item.  Returns the underlying click
+result, which callers normally ignore; attach handlers with UI-ON-CLICK."
+  (%ui-button label))
+
+(defun ui-selectable (label selected-p)
+  "Submit a selectable as the current item.  SELECTED-P is the displayed
+selection state.  Returns the underlying click result, which callers
+normally ignore; attach handlers with UI-ON-CLICK."
+  (%ui-selectable label selected-p))
+
+(defmacro ui-on-click (button &body body)
+  "Run BODY when the current item is clicked with mouse BUTTON
+(:left, :middle, :right, :x1 or :x2)."
+  `(when (%ui-item-clicked ,button)
+     ,@body))
+
+(defmacro ui-on-double-click (button &body body)
+  "Run BODY when the current item is double-clicked with mouse BUTTON."
+  `(when (%ui-double-click ,button)
+     ,@body))
+
+(defmacro ui-on-context (&body body)
+  "Open the context popup for the current item, run BODY (normally
+UI-MENU-ITEM forms), and close the popup."
+  `(when (%ui-begin-context-menu-item)
+     ,@body
+     (%ui-end-context-menu)))
+
+(defmacro ui-on-context-window (&body body)
+  "Open the context popup of the current window (not bound to a specific
+item), run BODY, and close the popup."
+  `(when (%ui-begin-context-menu-window)
+     ,@body
+     (%ui-end-context-menu)))
+
+(defmacro ui-menu-item (label &body body)
+  "Submit a menu item inside a context popup; run BODY when it is clicked."
+  `(when (%ui-menu-item ,label)
+     ,@body))
 
 (defcfun ("input_mouse_x" %input-mouse-x) :float)
 (defcfun ("input_mouse_y" %input-mouse-y) :float)

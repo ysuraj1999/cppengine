@@ -1108,6 +1108,26 @@ bool ui_menu_item(const char* label) {
   return ImGui::MenuItem(label);
 }
 
+static ImGuiMouseButton imgui_button(MouseButton button) {
+  switch (button) {
+    case MOUSE_BUTTON_LEFT:   return ImGuiMouseButton_Left;   // 1 -> 0
+    case MOUSE_BUTTON_RIGHT:  return ImGuiMouseButton_Right;  // 3 -> 1
+    case MOUSE_BUTTON_MIDDLE: return ImGuiMouseButton_Middle; // 2 -> 2
+    case MOUSE_BUTTON_X1:     return ImGuiMouseButton_Left;   // 4 -> n/a
+    case MOUSE_BUTTON_X2:     return ImGuiMouseButton_Right;  // 5 -> n/a
+    default:                  return ImGuiMouseButton_Left;
+  }
+}
+
+bool ui_double_click(MouseButton button) {
+  return ImGui::IsMouseDoubleClicked(imgui_button(button)) &&
+         ImGui::IsItemHovered(ImGuiHoveredFlags_None);
+}
+
+bool ui_item_clicked(MouseButton button) {
+  return ImGui::IsItemClicked(imgui_button(button));
+}
+
 void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
 				  Transform t) {
   registry.get(sh).set_instance_transform(i, t);

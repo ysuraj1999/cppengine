@@ -136,6 +136,8 @@ bool ui_begin_context_menu_item(void);
 bool ui_begin_context_menu_window(void);
 void ui_end_context_menu(void);
 bool ui_menu_item(const char* label);
+bool ui_double_click(MouseButton button);
+bool ui_item_clicked(MouseButton button);
 
 #ifdef __cplusplus
 }

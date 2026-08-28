@@ -27,23 +27,19 @@
           (progn ,@body)
        (%ui-pop-id))))
 
-(defmacro with-ui-treenode ((nodestring nodehandle &optional open-sym) &body body)
-  "Push NODEHANDLE onto the UI id stack, submit a tree node labeled
-   NODESTRING, run BODY, and pop the id.  BODY runs every frame so click
-   and context handlers stay attached even while the node is closed;
-   guard children with OPEN-SYM, bound to whether the node is open.  When
-   the node is open, the tree pop runs before the id pop."
+(defmacro with-ui-treenode (nodestring &optional open-sym &body body)
+  "Submit a tree node labeled NODESTRING and run BODY.  The node's UI id
+   is NODESTRING itself.  BODY runs every frame so click and context
+   handlers stay attached even while the node is closed; guard children
+   with OPEN-SYM, bound to whether the node is open.  The tree pop runs
+   every frame the node is open."
   (mu:with-gensyms (open)
     (let ((open-sym (or open-sym open)))
-      `(progn
-         (%ui-push-id ,nodehandle)
+      `(let ((,open-sym (%ui-treenode ,nodestring)))
          (unwind-protect
-              (let ((,open-sym (%ui-treenode ,nodestring)))
-                (unwind-protect
-                     (progn ,@body)
-                  (when ,open-sym
-                    (%ui-treepop))))
-           (%ui-pop-id))))))
+              (progn ,@body)
+           (when ,open-sym
+             (%ui-treepop)))))))
 
 (defmacro do-scenes ((scene) &body body)
   (mu:with-gensyms (handle)

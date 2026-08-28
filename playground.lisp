@@ -225,23 +225,23 @@ iterate while scenes are created or destroyed."
 	       (setf prefix-cursor node))
 	     (invalid-chord()
 	       (cancel-action)))
-       (lambda (action &rest args)
-	 (ecase action
-	   (:add-shortcut (destructuring-bind (shortcut-list-expr function) args
-			    (add-shortcut (shortcut shortcut-list-expr) function)))
-	   (:feed (destructuring-bind (chord) args
-		    (if (equal chord (list (key :escape)))
-			(cancel-action)
-			(let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
-			  (if next-node
-			      (progn (move-cursor next-node)
-				     (when (prefix-node-function prefix-cursor)
-				       (funcall (prefix-node-function prefix-cursor))
-				       (reset-cursor)))
-			      (invalid-chord))))))
-	   (:reset (setf prefix-cursor prefix-root))
-	   (:debug-root prefix-root))))))
-	 
+      (lambda (action &rest args)
+	(ecase action
+	  (:add-shortcut (destructuring-bind (shortcut-list-expr function) args
+			   (add-shortcut (shortcut shortcut-list-expr) function)))
+	  (:feed (destructuring-bind (chord) args
+		   (if (equal chord (list (key :escape)))
+		       (cancel-action)
+		       (let ((next-node (gethash chord (prefix-node-table prefix-cursor))))
+			 (if next-node
+			     (progn (move-cursor next-node)
+				    (when (prefix-node-function prefix-cursor)
+				      (funcall (prefix-node-function prefix-cursor))
+				      (reset-cursor)))
+			     (invalid-chord))))))
+	  (:reset (setf prefix-cursor prefix-root))
+	  (:debug-root prefix-root))))))
+
 (defparameter *modifier-keys* (mapcar #'key '(:left-ctrl :left-shift :left-alt :left-gui
 					      :right-ctrl :right-shift :right-alt :right-gui
 					      :ctrl :shift :alt :gui)))
@@ -338,9 +338,7 @@ iterate while scenes are created or destroyed."
 
 (defun ui-scene (scene)
   "Scene tree node. Double click loads an OBJ into SCENE."
-  (with-ui-treenode ((format nil "Scene ~a" (scene-handle scene))
-                     (scene-handle scene)
-                     scene-open)
+  (with-ui-treenode (format nil "Scene ~a" (scene-handle scene)) scene-open
     (let ((delete-scene nil))
       (ui-on-double-click :left
         (let ((path (file-picker)))
@@ -366,9 +364,7 @@ iterate while scenes are created or destroyed."
 
 (defun ui-mesh (mesh)
   "Mesh tree node. Double click adds a new instance of MESH."
-  (with-ui-treenode ((mesh-alias mesh)
-                     (mesh-handle mesh)
-                     mesh-open)
+  (with-ui-treenode (mesh-alias mesh) mesh-open
     (ui-on-double-click :left
       (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (ui-on-context
@@ -392,58 +388,20 @@ iterate while scenes are created or destroyed."
         (scene-remove-instance (mesh-scene (instance-mesh instance)) instance)))))
 
 (defun panel-inspector ()
-  (%ui-begin-window "Inspector")
-  (let ((delete-scene nil))
-    (do-scenes (scene)
-      (%ui-push-id (scene-handle scene))
-      (let ((scene-open (%ui-treenode (format nil "Scene ~a" (scene-handle scene)))))
-        (when (%ui-begin-context-menu-item)
-          (when (%ui-menu-item "Push Scene")
-            (setf *current-scene* scene)
-            (scene-sync scene))
-          (when (%ui-menu-item "Instantiate All Meshes")
-            (do-scene-meshes (mesh scene)
-              (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))))
-          (when (%ui-menu-item "Load OBJ")
-            (let ((path (file-picker)))
-              (when path
-                (scene-load-obj scene path))))
-          (when (%ui-menu-item "Delete Scene")
-            (setf delete-scene scene))
-          (%ui-end-context-menu))
-        (when scene-open
-          (do-scene-meshes (mesh scene)
-            (%ui-push-id (mesh-handle mesh))
-            (let ((mesh-open (%ui-treenode (mesh-alias mesh))))
-              (when (%ui-begin-context-menu-item)
-                (when (%ui-menu-item "Instantiate")
-                  (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
-                (%ui-end-context-menu))
-              (when mesh-open
-                (do-mesh-instances (instance mesh)
-                  (%ui-push-id (instance-handle instance))
-                  (when (%ui-selectable (instance-alias instance)
-                                        (selection-get instance))
-                    (selection-set instance))
-                  (when (%ui-begin-context-menu-item)
-                    (when (%ui-menu-item "Delete")
-                      (scene-remove-instance scene instance))
-                    (%ui-end-context-menu))
-                  (%ui-pop-id))
-                (%ui-treepop)))
-            (%ui-pop-id))
-          (%ui-treepop)))
-      (%ui-pop-id))
-    (when delete-scene
-      (scene-destroy delete-scene))
-    (when (%ui-begin-context-menu-window)
-      (when (%ui-menu-item "New Scene")
-        (make-instance 'scene))
-      (%ui-end-context-menu))
-    (%ui-end-window)))
+  (with-ui-window "Inspector"
+    (let ((delete-scene nil))
+      (do-scenes (scene)
+        (let ((result (ui-scene scene)))
+          (when result
+            (setf delete-scene result))))
+      (when delete-scene
+        (scene-destroy delete-scene))
+      (ui-on-context-window
+        (ui-menu-item "New Scene"
+          (make-instance 'scene))))))
 
 
-(defparameter *keyboard-sensitivity* 10.0)
+(defparameter *keyboard-sensitivity* 200.0)
 (defparameter *mouse-sensitivity* 10.0)
 
 (defvar *interaction-stack* '()
@@ -511,8 +469,13 @@ iterate while scenes are created or destroyed."
            (d-down (input :keyboard :d :down))
            (space-down (input :keyboard :space :down))
            (ctrl-down (input :keyboard :ctrl :down)))
-       (let ((move-speed (* *keyboard-sensitivity* dt))
-             (look-speed (* *mouse-sensitivity* dt)))
+       (let* ((speed (sqrt (+ (* dx dx) (* dy dy))))
+	      (normalized-speed (clamp (/ speed 20.0) 0.0 1.0))
+	      (scale (cubic-bezier
+		      0.82 0.00 0.99 0.34
+		      normalized-speed))
+	      (move-speed (* *keyboard-sensitivity* dt))
+              (look-speed (* *mouse-sensitivity* dt scale)))
          (%renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
          (%renderer-camera-move
           (+ (if w-down move-speed 0.0)
@@ -532,6 +495,30 @@ iterate while scenes are created or destroyed."
                 (= (mouse-event-button ev) 1) ; MOUSE_BUTTON_LEFT
                 (mouse-event-down ev))
        (exit-interaction)))))
+
+(defun cubic-bezier (x1 y1 x2 y2 input)
+  (labels ((bezier-value (p0 p1 p2 p3 parameter)
+             (let ((u (- 1.0 parameter)))
+               (+ (* u u u p0)
+                  (* 3.0 u u parameter p1)
+                  (* 3.0 u parameter parameter p2)
+                  (* parameter parameter parameter p3))))
+           
+           (bezier-x (parameter)
+             (bezier-value 0.0 x1 x2 1.0 parameter))
+           
+           (bezier-y (parameter)
+             (bezier-value 0.0 y1 y2 1.0 parameter)))
+    
+    (let ((parameter 0.5))
+      (dotimes (i 20)
+        (let ((current-x (bezier-x parameter)))
+          (setf parameter
+                (clamp (+ parameter
+                          (* (- input current-x) 0.5))
+                       0.0
+                       1.0))))
+      (bezier-y parameter))))
 
 (defun editor ()
   (when (%renderer-init)
