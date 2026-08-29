@@ -170,3 +170,55 @@
     (:up (quote %input-key-up-p))
     (:pressed (quote %input-key-pressed-p))
     (:released (quote %input-key-released-p))))
+
+(defmacro with-transform (&body clauses)
+  "Build a fresh transform by applying clause edits and return it.
+   A default transform with zero position, unit scale and zero rotation
+   is created, then each clause is applied in order as one atomic edit:
+
+     (:position :x 10)    set position
+     (:move-by :z 5)      add to position
+
+     (:rotation :y 90)    set rotation
+     (:rotate-by :x 15)   add to rotation
+
+     (:scale :x 2)        set scale
+     (:scale-by :y 1.5)   multiply scale
+
+   All clauses run against the same transform object, which is the value
+   of the entire form."
+  (mu:with-gensyms (transform)
+    (labels ((axis-accessor (prefix axis)
+               (ecase prefix
+                 (:p (ecase axis
+                       (:x 'transform-px) (:y 'transform-py) (:z 'transform-pz)))
+                 (:r (ecase axis
+                       (:x 'transform-rx) (:y 'transform-ry) (:z 'transform-rz)))
+                 (:s (ecase axis
+                       (:x 'transform-sx) (:y 'transform-sy) (:z 'transform-sz)))))
+             (op-prefix (op)
+               (ecase op
+                 ((:position :move-by) :p)
+                 ((:rotation :rotate-by) :r)
+                 ((:scale :scale-by) :s)))
+             (assign (accessor value)
+               `(setf (,accessor ,transform) ,value))
+             (relative (accessor value combine)
+               `(setf (,accessor ,transform)
+                      (,combine (,accessor ,transform) ,value)))
+             (clause-form (clause)
+               (unless (= 3 (length clause))
+                 (error "Invalid transform clause ~S: expected exactly (operation axis value)"
+                        clause))
+               (destructuring-bind (op axis value) clause
+                 (unless (member axis '(:x :y :z))
+                   (error "Invalid transform axis ~S in clause ~S: expected :X :Y or :Z"
+                          axis clause))
+                 (let ((accessor (axis-accessor (op-prefix op) axis)))
+                   (ecase op
+                     ((:position :rotation :scale) (assign accessor value))
+                     ((:move-by :rotate-by) (relative accessor value '+))
+                     ((:scale-by) (relative accessor value '*)))))))
+      `(let ((,transform (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+         ,@(mapcar #'clause-form clauses)
+         ,transform))))
