@@ -454,9 +454,13 @@ instance, middle click deletes."
     (funcall command-input :add-shortcut '((:ctrl :s)) (lambda () (print "Save")))
     (funcall command-input :add-shortcut '((:ctrl :k)) (lambda () (print "Kill")))
     (funcall command-input :add-shortcut '((:ctrl :p)) (lambda () (print "Print")))
-    (funcall command-input :add-shortcut '((:f))
-             (lambda () (push-interaction (fps-interaction))))
-      (make-interaction
+      (funcall command-input :add-shortcut '((:f))
+               (lambda () (push-interaction (fps-interaction))))
+      (funcall command-input :add-shortcut '((:t))
+               (lambda ()
+                 (when *selection*
+                   (push-interaction (translate-interaction)))))
+        (make-interaction
        :tick nil
        :event (lambda (ev) (funcall command-input :feed ev)))))
 
@@ -496,7 +500,36 @@ instance, middle click deletes."
                          (eq key :escape))
                   (and (eq type :mouse-button-down)
                          (eq button :left)))
-          (exit-interaction))))))
+            (exit-interaction))))))
+
+(defun translate-interaction ()
+  "Modal 3-axis translation of *SELECTION*: mouse dx -> z, dy -> y,
+  scroll dz -> x, applied in world space one frame at a time via
+  edit-transform. Exits on ESC."
+  (make-interaction
+   :on-enter (lambda () (input :cursor :capture t))
+   :on-exit (lambda () (input :cursor :capture nil))
+   :tick
+   (lambda (dt)
+     (when *selection*
+       (let ((dx (input :mouse :delta :x))
+             (dy (input :mouse :delta :y))
+             (dz (input :mouse :wheel :y))
+             (mouse-scale (* *mouse-sensitivity* dt)))
+           (let ((tr (instance-transform *selection*)))
+             (setf tr (edit-transform (tr)
+			(:move-by :z (* dx mouse-scale))
+			(:move-by :y (* dy mouse-scale))
+			(:move-by :x (* dz mouse-scale))))
+             (setf (instance-transform *selection*) tr)))))
+   :event
+   (lambda (ev)
+     (mu:with-members (type key button) ev input-event
+       (when (or (and (eq type :mouse-button-down)
+		      (eq button :left))
+		 (and (eq type :key-down)
+                      (eq key :escape)))
+	 (exit-interaction))))))
 
 (defun cubic-bezier (x1 y1 x2 y2 input)
   (labels ((bezier-value (p0 p1 p2 p3 parameter)
@@ -553,3 +586,29 @@ instance, middle click deletes."
       (%renderer-quit))))
 
 ;; (editor)
+
+;; (defun snake()
+;;   (when (%renderer-init)
+;;     (let ((grid-size 16)
+;; 	  (direction :right)
+;; 	  (snake-segments (make-array 0 :adjustable t :fill-pointer 0))
+;; 	  (food-position))
+;;       (labels ((init()
+;; 		 (vector-push-extend '(0 0) snake-segments))
+;; 	       (move-ahead()
+;; 		 (let ((head-segment (aref snake-segments 0))
+;; 		       (last-segment))
+;; 		   (loop for index from 
+			    
+;; 		   (destructuring-bind (x y) head-segment
+;; 		     (ecase :direction
+;; 		       (:up (list x (1- y)))
+;; 		       (:down (list x (1+ y)))
+;; 		       (:left (list (1- x) y))
+;; 		       (:right (list (1+ x) y))))
+;; 	       (grow())
+;; 	       (place-food())
+;; 	       (eat-food())
+;; 	       (die()))
+;; 	(print "Snake")))
+;;     (%renderer-quit)))
