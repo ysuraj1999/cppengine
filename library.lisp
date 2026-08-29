@@ -48,124 +48,124 @@
   "Numeric Key code for KEY keyword; mirrors the canonical C Key enum."
   (foreign-enum-value '%key key))
 
-(defcfun ("renderer_init" %renderer-init) :bool)
+(defcfun ("renderer_init" c-renderer-init) :bool)
 
-(defcfun ("renderer_load_obj" %renderer-load-obj) :uint64
+(defcfun ("renderer_load_obj" c-renderer-load-obj) :uint64
   (path :string))
 
-(defcfun ("remove_mesh" %remove-mesh) :bool
+(defcfun ("remove_mesh" c-remove-mesh) :bool
   (mh %mesh-handle))
 
-(defcfun ("remove_instance" %remove-instance) :bool
+(defcfun ("remove_instance" c-remove-instance) :bool
   (i %instance-handle))
 
-(defcfun ("add_instance" %add-instance) %instance-handle
+(defcfun ("add_instance" c-add-instance) %instance-handle
   (m %mesh-handle)
   (xform (:struct %transform)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("mesh_alias" %mesh-alias) :pointer
+(defcfun ("mesh_alias" c-mesh-alias) :pointer
   (mh %mesh-handle))
 
 (defun mesh-alias (mh)
-  (foreign-string-to-lisp (%mesh-alias mh)))
+  (foreign-string-to-lisp (c-mesh-alias mh)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("instance_alias" %instance-alias) :pointer
+(defcfun ("instance_alias" c-instance-alias) :pointer
   (ih %instance-handle))
 
 (defun instance-alias (ih)
-  (foreign-string-to-lisp (%instance-alias ih)))
+  (foreign-string-to-lisp (c-instance-alias ih)))
 
-(defcfun ("instance_get_transform" %instance-get-transform)
+(defcfun ("instance_get_transform" c-instance-get-transform)
     (:struct %transform)
   (i %instance-handle))
 
 (defcfun ("instance_set_transform"
-          %instance-set-transform) :void
+          c-instance-set-transform) :void
   (i :uint64)
   (xform (:struct %transform)))
 
-(defcfun ("mesh_count" %mesh-count) :uint64)
-(defcfun ("mesh_at" %mesh-at) %mesh-handle
+(defcfun ("mesh_count" c-mesh-count) :uint64)
+(defcfun ("mesh_at" c-mesh-at) %mesh-handle
   (index :uint64))
-(defcfun ("mesh_instance_count" %mesh-instance-count) :uint64
+(defcfun ("mesh_instance_count" c-mesh-instance-count) :uint64
   (mesh %mesh-handle))
-(defcfun ("mesh_instance_at" %mesh-instance-at) %instance-handle
+(defcfun ("mesh_instance_at" c-mesh-instance-at) %instance-handle
   (mesh %mesh-handle)
   (index :uint64))
 
-(defcfun ("renderer_rebuild" %renderer-rebuild) :void)
-(defcfun ("renderer_render_begin" %renderer-render-begin) :void)
-(defcfun ("renderer_render_scene" %renderer-render-scene) :void)
-(defcfun ("renderer_render_end" %renderer-render-end) :void)
-(defcfun ("renderer_render" %renderer-render) :void)
+(defcfun ("renderer_rebuild" c-renderer-rebuild) :void)
+(defcfun ("renderer_render_begin" c-renderer-render-begin) :void)
+(defcfun ("renderer_render_scene" c-renderer-render-scene) :void)
+(defcfun ("renderer_render_end" c-renderer-render-end) :void)
+(defcfun ("renderer_render" c-renderer-render) :void)
 
-(defcfun ("ui_begin" %ui-begin) :void)
-(defcfun ("ui_end" %ui-end) :void)
+(defcfun ("ui_begin" c-ui-begin) :void)
+(defcfun ("ui_end" c-ui-end) :void)
 
-(defcfun ("ui_begin_window" %ui-begin-window)
+(defcfun ("ui_begin_window" c-ui-begin-window)
   :void
   (name :string))
-(defcfun ("ui_end_window" %ui-end-window)
+(defcfun ("ui_end_window" c-ui-end-window)
   :void)
-(defcfun ("ui_button" %ui-button)
+(defcfun ("ui_button" c-ui-button)
   :bool
   (label :string))
 
-(defcfun ("ui_begin_tree" %ui-begin-tree)
+(defcfun ("ui_begin_tree" c-ui-begin-tree)
   :bool
   (label :string))
 
-(defcfun ("ui_end_tree" %ui-end-tree)
+(defcfun ("ui_end_tree" c-ui-end-tree)
   :void)
 
-(defcfun ("ui_selectable" %ui-selectable)
+(defcfun ("ui_selectable" c-ui-selectable)
   :bool
   (label :string)
   (selected :bool))
 
-(defcfun ("ui_sameline" %ui-sameline)
+(defcfun ("ui_sameline" c-ui-sameline)
   :void)
 
-(defcfun ("ui_text" %ui-text)
+(defcfun ("ui_text" c-ui-text)
   :void
   (text :string))
 
-(defcfun ("ui_push_id" %ui-push-id)
+(defcfun ("ui_push_id" c-ui-push-id)
   :void
   (id :int))
 
-(defcfun ("ui_pop_id" %ui-pop-id)
+(defcfun ("ui_pop_id" c-ui-pop-id)
   :void)
 
-(defcfun ("ui_begin_context_menu_item" %ui-begin-context-menu-item)
+(defcfun ("ui_begin_context_menu_item" c-ui-begin-context-menu-item)
   :bool)
 
-(defcfun ("ui_begin_context_menu_window" %ui-begin-context-menu-window)
+(defcfun ("ui_begin_context_menu_window" c-ui-begin-context-menu-window)
   :bool)
 
-(defcfun ("ui_end_context_menu" %ui-end-context-menu)
+(defcfun ("ui_end_context_menu" c-ui-end-context-menu)
   :void)
 
-(defcfun ("ui_menu_item" %ui-menu-item)
+(defcfun ("ui_menu_item" c-ui-menu-item)
   :bool
   (label :string))
 
-(defcfun ("renderer_clear" %renderer-clear) :bool)
+(defcfun ("renderer_clear" c-renderer-clear) :bool)
 
-(defcfun ("renderer_quit" %renderer-quit) :void)
+(defcfun ("renderer_quit" c-renderer-quit) :void)
 
-(defcfun ("input_poll" %input-poll) :void)
+(defcfun ("input_poll" c-input-poll) :void)
 
-(defcfun ("input_should_close" %input-should-close-p) :bool)
+(defcfun ("input_should_close" c-input-should-close-p) :bool)
 
-(defcfun ("input_set_cursor_captured" %input-set-cursor-captured) :void
+(defcfun ("input_set_cursor_captured" c-input-set-cursor-captured) :void
   (captured :bool))
 
-(defcfun ("input_cursor_captured" %input-cursor-captured-p) :bool)
+(defcfun ("input_cursor_captured" c-input-cursor-captured-p) :bool)
 
-(defcfun ("renderer_camera_set" %renderer-camera-set) :void
+(defcfun ("renderer_camera_set" c-renderer-camera-set) :void
   (px :float) (py :float) (pz :float)
   (yaw :float) (pitch :float))
 
@@ -177,11 +177,11 @@
   (:x1 4)
   (:x2 5))
 
-(defcfun ("ui_item_double_clicked" %ui-item-double-clicked)
+(defcfun ("ui_item_double_clicked" c-ui-item-double-clicked)
   :bool
   (button %mouse-button))
 
-(defcfun ("ui_item_clicked" %ui-item-clicked)
+(defcfun ("ui_item_clicked" c-ui-item-clicked)
   :bool
   (button %mouse-button))
 
@@ -189,58 +189,58 @@
 (defun ui-button (label)
   "Submit a button as the current item.  Returns the underlying click
 result, which callers normally ignore; attach handlers with UI-ON-CLICK."
-  (%ui-button label))
+  (c-ui-button label))
 
 (defun ui-selectable (label selected-p)
   "Submit a selectable as the current item.  SELECTED-P is the displayed
 selection state.  Returns the underlying click result, which callers
 normally ignore; attach handlers with UI-ON-CLICK."
-  (%ui-selectable label selected-p))
+  (c-ui-selectable label selected-p))
 
 (defmacro ui-on-click (button &body body)
   "Run BODY when the current item is clicked with mouse BUTTON
 (:left, :middle, :right, :x1 or :x2)."
-  `(when (%ui-item-clicked ,button)
+  `(when (c-ui-item-clicked ,button)
      ,@body))
 
 (defmacro ui-on-double-click (button &body body)
   "Run BODY when the current item is double-clicked with mouse BUTTON."
-  `(when (%ui-item-double-clicked ,button)
+  `(when (c-ui-item-double-clicked ,button)
      ,@body))
 
 (defmacro ui-on-context (&body body)
   "Open the context popup for the current item, run BODY (normally
 UI-MENU-ITEM forms), and close the popup."
-  `(when (%ui-begin-context-menu-item)
+  `(when (c-ui-begin-context-menu-item)
      ,@body
-     (%ui-end-context-menu)))
+     (c-ui-end-context-menu)))
 
 (defmacro ui-on-context-window (&body body)
   "Open the context popup of the current window (not bound to a specific
 item), run BODY, and close the popup."
-  `(when (%ui-begin-context-menu-window)
+  `(when (c-ui-begin-context-menu-window)
      ,@body
-     (%ui-end-context-menu)))
+     (c-ui-end-context-menu)))
 
 (defmacro ui-menu-item (label &body body)
   "Submit a menu item inside a context popup; run BODY when it is clicked."
-  `(when (%ui-menu-item ,label)
+  `(when (c-ui-menu-item ,label)
      ,@body))
 
-(defcfun ("input_mouse_x" %input-mouse-x) :float)
-(defcfun ("input_mouse_y" %input-mouse-y) :float)
-(defcfun ("input_mouse_dx" %input-mouse-dx) :float)
-(defcfun ("input_mouse_dy" %input-mouse-dy) :float)
-(defcfun ("input_mouse_wheel_x" %input-mouse-wheel-x) :float)
-(defcfun ("input_mouse_wheel_y" %input-mouse-wheel-y) :float)
-(defcfun ("input_mouse_down" %input-mouse-down-p) :bool
+(defcfun ("input_mouse_x" c-input-mouse-x) :float)
+(defcfun ("input_mouse_y" c-input-mouse-y) :float)
+(defcfun ("input_mouse_dx" c-input-mouse-dx) :float)
+(defcfun ("input_mouse_dy" c-input-mouse-dy) :float)
+(defcfun ("input_mouse_wheel_x" c-input-mouse-wheel-x) :float)
+(defcfun ("input_mouse_wheel_y" c-input-mouse-wheel-y) :float)
+(defcfun ("input_mouse_down" c-input-mouse-down-p) :bool
   (button %mouse-button))
-(defun %input-mouse-up-p(button)
-  (not (%input-mouse-down-p button)))
+(defcfun ("input_mouse_up" c-input-mouse-up-p) :bool
+  (button %mouse-button))
 
-(defcfun ("input_mouse_pressed" %input-mouse-pressed-p) :bool
+(defcfun ("input_mouse_pressed" c-input-mouse-pressed-p) :bool
   (button %mouse-button))
-(defcfun ("input_mouse_released" %input-mouse-released-p) :bool
+(defcfun ("input_mouse_released" c-input-mouse-released-p) :bool
   (button %mouse-button))
 
 (defcenum (%input-event-type :int)
@@ -264,9 +264,9 @@ item), run BODY, and close the popup."
   (wheel-x :float)
   (wheel-y :float))
 
-(defcfun ("input_event_count" %input-event-count) :uint64)
+(defcfun ("input_event_count" c-input-event-count) :uint64)
 
-(defcfun ("input_event_at" %input-event-at)
+(defcfun ("input_event_at" c-input-event-at)
     (:struct %input-event)
   (index :uint64))
 
@@ -301,41 +301,41 @@ item), run BODY, and close the popup."
   "Return a typed vector of this frame's input events in the order SDL
     delivered them; each element is an INPUT-EVENT with TYPE, KEY, BUTTON
     (keywords), DOWN, REPEAT and the mouse position/delta/wheel fields."
-  (let ((count (%input-event-count)))
+  (let ((count (c-input-event-count)))
     (loop with events = (make-array count
                                     :element-type 'input-event
                                     :fill-pointer 0)
           for i below count
-          do (vector-push-extend (%input-event-at i) events)
+          do (vector-push-extend (c-input-event-at i) events)
           finally (return events))))
 
-(defcfun ("renderer_camera_move" %renderer-camera-move) :void
+(defcfun ("renderer_camera_move" c-renderer-camera-move) :void
   (forward :float)
   (right :float)
   (up :float))
 
-(defcfun ("renderer_camera_rotate" %renderer-camera-rotate) :void
+(defcfun ("renderer_camera_rotate" c-renderer-camera-rotate) :void
   (yaw :float)
   (pitch :float))
 
-(defcfun ("renderer_camera_look_at" %renderer-camera-look-at) :void
+(defcfun ("renderer_camera_look_at" c-renderer-camera-look-at) :void
   (x :float)
   (y :float)
   (z :float))
 
-(defcfun ("input_key_down" %input-key-down-p) :bool
+(defcfun ("input_key_down" c-input-key-down-p) :bool
   (key %key))
-(defun %input-key-up-p(key)
-  (not (%input-key-down-p key)))
-
-(defcfun ("input_key_pressed" %input-key-pressed-p) :bool
+(defcfun ("input_key_up" c-input-key-up-p) :bool
   (key %key))
 
-(defcfun ("input_key_released" %input-key-released-p) :bool
+(defcfun ("input_key_pressed" c-input-key-pressed-p) :bool
+  (key %key))
+
+(defcfun ("input_key_released" c-input-key-released-p) :bool
   (key %key))
 
 
-(defcfun ("time_dt" %time-dt) :float)
+(defcfun ("time_dt" c-time-dt) :float)
 
 
 (defstruct transform
@@ -382,33 +382,29 @@ item), run BODY, and close the popup."
 ;; The renderer owns a single implicit scene; the mesh/instance handles are
 ;; the public references to objects inside it.
 
-(defvar *instance-transform* (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)
-  "Initial transform used by INSTANCE; bound by WITH-TRANSFORM.")
-
 (defun load-obj (path)
   "Load an OBJ into the renderer's single scene.  Returns the number of
 meshes added; traverse them with DO-MESHES."
-  (%renderer-load-obj path))
+  (c-renderer-load-obj path))
 
 (defun instance (mesh)
-  "Create a new instance of MESH in the single scene, using
-*INSTANCE-TRANSFORM* as its initial transform.  Returns an
-InstanceHandle."
-  (%add-instance mesh *instance-transform*))
+  "Create a new instance of MESH in the single scene at the origin with
+unit scale.  Returns an InstanceHandle."
+  (c-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
 
 (defun instance-transform (ih)
-  (%instance-get-transform ih))
+  (c-instance-get-transform ih))
 
 (defun (setf instance-transform) (value ih)
-  (%instance-set-transform ih value)
+  (c-instance-set-transform ih value)
   value)
 
 (defun remove-mesh (mh)
-  (%remove-mesh mh))
+  (c-remove-mesh mh))
 
 (defun remove-instance (ih)
-  (%remove-instance ih))
+  (c-remove-instance ih))
 
 (defun render ()
   "Render the renderer's single implicit scene."
-  (%renderer-render))
+  (c-renderer-render))

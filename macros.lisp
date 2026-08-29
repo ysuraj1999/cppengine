@@ -3,29 +3,29 @@
 (defmacro with-renderer (&body body)
   (mu:with-gensyms (ok)
     `(progn
-       (setf ,ok (%renderer-init))
+       (setf ,ok (c-renderer-init))
        (unwind-protect
             (when ,ok ,@body)
          (when ,ok
-           (%renderer-quit))))))
+           (c-renderer-quit))))))
 
 (defmacro with-ui-window (windowstr &body body)
   "Begin a UI window titled WINDOWSTR, run BODY, and end the window.
    The end runs even on a non-local exit."
   `(progn
-     (%ui-begin-window ,windowstr)
+     (c-ui-begin-window ,windowstr)
      (unwind-protect
           (progn ,@body)
-       (%ui-end-window))))
+       (c-ui-end-window))))
 
 (defmacro with-ui-id (id &body body)
   "Push ID onto the UI id stack, run BODY, and pop it.  The pop runs
    even on a non-local exit."
   `(progn
-     (%ui-push-id ,id)
+     (c-ui-push-id ,id)
      (unwind-protect
           (progn ,@body)
-       (%ui-pop-id))))
+       (c-ui-pop-id))))
 
 (defmacro with-ui-tree (nodestring &optional open-sym &body body)
   "Submit a tree node labeled NODESTRING and run BODY.  The node's UI id
@@ -35,19 +35,19 @@
    every frame the node is open."
   (mu:with-gensyms (open)
     (let ((open-sym (or open-sym open)))
-      `(let ((,open-sym (%ui-begin-tree ,nodestring)))
+      `(let ((,open-sym (c-ui-begin-tree ,nodestring)))
          (unwind-protect
               (progn ,@body)
            (when ,open-sym
-             (%ui-end-tree)))))))
+             (c-ui-end-tree)))))))
 
 (defmacro do-meshes ((mesh) &body body)
   "Traverse every mesh in the renderer's single scene. MESH is bound to a
 mesh handle, a first-class value that may be saved or passed to functions.
 Iterates via the count/at C API without building an intermediate vector."
   (mu:with-gensyms (i)
-    `(dotimes (,i (%mesh-count))
-       (let ((,mesh (%mesh-at ,i)))
+    `(dotimes (,i (c-mesh-count))
+       (let ((,mesh (c-mesh-at ,i)))
          ,@body))))
 
 (defmacro do-instances ((instance mesh) &body body)
@@ -55,37 +55,29 @@ Iterates via the count/at C API without building an intermediate vector."
 INSTANCE is bound to an instance handle, a first-class value that may be
 saved or passed to functions."
   (mu:with-gensyms (i)
-    `(dotimes (,i (%mesh-instance-count ,mesh))
-       (let ((,instance (%mesh-instance-at ,mesh ,i)))
+    `(dotimes (,i (c-mesh-instance-count ,mesh))
+       (let ((,instance (c-mesh-instance-at ,mesh ,i)))
          ,@body))))
-
-(defmacro with-transform ((&rest clauses) &body body)
-  "Bind *INSTANCE-TRANSFORM* to a fresh transform built from CLAUSES (the
-same clause DSL as EDIT-TRANSFORM) for the duration of BODY. INSTANCE
-forms inside BODY use it as their initial transform."
-  `(let ((*instance-transform*
-           (edit-transform (transform) ,@clauses)))
-     ,@body))
 
 (defmacro do-input-events ((event) &body body)
   "Iterate the unified input event stream delivered this frame. BODY runs
    once per event with EVENT bound to an INPUT-EVENT carrying TYPE, KEY,
    BUTTON, DOWN, REPEAT and the mouse fields."
   (mu:with-gensyms (i)
-    `(dotimes (,i (%input-event-count))
-       (let ((,event (%input-event-at ,i)))
+    `(dotimes (,i (c-input-event-count))
+       (let ((,event (c-input-event-at ,i)))
          ,@body))))
 
 (defmacro input (device &rest args)
-  "Direct state query - expands at compile time to the existing %input-*
+  "Direct state query - expands at compile time to the existing c-input-*
    native functions. No runtime abstraction.
-     (input :mouse :position :x)         -> (%input-mouse-x)
-     (input :mouse :delta :x)            -> (%input-mouse-dx)
-     (input :mouse :wheel :y)            -> (%input-mouse-wheel-y)
-     (input :mouse :button :left :down)  -> (%input-mouse-down-p :left)
-       (input :keyboard :w :down)          -> (%input-key-down-p :w)
-     (input :cursor :captured-p)         -> (%input-cursor-captured-p)
-     (input :cursor :capture t)          -> (%input-set-cursor-captured t)"
+     (input :mouse :position :x)         -> (c-input-mouse-x)
+     (input :mouse :delta :x)            -> (c-input-mouse-dx)
+     (input :mouse :wheel :y)            -> (c-input-mouse-wheel-y)
+     (input :mouse :button :left :down)  -> (c-input-mouse-down-p :left)
+       (input :keyboard :w :down)          -> (c-input-key-down-p :w)
+     (input :cursor :captured-p)         -> (c-input-cursor-captured-p)
+     (input :cursor :capture t)          -> (c-input-set-cursor-captured t)"
   (ecase device
     (:mouse
      (destructuring-bind (property &rest rest) args
@@ -113,10 +105,10 @@ forms inside BODY use it as their initial transform."
               (error "Button action isn't valid: ~S" action))
             `(,(button-action-to-function action) ,button)))
          (:captured-p
-          `(%input-cursor-captured-p))
+          `(c-input-cursor-captured-p))
          (:capture
           (destructuring-bind (flag) rest
-            `(%input-set-cursor-captured ,flag))))))
+            `(c-input-set-cursor-captured ,flag))))))
     (:keyboard
      (destructuring-bind (keyname action) args
        (unless (mouse-action-p action)
@@ -126,10 +118,10 @@ forms inside BODY use it as their initial transform."
      (destructuring-bind (property &rest rest) args
        (ecase property
          (:captured-p
-          `(%input-cursor-captured-p))
+          `(c-input-cursor-captured-p))
          (:capture
           (destructuring-bind (flag) rest
-            `(%input-set-cursor-captured ,flag))))))))
+            `(c-input-set-cursor-captured ,flag))))))))
 
 (defun mouse-button-p (pred)
   (member pred '(:left :middle :right :x1 :x2)))
@@ -151,32 +143,32 @@ forms inside BODY use it as their initial transform."
 
 (defun button-action-to-function (action)
   (ecase action
-    (:down (quote %input-mouse-down-p))
-    (:up (quote %input-mouse-up-p))
-    (:pressed (quote %input-mouse-pressed-p))
-    (:released (quote %input-mouse-released-p))))
+    (:down (quote c-input-mouse-down-p))
+    (:up (quote c-input-mouse-up-p))
+    (:pressed (quote c-input-mouse-pressed-p))
+    (:released (quote c-input-mouse-released-p))))
 
 (defun axis-to-position-function (axis)
   (ecase axis
-    (:x (quote %input-mouse-x))
-    (:y (quote %input-mouse-y))))
+    (:x (quote c-input-mouse-x))
+    (:y (quote c-input-mouse-y))))
 
 (defun axis-to-delta-function (axis)
   (ecase axis
-    (:x (quote %input-mouse-dx))
-    (:y (quote %input-mouse-dy))))
+    (:x (quote c-input-mouse-dx))
+    (:y (quote c-input-mouse-dy))))
 
 (defun axis-to-wheel-function (axis)
   (ecase axis
-    (:x (quote %input-mouse-wheel-x))
-    (:y (quote %input-mouse-wheel-y))))
+    (:x (quote c-input-mouse-wheel-x))
+    (:y (quote c-input-mouse-wheel-y))))
 
 (defun key-action-to-function (action)
   (ecase action
-    (:down (quote %input-key-down-p))
-    (:up (quote %input-key-up-p))
-    (:pressed (quote %input-key-pressed-p))
-    (:released (quote %input-key-released-p))))
+    (:down (quote c-input-key-down-p))
+    (:up (quote c-input-key-up-p))
+    (:pressed (quote c-input-key-pressed-p))
+    (:released (quote c-input-key-released-p))))
 
 (defmacro edit-transform ((transform) &body clauses)
   "Build a fresh transform by applying clause edits and return it.

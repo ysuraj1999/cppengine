@@ -319,6 +319,7 @@ struct Keyboard {
   void clear_current_state() { memset(current, 0, sizeof(current)); }
 
   bool down(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k]; }
+  bool up(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return !current[k]; }
   bool pressed(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return current[k] && !previous[k]; }
   bool released(Key k) const { ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range"); return !current[k] && previous[k]; }
 };
@@ -357,6 +358,7 @@ struct Mouse {
   }
 
   bool down(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b]; }
+  bool up(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return !down_current[b]; }
   bool pressed(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return down_current[b] && !down_previous[b]; }
   bool released(MouseButton b) const { ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button"); return !down_current[b] && down_previous[b]; }
 };
@@ -1029,6 +1031,10 @@ bool input_mouse_down(MouseButton button) {
   return input.mouse.down(button);
 }
 
+bool input_mouse_up(MouseButton button) {
+  return input.mouse.up(button);
+}
+
 bool input_mouse_pressed(MouseButton button) {
   return input.mouse.pressed(button);
 }
@@ -1120,6 +1126,10 @@ void renderer_camera_look_at(f32 x, f32 y, f32 z) {
 
 bool input_key_down(Key key) {
   return input.keyboard.down(key);
+}
+
+bool input_key_up(Key key) {
+  return input.keyboard.up(key);
 }
 
 bool input_key_pressed(Key key) {

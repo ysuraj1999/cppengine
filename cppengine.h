@@ -124,10 +124,12 @@ f32 input_mouse_dy(void);
 f32 input_mouse_wheel_x(void);
 f32 input_mouse_wheel_y(void);
 bool input_mouse_down(MouseButton button);
+bool input_mouse_up(MouseButton button);
 bool input_mouse_pressed(MouseButton button);
 bool input_mouse_released(MouseButton button);
 
 bool input_key_down(Key key);
+bool input_key_up(Key key);
 bool input_key_pressed(Key key);
 bool input_key_released(Key key);
 

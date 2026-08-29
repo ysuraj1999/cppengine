@@ -153,9 +153,9 @@
     (with-ui-window "Instance Properties"
       (let ((tr (instance-transform *selection*)))
         (mu:with-members (px py pz rx ry rz sx sy sz) tr transform
-	  (%ui-text (format nil "Position: ~,2f ~,2f ~,2f" px py pz))
-	  (%ui-text (format nil "Rotation: ~,2f ~,2f ~,2f" rx ry rz))
-	  (%ui-text (format nil "Scale: ~,2f ~,2f ~,2f" sx sy sz)))))))
+	  (c-ui-text (format nil "Position: ~,2f ~,2f ~,2f" px py pz))
+	  (c-ui-text (format nil "Rotation: ~,2f ~,2f ~,2f" rx ry rz))
+	  (c-ui-text (format nil "Scale: ~,2f ~,2f ~,2f" sx sy sz)))))))
 
 (defun ui-mesh (mesh)
   "Mesh tree node. Double click adds a new instance of MESH."
@@ -167,7 +167,7 @@
         (instance mesh))
       (ui-menu-item "Delete Mesh"
         (when (remove-mesh mesh)
-          (%renderer-rebuild))))
+          (c-renderer-rebuild))))
     (when mesh-open
       (do-instances (instance mesh)
         (ui-instance instance)))))
@@ -175,7 +175,7 @@
 (defun look-at-instance (instance)
   "Aim the camera at INSTANCE's position."
   (mu:with-members (px py pz) (instance-transform instance) transform
-    (%renderer-camera-look-at px py pz)))
+    (c-renderer-camera-look-at px py pz)))
 
 (defun ui-instance (instance)
   "Instance selectable. Left click selects and points the camera at the
@@ -199,7 +199,7 @@ instance, middle click deletes."
         (let ((path (file-picker)))
           (when path
             (load-obj path)
-            (%renderer-rebuild)))))
+            (c-renderer-rebuild)))))
     (do-meshes (mesh)
       (ui-mesh mesh))))
 
@@ -280,8 +280,8 @@ instance, middle click deletes."
 		      normalized-speed))
 	      (move-speed (* *keyboard-sensitivity* dt))
               (look-speed (* *mouse-sensitivity* dt scale)))
-         (%renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
-         (%renderer-camera-move
+         (c-renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
+         (c-renderer-camera-move
           (+ (if w-down move-speed 0.0)
              (if s-down (- move-speed) 0.0))
           (+ (if a-down (- move-speed) 0.0)
@@ -351,35 +351,35 @@ instance, middle click deletes."
       (bezier-y parameter))))
 
 (defun editor ()
-  (when (%renderer-init)
+  (when (c-renderer-init)
     (setf *interaction-stack* nil)
     (push-interaction (make-fundamental-2d-interaction))
     (unwind-protect
-	 (loop until (%input-should-close-p)
+	 (loop until (c-input-should-close-p)
 	       doing
-		  (%input-poll)
+		  (c-input-poll)
 		  (let ((interaction (current-interaction)))
 		    (when interaction
-		      (funcall interaction :tick (%time-dt))
+		      (funcall interaction :tick (c-time-dt))
 		      (do-input-events (ev)
 			(funcall interaction :event ev))))
-		  (%renderer-render-begin)
-		  (%renderer-render-scene)
-		  (%ui-begin)
+		  (c-renderer-render-begin)
+		  (c-renderer-render-scene)
+		  (c-ui-begin)
 		  (panel-inspector)
 		  (panel-instance-properties)
-		  (%ui-end)
-		  (%renderer-render-end))
+		  (c-ui-end)
+		  (c-renderer-render-end))
       (let ((it (current-interaction)))
 	(when it (funcall it :exit)))
       (setf *interaction-stack* nil
 	    *selection* nil)
-      (%renderer-quit))))
+      (c-renderer-quit))))
 
 ;; (editor)
 
 ;; (defun snake()
-;;   (when (%renderer-init)
+;;   (when (c-renderer-init)
 ;;     (let ((grid-size 16)
 ;; 	  (direction :right)
 ;; 	  (snake-segments (make-array 0 :adjustable t :fill-pointer 0))
@@ -402,4 +402,4 @@ instance, middle click deletes."
 ;; 	       (eat-food())
 ;; 	       (die()))
 ;; 	(print "Snake")))
-;;     (%renderer-quit)))
+;;     (c-renderer-quit)))
