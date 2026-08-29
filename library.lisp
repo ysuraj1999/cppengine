@@ -118,11 +118,11 @@
   :bool
   (label :string))
 
-(defcfun ("ui_treenode" %ui-treenode)
+(defcfun ("ui_begin_tree" %ui-begin-tree)
   :bool
   (label :string))
 
-(defcfun ("ui_treepop" %ui-treepop)
+(defcfun ("ui_end_tree" %ui-end-tree)
   :void)
 
 (defcfun ("ui_selectable" %ui-selectable)
@@ -203,7 +203,7 @@
   (:x1 4)
   (:x2 5))
 
-(defcfun ("ui_double_click" %ui-double-click)
+(defcfun ("ui_item_double_clicked" %ui-item-double-clicked)
   :bool
   (button %mouse-button))
 
@@ -231,7 +231,7 @@ normally ignore; attach handlers with UI-ON-CLICK."
 
 (defmacro ui-on-double-click (button &body body)
   "Run BODY when the current item is double-clicked with mouse BUTTON."
-  `(when (%ui-double-click ,button)
+  `(when (%ui-item-double-clicked ,button)
      ,@body))
 
 (defmacro ui-on-context (&body body)

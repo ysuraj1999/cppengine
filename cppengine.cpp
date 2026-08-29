@@ -1170,11 +1170,11 @@ bool ui_button(const char* label) {
   return ImGui::Button(label);
 }
 
-bool ui_treenode(const char* label) {
+bool ui_begin_tree(const char* label) {
   return ImGui::TreeNode(label);
 }
 
-void ui_treepop() {
+void ui_end_tree() {
   ImGui::TreePop();
 }
 
@@ -1227,7 +1227,7 @@ static ImGuiMouseButton imgui_button(MouseButton button) {
   }
 }
 
-bool ui_double_click(MouseButton button) {
+bool ui_item_double_clicked(MouseButton button) {
   return ImGui::IsMouseDoubleClicked(imgui_button(button)) &&
          ImGui::IsItemHovered(ImGuiHoveredFlags_None);
 }

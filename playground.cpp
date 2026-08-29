@@ -71,12 +71,12 @@ int main(int argc, char* argv[]) {
     for (u64 s = 0; s < scCount; s++) {
       SceneHandle sceneH = scene_at(s);
       std::string sceneLabel = "Scene #" + std::to_string(sceneH);
-      if (ui_treenode(sceneLabel.c_str())) {
+      if (ui_begin_tree(sceneLabel.c_str())) {
         u64 mCount = scene_mesh_count(sceneH);
         for (u64 m = 0; m < mCount; m++) {
           MeshHandle mh = scene_mesh_at(sceneH, m);
           const char* meshLabel = scene_mesh_alias(sceneH, mh);
-          if (ui_treenode(meshLabel)) {
+          if (ui_begin_tree(meshLabel)) {
             u64 instCount = scene_mesh_instance_count(sceneH, mh);
             for (u64 inst = 0; inst < instCount; inst++) {
               InstanceHandle ih = scene_mesh_instance_at(sceneH, mh, inst);
@@ -85,10 +85,10 @@ int main(int argc, char* argv[]) {
                 selected = true;
               }
             }
-            ui_treepop();
+            ui_end_tree();
           }
         }
-        ui_treepop();
+        ui_end_tree();
       }
     }
     ui_end_window();

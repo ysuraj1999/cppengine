@@ -339,7 +339,7 @@ iterate while scenes are created or destroyed."
 
 (defun ui-scene (scene)
   "Scene tree node. Double click loads an OBJ into SCENE."
-  (with-ui-treenode (format nil "Scene ~a" (scene-handle scene)) scene-open
+  (with-ui-tree (format nil "Scene ~a" (scene-handle scene)) scene-open
     (let ((delete-scene nil))
       (ui-on-double-click :left
         (let ((path (file-picker)))
@@ -365,7 +365,7 @@ iterate while scenes are created or destroyed."
 
 (defun ui-mesh (mesh)
   "Mesh tree node. Double click adds a new instance of MESH."
-  (with-ui-treenode (mesh-alias mesh) mesh-open
+  (with-ui-tree (mesh-alias mesh) mesh-open
     (ui-on-double-click :left
       (mesh-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
     (ui-on-context

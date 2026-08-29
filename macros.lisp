@@ -27,19 +27,19 @@
           (progn ,@body)
        (%ui-pop-id))))
 
-(defmacro with-ui-treenode (nodestring &optional open-sym &body body)
+(defmacro with-ui-tree (nodestring &optional open-sym &body body)
   "Submit a tree node labeled NODESTRING and run BODY.  The node's UI id
    is NODESTRING itself.  BODY runs every frame so click and context
    handlers stay attached even while the node is closed; guard children
-   with OPEN-SYM, bound to whether the node is open.  The tree pop runs
+   with OPEN-SYM, bound to whether the node is open.  The tree closes
    every frame the node is open."
   (mu:with-gensyms (open)
     (let ((open-sym (or open-sym open)))
-      `(let ((,open-sym (%ui-treenode ,nodestring)))
+      `(let ((,open-sym (%ui-begin-tree ,nodestring)))
          (unwind-protect
               (progn ,@body)
            (when ,open-sym
-             (%ui-treepop)))))))
+             (%ui-end-tree)))))))
 
 (defmacro do-scenes ((scene) &body body)
   (mu:with-gensyms (handle)

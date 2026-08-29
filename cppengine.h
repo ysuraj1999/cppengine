@@ -150,8 +150,8 @@ void ui_end(void);
 void ui_begin_window(const char* name);
 void ui_end_window(void);
 bool ui_button(const char* label);
-bool ui_treenode(const char* label);
-void ui_treepop(void);
+bool ui_begin_tree(const char* label);
+void ui_end_tree(void);
 bool ui_selectable(const char* label, bool selected);
 void ui_sameline(void);
 void ui_text(const char* text);
@@ -161,7 +161,7 @@ bool ui_begin_context_menu_item(void);
 bool ui_begin_context_menu_window(void);
 void ui_end_context_menu(void);
 bool ui_menu_item(const char* label);
-bool ui_double_click(MouseButton button);
+bool ui_item_double_clicked(MouseButton button);
 bool ui_item_clicked(MouseButton button);
 
 #ifdef __cplusplus
