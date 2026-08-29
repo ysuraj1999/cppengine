@@ -259,6 +259,12 @@ instance, middle click deletes."
        :tick nil
        :event (lambda (ev) (funcall command-input :feed ev)))))
 
+(defun increase-keyboard-sensitivity()
+  (incf *keyboard-sensitivity* 10))
+
+(defun decrease-keyboard-sensitivity()
+  (decf *keyboard-sensitivity* 10))
+
 (defun fps-interaction ()
   (make-interaction
    :on-enter (lambda () (input :cursor :capture t))
@@ -291,6 +297,12 @@ instance, middle click deletes."
     :event
     (lambda (ev)
       (mu:with-members (type key button) ev input-event
+	(when (and (eq type :key-down)
+		   (eq key :minus))
+	  (decrease-keyboard-sensitivity))
+	(when (and (eq type :key-down)
+		   (eq key :equals))
+	  (increase-keyboard-sensitivity))
         (when (or (and (eq type :key-down)
                          (eq key :escape))
                   (and (eq type :mouse-button-down)
@@ -378,28 +390,71 @@ instance, middle click deletes."
 
 ;; (editor)
 
-;; (defun snake()
-;;   (when (c-renderer-init)
-;;     (let ((grid-size 16)
-;; 	  (direction :right)
-;; 	  (snake-segments (make-array 0 :adjustable t :fill-pointer 0))
-;; 	  (food-position))
-;;       (labels ((init()
-;; 		 (vector-push-extend '(0 0) snake-segments))
-;; 	       (move-ahead()
-;; 		 (let ((head-segment (aref snake-segments 0))
-;; 		       (last-segment))
-;; 		   (loop for index from 
-			    
-;; 		   (destructuring-bind (x y) head-segment
-;; 		     (ecase :direction
-;; 		       (:up (list x (1- y)))
-;; 		       (:down (list x (1+ y)))
-;; 		       (:left (list (1- x) y))
-;; 		       (:right (list (1+ x) y))))
-;; 	       (grow())
-;; 	       (place-food())
-;; 	       (eat-food())
-;; 	       (die()))
-;; 	(print "Snake")))
-;;     (c-renderer-quit)))
+(defun snake()
+  (when (c-renderer-init)
+    (let ((direction :right)
+	  (running t)
+	  (snake)
+	  (accumulator 0)
+	  (step-rate (coerce (/ 1.0 5.0) 'single-float))) ; 5 ticks per second
+      (labels ((init()
+		 (load-obj "./models/cube.obj")
+		 (c-renderer-rebuild))
+	       (toggle()
+		 (setf running (not running)))
+	       (move-ahead()
+		 (and running
+		      (let ((tr (instance-transform snake)))
+			(setf (instance-transform snake)
+			      (ecase direction
+				(:right (edit-transform (tr)
+					  (:move-by :z -1)))
+				(:left (edit-transform (tr)
+					 (:move-by :z 1)))
+				(:up (edit-transform (tr)
+				       (:move-by :y 1)))
+				(:down (edit-transform (tr)
+					 (:move-by :y -1)))))))))
+	(init)
+	(do-meshes (mesh)
+	  (instance mesh))
+	(do-meshes (mesh)
+	  (do-instances (i mesh)
+	    (setf snake i)))
+	(let ((snake-interaction
+		(make-interaction
+		 :tick (lambda(dt)
+			 (incf accumulator dt)
+			 (when (>= accumulator step-rate)
+			   (decf accumulator step-rate)
+			   (move-ahead)))
+		 :event (lambda (ev)
+			  (mu:with-members (type key button) ev input-event
+			    (cond
+			      ((and (eq type :key-down) (eq key :w))
+			       (setf direction :up))
+			      ((and (eq type :key-down) (eq key :a))
+			       (setf direction :left))
+			      ((and (eq type :key-down) (eq key :s))
+			       (setf direction :down))
+			      ((and (eq type :key-down) (eq key :d))
+			       (setf direction :right))
+			      ((and (eq type :key-down) (eq key :space))
+			       (toggle))
+			      ((and (eq type :key-down) (eq key :f))
+			       (push-interaction (fps-interaction)))))))))
+	  (push-interaction snake-interaction)
+	  (loop until (c-input-should-close-p)
+		doing
+		   (c-input-poll)
+		   (let ((interaction (current-interaction)))
+		     (when interaction
+		       (funcall interaction :tick (c-time-dt))
+		       (do-input-events (ev)
+			 (funcall interaction :event ev))))
+		   (c-renderer-render-begin)
+		   (c-renderer-render-scene)
+		   (c-ui-begin)
+		   (c-ui-end)
+		   (c-renderer-render-end))
+	  (c-renderer-quit))))))
