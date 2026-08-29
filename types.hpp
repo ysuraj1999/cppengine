@@ -128,7 +128,6 @@ struct MeshRegion {
 
 using MeshHandle = u64;
 using InstanceHandle = u64;
-using SceneHandle = u64;
 
 struct Instance {
   InstanceHandle instanceHandle;
@@ -243,35 +242,6 @@ struct Scene {
     auto it = instanceIndex.find(ih);
     ASSERT(it != instanceIndex.end(), "instance handle not found");
     return it->second->alias.c_str();
-  }
-};
-
-struct SceneRegistry {
-  std::unordered_map<SceneHandle, Scene> scenes;
-  std::vector<SceneHandle> order;
-  HandleCounter sceneCounter;
-
-  SceneHandle create() {
-    SceneHandle sh = sceneCounter();
-    scenes[sh] = Scene{};
-    order.push_back(sh);
-    return sh;
-  }
-  bool destroy(SceneHandle sh) {
-    bool erased = scenes.erase(sh) > 0;
-    if (erased)
-      order.erase(std::find(order.begin(), order.end(), sh));
-    return erased;
-  }
-  Scene& get(SceneHandle sh) {
-    auto it = scenes.find(sh);
-    ASSERT(it != scenes.end(), "invalid scene handle");
-    return it->second;
-  }
-  u64 count() const { return order.size(); }
-  SceneHandle at(u64 index) const {
-    ASSERT(index < order.size(), "scene index out of bounds");
-    return order[index];
   }
 };
 

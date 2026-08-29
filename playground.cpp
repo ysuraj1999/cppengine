@@ -18,21 +18,18 @@ int main(int argc, char* argv[]) {
 
   renderer_init();
 
-  SceneHandle sh = scene_create();
+  u64 meshCount = renderer_load_obj("models/bmw.obj");
+  std::cout << "Length " << meshCount << '\n';
 
-  scene_load_obj(sh, "models/bmw.obj");
-  std::cout << "Length " << scene_mesh_count(sh) << '\n';
-
-  u64 meshCount = scene_mesh_count(sh);
   for (u64 i = 0; i < meshCount; i++) {
-    MeshHandle mh = scene_mesh_at(sh, i);
-    scene_add_instance(sh, mh,
-                       {/*position*/ 0.0f, 0.0f, 0.0f,
-                        /*scale*/    1.0f, 1.0f, 1.0f,
-                        /*rotation*/ 0.0f, 0.0f, 0.0f});
+    MeshHandle mh = mesh_at(i);
+    add_instance(mh,
+                 {/*position*/ 0.0f, 0.0f, 0.0f,
+                  /*scale*/    1.0f, 1.0f, 1.0f,
+                  /*rotation*/ 0.0f, 0.0f, 0.0f});
   }
   
-  renderer_rebuild_scene(sh);
+  renderer_rebuild();
   rendererConfig.keyboardSensitivity = 200.0;
   rendererConfig.mouseSensitivity = 50.0;
   bool running = true;
@@ -64,28 +61,20 @@ int main(int argc, char* argv[]) {
 			 middle_click ? dy * look_speed : 0.0f
 			 );
     renderer_render_begin();
-    renderer_render_scene(sh);
+    renderer_render_scene();
     ui_begin();
     ui_begin_window("Inspector");
-    u64 scCount = scene_count();
-    for (u64 s = 0; s < scCount; s++) {
-      SceneHandle sceneH = scene_at(s);
-      std::string sceneLabel = "Scene #" + std::to_string(sceneH);
-      if (ui_begin_tree(sceneLabel.c_str())) {
-        u64 mCount = scene_mesh_count(sceneH);
-        for (u64 m = 0; m < mCount; m++) {
-          MeshHandle mh = scene_mesh_at(sceneH, m);
-          const char* meshLabel = scene_mesh_alias(sceneH, mh);
-          if (ui_begin_tree(meshLabel)) {
-            u64 instCount = scene_mesh_instance_count(sceneH, mh);
-            for (u64 inst = 0; inst < instCount; inst++) {
-              InstanceHandle ih = scene_mesh_instance_at(sceneH, mh, inst);
-              bool selected = false;
-              if (ui_selectable(scene_instance_alias(sceneH, ih), selected)) {
-                selected = true;
-              }
-            }
-            ui_end_tree();
+    u64 mCount = mesh_count();
+    for (u64 m = 0; m < mCount; m++) {
+      MeshHandle mh = mesh_at(m);
+      const char* meshLabel = mesh_alias(mh);
+      if (ui_begin_tree(meshLabel)) {
+        u64 instCount = mesh_instance_count(mh);
+        for (u64 inst = 0; inst < instCount; inst++) {
+          InstanceHandle ih = mesh_instance_at(mh, inst);
+          bool selected = false;
+          if (ui_selectable(instance_alias(ih), selected)) {
+            selected = true;
           }
         }
         ui_end_tree();
@@ -96,7 +85,6 @@ int main(int argc, char* argv[]) {
     renderer_render_end();
   }
   
-  scene_destroy(sh);
   renderer_quit();
   return 0;
 }

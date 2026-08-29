@@ -7,7 +7,6 @@
 (unless (foreign-library-loaded-p 'libcppengine)
   (use-foreign-library libcppengine))
 
-(defctype %scene-handle :uint64)
 (defctype %mesh-handle :uint64)
 (defctype %instance-handle :uint64)
 
@@ -51,60 +50,56 @@
 
 (defcfun ("renderer_init" %renderer-init) :bool)
 
-(defcfun ("scene_create" %scene-create) %scene-handle)
-(defcfun ("scene_destroy" %scene-destroy) :bool
-  (sh %scene-handle))
-
-(defcfun ("scene_load_obj" %scene-load-obj) :bool
-  (sh %scene-handle)
+(defcfun ("renderer_load_obj" %renderer-load-obj) :uint64
   (path :string))
 
-(defcfun ("scene_remove_mesh" %scene-remove-mesh) :bool
-  (sh %scene-handle)
+(defcfun ("remove_mesh" %remove-mesh) :bool
   (mh %mesh-handle))
 
-(defcfun ("scene_add_instance" %scene-add-instance) %instance-handle
-  (sh %scene-handle)
+(defcfun ("remove_instance" %remove-instance) :bool
+  (i %instance-handle))
+
+(defcfun ("add_instance" %add-instance) %instance-handle
   (m %mesh-handle)
   (xform (:struct %transform)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("scene_mesh_alias" %scene-mesh-alias) :pointer
-  (sh %scene-handle)
+(defcfun ("mesh_alias" %mesh-alias) :pointer
   (mh %mesh-handle))
 
-(defun scene-mesh-alias (sh mh)
-  (foreign-string-to-lisp (%scene-mesh-alias sh mh)))
+(defun mesh-alias (mh)
+  (foreign-string-to-lisp (%mesh-alias mh)))
 
 ;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("scene_instance_alias" %scene-instance-alias) :pointer
-  (sh %scene-handle)
-  (i %instance-handle))
+(defcfun ("instance_alias" %instance-alias) :pointer
+  (ih %instance-handle))
 
-(defun scene-instance-alias (sh i)
-  (foreign-string-to-lisp (%scene-instance-alias sh i)))
+(defun instance-alias (ih)
+  (foreign-string-to-lisp (%instance-alias ih)))
 
-(defcfun ("scene_instance_get_transform" %scene-instance-get-transform)
+(defcfun ("instance_get_transform" %instance-get-transform)
     (:struct %transform)
-  (sh %scene-handle)
   (i %instance-handle))
 
-(defcfun ("scene_instance_set_transform"
-          %scene-instance-set-transform) :void
-  (sh :uint64)
+(defcfun ("instance_set_transform"
+          %instance-set-transform) :void
   (i :uint64)
   (xform (:struct %transform)))
 
-(defcfun ("scene_remove_instance" %scene-remove-instance) :bool
-  (sh %scene-handle)
-  (i %instance-handle))
+(defcfun ("mesh_count" %mesh-count) :uint64)
+(defcfun ("mesh_at" %mesh-at) %mesh-handle
+  (index :uint64))
+(defcfun ("mesh_instance_count" %mesh-instance-count) :uint64
+  (mesh %mesh-handle))
+(defcfun ("mesh_instance_at" %mesh-instance-at) %instance-handle
+  (mesh %mesh-handle)
+  (index :uint64))
 
-(defcfun ("renderer_rebuild_scene" %renderer-rebuild-scene) :bool
-  (sh %scene-handle))
+(defcfun ("renderer_rebuild" %renderer-rebuild) :void)
 (defcfun ("renderer_render_begin" %renderer-render-begin) :void)
-(defcfun ("renderer_render_scene" %renderer-render-scene) :void
-  (sh %scene-handle))
+(defcfun ("renderer_render_scene" %renderer-render-scene) :void)
 (defcfun ("renderer_render_end" %renderer-render-end) :void)
+(defcfun ("renderer_render" %renderer-render) :void)
 
 (defcfun ("ui_begin" %ui-begin) :void)
 (defcfun ("ui_end" %ui-end) :void)
@@ -169,27 +164,6 @@
   (captured :bool))
 
 (defcfun ("input_cursor_captured" %input-cursor-captured-p) :bool)
-
-(defcfun ("scene_count" %scene-count) :uint64)
-
-(defcfun ("scene_at" %scene-at) %scene-handle
-  (index :uint64))
-
-(defcfun ("scene_mesh_count" %scene-mesh-count) :uint64
-  (sh %scene-handle))
-
-(defcfun ("scene_mesh_at" %scene-mesh-at) %mesh-handle
-  (sh %scene-handle)
-  (index :uint64))
-
-(defcfun ("scene_mesh_instance_count" %scene-mesh-instance-count) :uint64
-  (sh %scene-handle)
-  (mesh %mesh-handle))
-
-(defcfun ("scene_mesh_instance_at" %scene-mesh-instance-at) %instance-handle
-  (sh %scene-handle)
-  (mesh %mesh-handle)
-  (index :uint64))
 
 (defcfun ("renderer_camera_set" %renderer-camera-set) :void
   (px :float) (py :float) (pz :float)
@@ -404,3 +378,37 @@ item), run BODY, and close the popup."
               (foreign-slot-value ptr '(:struct %transform) 'rx)
               (foreign-slot-value ptr '(:struct %transform) 'ry)
               (foreign-slot-value ptr '(:struct %transform) 'rz)))
+
+;; The renderer owns a single implicit scene; the mesh/instance handles are
+;; the public references to objects inside it.
+
+(defvar *instance-transform* (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)
+  "Initial transform used by INSTANCE; bound by WITH-TRANSFORM.")
+
+(defun load-obj (path)
+  "Load an OBJ into the renderer's single scene.  Returns the number of
+meshes added; traverse them with DO-MESHES."
+  (%renderer-load-obj path))
+
+(defun instance (mesh)
+  "Create a new instance of MESH in the single scene, using
+*INSTANCE-TRANSFORM* as its initial transform.  Returns an
+InstanceHandle."
+  (%add-instance mesh *instance-transform*))
+
+(defun instance-transform (ih)
+  (%instance-get-transform ih))
+
+(defun (setf instance-transform) (value ih)
+  (%instance-set-transform ih value)
+  value)
+
+(defun remove-mesh (mh)
+  (%remove-mesh mh))
+
+(defun remove-instance (ih)
+  (%remove-instance ih))
+
+(defun render ()
+  "Render the renderer's single implicit scene."
+  (%renderer-render))

@@ -149,8 +149,8 @@ static MouseButton sdl_to_mouse_button(Uint8 button) {
 RendererConfig rendererConfig = {};
 glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
 
-// Monotonically increasing counters (owned per Scene / SceneRegistry)
-static_global SceneRegistry registry;
+// The renderer owns exactly one implicit scene.
+static_global Scene scene;
 static_global SDL_Window *window;
 static_global SDL_GPUDevice *gpuDevice;
 static_global SDL_GPUBuffer *vertexBuffer;
@@ -217,8 +217,7 @@ struct RendererFrame {
     sdlAssert(renderPass != nullptr);
   }
 
-  void render_scene(SceneHandle sh) {
-    Scene &scene = registry.get(sh);
+  void render_scene() {
     for (auto &[meshHandle, instances] : scene.objects) {
       auto regionIt = rendererState.meshRegions.find(meshHandle);
       ASSERT(regionIt != rendererState.meshRegions.end(),
@@ -386,14 +385,6 @@ static_global Input input = {};
 
 static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
 static_global RendererFrame frame = {};
-
-SceneHandle scene_create() {
-  return registry.create();
-}
-
-bool scene_destroy(SceneHandle sh) {
-  return registry.destroy(sh);
-}
 
 // Lifecycle init check: log, release any partial state, fail gracefully.
 #define INIT_CHECK(cond, msg)						\
@@ -723,44 +714,39 @@ bool renderer_init() {
   return true;
 }
 
-bool scene_load_obj(SceneHandle sh, const char *path) {
-  Scene& scene = registry.get(sh);
-
+u64 renderer_load_obj(const char *path) {
   std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
-
   for (const auto &m : meshCollection) {
     scene.add_mesh(m);
   }
-  
-  return true;
+  return meshCollection.size();
 }
 
-bool scene_remove_mesh(SceneHandle sh, MeshHandle mh) {
-  return registry.get(sh).remove_mesh(mh);
+bool remove_mesh(MeshHandle mh) {
+  return scene.remove_mesh(mh);
 }
 
-InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t) {
-  return registry.get(sh).add_instance(m, t);
+InstanceHandle add_instance(MeshHandle m, Transform t) {
+  return scene.add_instance(m, t);
 }
 
-const char* scene_mesh_alias(SceneHandle sh, MeshHandle mh) {
-  return registry.get(sh).mesh_alias(mh);
+const char* mesh_alias(MeshHandle mh) {
+  return scene.mesh_alias(mh);
 }
 
-const char* scene_instance_alias(SceneHandle sh, InstanceHandle ih) {
-  return registry.get(sh).instance_alias(ih);
+const char* instance_alias(InstanceHandle ih) {
+  return scene.instance_alias(ih);
 }
 
-bool scene_remove_instance(SceneHandle sh, InstanceHandle ih) {
-  return registry.get(sh).remove_instance(ih);
+bool remove_instance(InstanceHandle ih) {
+  return scene.remove_instance(ih);
 }
 
-bool renderer_rebuild_scene(SceneHandle sh) {
+void renderer_rebuild() {
   ASSERT(gpuDevice != nullptr, "renderer not initialized");
-  Scene& scene = registry.get(sh);
 
   renderer_clear();
-  
+
   u32 vertIndexOffset = 0;
   u32 indexIndexOffset = 0;
   for (u64 i = 0; i < scene.mesh_count(); i++) {
@@ -882,35 +868,26 @@ bool renderer_rebuild_scene(SceneHandle sh) {
 
   indexBufferBinding[0].buffer = indexBuffer;
   indexBufferBinding[0].offset = 0;
-  return true;
 }
 
-u64 scene_count() {
-  return registry.count();
+u64 mesh_count() {
+  return scene.mesh_count();
 }
 
-SceneHandle scene_at(u64 index) {
-  return registry.at(index);
+MeshHandle mesh_at(u64 index) {
+  return scene.mesh_at(index);
 }
 
-u64 scene_mesh_count(SceneHandle sh) {
-  return registry.get(sh).mesh_count();
+u64 mesh_instance_count(MeshHandle mesh) {
+  return scene.instance_count(mesh);
 }
 
-MeshHandle scene_mesh_at(SceneHandle sh, u64 index) {
-  return registry.get(sh).mesh_at(index);
-}
-
-u64 scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh) {
-  return registry.get(sh).instance_count(mesh);
-}
-
-InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index) {
-  return registry.get(sh).instance_at(mesh, index);
+InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index) {
+  return scene.instance_at(mesh, index);
 }
 
 void renderer_render_begin(void)       { frame.begin(); }
-void renderer_render_scene(SceneHandle sh) { frame.render_scene(sh); }
+void renderer_render_scene(void)       { frame.render_scene(); }
 void renderer_render_end(void)         { frame.end(); }
 
 void ui_begin() {
@@ -1122,7 +1099,7 @@ void renderer_quit() {
   rendererState.vertices.clear();
   rendererState.indices.clear();
   rendererState.meshRegions.clear();
-  registry = SceneRegistry{};
+  scene = Scene{};
 
   shouldClose = false;
   input = Input{};
@@ -1236,11 +1213,10 @@ bool ui_item_clicked(MouseButton button) {
   return ImGui::IsItemClicked(imgui_button(button));
 }
 
-void scene_instance_set_transform(SceneHandle sh, InstanceHandle i,
-				  Transform t) {
-  registry.get(sh).set_instance_transform(i, t);
+void instance_set_transform(InstanceHandle i, Transform t) {
+  scene.set_instance_transform(i, t);
 }
 
-Transform scene_instance_get_transform(SceneHandle sh, InstanceHandle i) {
-  return registry.get(sh).get_instance_transform(i);
+Transform instance_get_transform(InstanceHandle i) {
+  return scene.get_instance_transform(i);
 }

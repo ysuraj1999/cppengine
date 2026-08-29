@@ -41,24 +41,31 @@
            (when ,open-sym
              (%ui-end-tree)))))))
 
-(defmacro do-scenes ((scene) &body body)
-  (mu:with-gensyms (handle)
-    `(map nil (lambda (,handle)
-                (let ((,scene (ensure-scene ,handle)))
-                  ,@body))
-          (scene-handles))))
-
-(defmacro do-scene-meshes ((mesh scene) &body body)
-  `(map nil (lambda (,mesh) ,@body) (scene-meshes ,scene)))
-
-(defmacro do-mesh-instances ((instance mesh) &body body)
-  `(map nil (lambda (,instance) ,@body) (mesh-instances ,mesh)))
-
-(defmacro do-scene-instances ((instance scene) &body body)
-  (mu:with-gensyms (mesh)
-    `(do-scene-meshes (,mesh ,scene)
-       (do-mesh-instances (,instance ,mesh)
+(defmacro do-meshes ((mesh) &body body)
+  "Traverse every mesh in the renderer's single scene. MESH is bound to a
+mesh handle, a first-class value that may be saved or passed to functions.
+Iterates via the count/at C API without building an intermediate vector."
+  (mu:with-gensyms (i)
+    `(dotimes (,i (%mesh-count))
+       (let ((,mesh (%mesh-at ,i)))
          ,@body))))
+
+(defmacro do-instances ((instance mesh) &body body)
+  "Traverse every instance of MESH (a mesh handle) in the single scene.
+INSTANCE is bound to an instance handle, a first-class value that may be
+saved or passed to functions."
+  (mu:with-gensyms (i)
+    `(dotimes (,i (%mesh-instance-count ,mesh))
+       (let ((,instance (%mesh-instance-at ,mesh ,i)))
+         ,@body))))
+
+(defmacro with-transform ((&rest clauses) &body body)
+  "Bind *INSTANCE-TRANSFORM* to a fresh transform built from CLAUSES (the
+same clause DSL as EDIT-TRANSFORM) for the duration of BODY. INSTANCE
+forms inside BODY use it as their initial transform."
+  `(let ((*instance-transform*
+           (edit-transform (transform) ,@clauses)))
+     ,@body))
 
 (defmacro do-input-events ((event) &body body)
   "Iterate the unified input event stream delivered this frame. BODY runs

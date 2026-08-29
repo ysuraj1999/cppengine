@@ -4,7 +4,6 @@
 
 typedef uint64_t u64;
 typedef float f32;
-typedef u64 SceneHandle;
 typedef u64 MeshHandle;
 typedef u64 InstanceHandle;
 
@@ -88,35 +87,29 @@ extern "C" {
 
 bool renderer_init(void);
 void renderer_render_begin(void);
-void renderer_render_scene(SceneHandle sh);
+void renderer_render_scene(void);
 void renderer_render_end(void);
 bool renderer_clear(void);
 void renderer_quit(void);
-bool renderer_rebuild_scene(SceneHandle sh);
+void renderer_rebuild(void);
 
 void renderer_camera_move(f32 forward, f32 right, f32 up);
 void renderer_camera_rotate(f32 dx, f32 dy);
 void renderer_camera_look_at(f32 x, f32 y, f32 z);
 
-SceneHandle scene_create(void);
-bool scene_destroy(SceneHandle sh);
-bool scene_load_obj(SceneHandle sh, const char *path);
-bool scene_remove_mesh(SceneHandle sh, MeshHandle mh);
-InstanceHandle scene_add_instance(SceneHandle sh, MeshHandle m, Transform t);
-const char* scene_mesh_alias(SceneHandle sh, MeshHandle mh);
-const char* scene_instance_alias(SceneHandle sh, InstanceHandle ih);
-void scene_instance_set_transform(SceneHandle sh,
-                                  InstanceHandle i,
-                                  Transform t);
-Transform scene_instance_get_transform(SceneHandle sh, InstanceHandle i);
-bool scene_remove_instance(SceneHandle sh, InstanceHandle i);
+u64 renderer_load_obj(const char *path);
+bool remove_mesh(MeshHandle mh);
+InstanceHandle add_instance(MeshHandle m, Transform t);
+const char* mesh_alias(MeshHandle mh);
+const char* instance_alias(InstanceHandle ih);
+void instance_set_transform(InstanceHandle i, Transform t);
+Transform instance_get_transform(InstanceHandle i);
+bool remove_instance(InstanceHandle i);
 
-u64 scene_count(void);
-SceneHandle scene_at(u64 index);
-u64 scene_mesh_count(SceneHandle sh);
-MeshHandle scene_mesh_at(SceneHandle sh, u64 index);
-u64 scene_mesh_instance_count(SceneHandle sh, MeshHandle mesh);
-InstanceHandle scene_mesh_instance_at(SceneHandle sh, MeshHandle mesh, u64 index);
+u64 mesh_count(void);
+MeshHandle mesh_at(u64 index);
+u64 mesh_instance_count(MeshHandle mesh);
+InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index);
 
 void input_poll(void);
 bool input_should_close(void);
