@@ -225,6 +225,18 @@ struct Scene {
     return it->second[index].instanceHandle;
   }
 
+  void ensure_instance_count(MeshHandle mh, u64 n) {
+    u64 current = instance_count(mh);
+    if (current > n) {
+      for (u64 i = current; i > n; i--)
+        remove_instance(instance_at(mh, i - 1));
+    } else if (current < n) {
+      Transform identity = {};
+      identity.sx = identity.sy = identity.sz = 1.0f;
+      for (u64 i = current; i < n; i++)
+        add_instance(mh, identity);
+    }
+  }
   void set_instance_transform(InstanceHandle ih, Transform t) {
     get_instance(ih).transform = t;
   }

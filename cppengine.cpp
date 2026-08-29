@@ -888,6 +888,10 @@ InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index) {
   return scene.instance_at(mesh, index);
 }
 
+void ensure_instance_count(MeshHandle mesh, u64 n) {
+  scene.ensure_instance_count(mesh, n);
+}
+
 void renderer_render_begin(void)       { frame.begin(); }
 void renderer_render_scene(void)       { frame.render_scene(); }
 void renderer_render_end(void)         { frame.end(); }

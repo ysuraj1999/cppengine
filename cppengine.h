@@ -110,6 +110,7 @@ u64 mesh_count(void);
 MeshHandle mesh_at(u64 index);
 u64 mesh_instance_count(MeshHandle mesh);
 InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index);
+void ensure_instance_count(MeshHandle mesh, u64 n);
 
 void input_poll(void);
 bool input_should_close(void);

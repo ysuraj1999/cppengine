@@ -95,6 +95,14 @@
   (mesh %mesh-handle)
   (index :uint64))
 
+(defcfun ("ensure_instance_count" c-ensure-instance-count) :void
+  (mesh %mesh-handle)
+  (n :uint64))
+
+(defun ensure-instance-count (mesh n)
+  "Ensure MESH has exactly N instances. Creates missing, prunes excess, no-op if equal."
+  (c-ensure-instance-count mesh n))
+
 (defcfun ("renderer_rebuild" c-renderer-rebuild) :void)
 (defcfun ("renderer_render_begin" c-renderer-render-begin) :void)
 (defcfun ("renderer_render_scene" c-renderer-render-scene) :void)
