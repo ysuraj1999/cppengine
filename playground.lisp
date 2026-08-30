@@ -409,7 +409,7 @@ instance, middle click deletes."
 		   (setf cube mesh))
 		 (place-food))
 	       (place-food()
-		 (setf food (list (- (random grid-size) 7) (- (random grid-size) 7))))
+		 (setf food (list (coerce (- (random grid-size) 7) 'single-float) (coerce (- (random grid-size) 7) 'single-float))))
 	       (toggle()
 		 (setf running (not running)))
 	       (move-ahead()
@@ -426,21 +426,32 @@ instance, middle click deletes."
 			 for previous = (aref snake (1- current-index))
 			 doing
 			    (setf (aref snake current-index) previous))
-		   (setf (aref snake 0) new-head)))
+		   (setf (aref snake 0) new-head)
+		   (format t "Head ~a, Food ~a~%" new-head food)
+		   (if (equal new-head food)
+		       (grow))))
 	       (grow()
 		 (vector-push-extend last-tail-position snake)
 		 (place-food))
 	       (snake-to-cubes()
-		 (ensure-instance-count cube (length snake))
-		 (let ((snake-index 0))
-		   (do-instances (instance cube)
-		     (destructuring-bind (x y) (aref snake snake-index)
-		       (let ((tr (instance-transform instance)))
-			 (setf (instance-transform instance)
-			       (edit-transform (tr)
-				 (:position :z x)
-				 (:position :y y)))))
-		     (incf snake-index)))))
+		 (ensure-instance-count cube (1+ (length snake)))
+		 (dotimes (c (length snake))
+		   (destructuring-bind (x y) (aref snake c)
+		     (let* ((i (c-mesh-instance-at cube c))
+			    (tr (c-instance-get-transform i)))
+		       (c-instance-set-transform i
+						 (edit-transform (tr)
+						   (:position :z x)
+						   (:position :y y))))))
+		 (let* ((i (c-mesh-instance-at cube (length snake)))
+			(food-tr (transform! 0.0 0.0 0.0
+					    1.0 1.0 1.0
+					    0.0 0.0 0.0)))
+		   (c-instance-set-transform i
+					     (edit-transform (food-tr)
+							     (:position :z (first food))
+							     (:position :y (second food)))))))
+
 	(init)
 	(snake-to-cubes)
 	(let ((snake-interaction
@@ -449,8 +460,8 @@ instance, middle click deletes."
 			 (incf accumulator dt)
 			 (when (>= accumulator step-rate)
 			   (decf accumulator step-rate)
-			   (loop for segment across snake
-				 doing (format t "~a~%" segment))
+			   ;; (loop for segment across snake
+			   ;; 	 doing (format t "~a~%" segment))
 			   (and running
 				(progn (move-ahead)
 				       (snake-to-cubes)))))
