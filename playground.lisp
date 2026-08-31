@@ -457,14 +457,12 @@ instance, middle click deletes."
 	(let ((snake-interaction
 		(make-interaction
 		 :tick (lambda(dt)
-			 (incf accumulator dt)
-			 (when (>= accumulator step-rate)
-			   (decf accumulator step-rate)
-			   ;; (loop for segment across snake
-			   ;; 	 doing (format t "~a~%" segment))
-			   (and running
-				(progn (move-ahead)
-				       (snake-to-cubes)))))
+			 (when running
+			   (incf accumulator dt)
+			   (when (>= accumulator step-rate)
+			     (decf accumulator step-rate)
+			     (progn (move-ahead)
+				    (snake-to-cubes)))))
 		 :event (lambda (ev)
 			  (mu:with-members (type key button) ev input-event
 			    (cond
