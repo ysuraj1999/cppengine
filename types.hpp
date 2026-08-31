@@ -126,6 +126,40 @@ struct MeshRegion {
     u32 indexCount;
 };
 
+std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
+
+struct GeometryStorage {
+  std::vector<Vertex> vertices;
+  std::vector<u32> indices;
+  std::vector<MeshHandle> meshOrder;
+  std::unordered_map<MeshHandle, MeshRegion> meshRegions;
+  HandleCounter meshCounter;
+
+  MeshHandle add_mesh(Mesh&& m) {
+    MeshHandle h = meshCounter();
+    MeshRegion r{};
+    r.vertexOffset = (u32)vertices.size();
+    r.indexOffset  = (u32)indices.size();
+    r.indexCount   = (u32)m.indices.size();
+    vertices.insert(vertices.end(), m.vertices.begin(), m.vertices.end());
+    indices.insert(indices.end(), m.indices.begin(), m.indices.end());
+    meshRegions[h] = r;
+    meshOrder.push_back(h);
+    return h;
+  }
+  u64 mesh_count() const { return meshOrder.size(); }
+  MeshHandle mesh_at(u64 index) const {
+    ASSERT(index < meshOrder.size(), "mesh index out of bounds");
+    return meshOrder[index];
+  }
+  u64 load_from_obj(const char *path) {
+    std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
+    for (auto &m : meshCollection)
+      add_mesh(std::move(m));
+    return meshCollection.size();
+  }
+};
+
 using MeshHandle = u64;
 using InstanceHandle = u64;
 
