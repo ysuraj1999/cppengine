@@ -428,7 +428,7 @@ instance, middle click deletes."
 			    (setf (aref snake current-index) previous))
 		   (setf (aref snake 0) new-head)
 		   (format t "Head ~a, Food ~a~%" new-head food)
-		   (if (equal new-head food)
+		   (if (equal head food)
 		       (grow))))
 	       (grow()
 		 (vector-push-extend last-tail-position snake)
