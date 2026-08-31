@@ -454,12 +454,12 @@ instance, middle click deletes."
 						   (:position :y y))))))
 		 (let* ((i (c-mesh-instance-at cube (length snake)))
 			(food-tr (transform! 0.0 0.0 0.0
-					    1.0 1.0 1.0
-					    0.0 0.0 0.0)))
+					     1.0 1.0 1.0
+					     0.0 0.0 0.0)))
 		   (c-instance-set-transform i
 					     (edit-transform (food-tr)
-							     (:position :z (first food))
-							     (:position :y (second food)))))))
+					       (:position :z (first food))
+					       (:position :y (second food)))))))
 
 	(init)
 	(snake-to-cubes)
