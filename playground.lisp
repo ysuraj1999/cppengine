@@ -285,7 +285,7 @@ instance, middle click deletes."
 		      0.82 0.00 0.99 0.34
 		      normalized-speed))
 	      (move-speed (* *keyboard-sensitivity* dt))
-              (look-speed (* *mouse-sensitivity* dt scale)))
+              (look-speed (* *mouse-sensitivity* dt)))
          (c-renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
          (c-renderer-camera-move
           (+ (if w-down move-speed 0.0)
