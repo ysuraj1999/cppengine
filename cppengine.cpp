@@ -183,23 +183,20 @@ struct RendererFrame {
   u32 instanceBufferOffset = 0;
 
   void init() {
-    swapchainTexture = nullptr;
-    swapchainWidth = 0;
-    swapchainHeight = 0;
-    renderPass = nullptr;
-    colorTargetInfo = {};
-    colorTargetInfo.clear_color =
-      SDL_FColor{rendererConfig.backgroundColor.r,
-                 rendererConfig.backgroundColor.g,
-                 rendererConfig.backgroundColor.b,
-                 rendererConfig.backgroundColor.a};
-    colorTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-    colorTargetInfo.store_op = SDL_GPU_STOREOP_STORE;
-    depthTargetInfo = {};
-    depthTargetInfo.load_op = SDL_GPU_LOADOP_CLEAR;
-    depthTargetInfo.clear_depth = 1.0f;
-    depthTargetInfo.store_op = SDL_GPU_STOREOP_DONT_CARE;
-    depthTargetInfo.texture = depthTexture;
+    colorTargetInfo = {
+        .clear_color = {rendererConfig.backgroundColor.r,
+                        rendererConfig.backgroundColor.g,
+                        rendererConfig.backgroundColor.b,
+                        rendererConfig.backgroundColor.a},
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_STORE,
+    };
+    depthTargetInfo = {
+        .texture = depthTexture,
+        .clear_depth = 1.0f,
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_DONT_CARE,
+    };
   }
 
   void begin() {
@@ -276,15 +273,16 @@ struct RendererFrame {
       *dst++ = transformToMat4(t.transform);
     }
 
-    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {};
-    transferToInstanceBufferLocation.offset = instanceBufferOffset;
-    transferToInstanceBufferLocation.transfer_buffer =
-      transferToInstanceBuffer;
+    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {
+        .transfer_buffer = transferToInstanceBuffer,
+        .offset = instanceBufferOffset,
+    };
 
-    SDL_GPUBufferRegion instanceBufferRegion = {};
-    instanceBufferRegion.offset = instanceBufferOffset;
-    instanceBufferRegion.buffer = instanceBuffer;
-    instanceBufferRegion.size = requiredInstanceCopySize;
+    SDL_GPUBufferRegion instanceBufferRegion = {
+        .buffer = instanceBuffer,
+        .offset = instanceBufferOffset,
+        .size = requiredInstanceCopySize,
+    };
 
     SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation,
                           &instanceBufferRegion, false);
@@ -418,12 +416,13 @@ bool ui_init() {
 
   // Setup Platform/Renderer backends
   ImGui_ImplSDL3_InitForSDLGPU(window);
-  ImGui_ImplSDLGPU3_InitInfo init_info = {};
-  init_info.Device = gpuDevice;
-  init_info.ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
-  init_info.MSAASamples = SDL_GPU_SAMPLECOUNT_1;                      // Only used in multi-viewports mode.
-  init_info.SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR;  // Only used in multi-viewports mode.
-  init_info.PresentMode = SDL_GPU_PRESENTMODE_VSYNC;
+  ImGui_ImplSDLGPU3_InitInfo init_info = {
+      .Device = gpuDevice,
+      .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window),
+      .MSAASamples = SDL_GPU_SAMPLECOUNT_1,
+      .SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+      .PresentMode = SDL_GPU_PRESENTMODE_VSYNC,
+  };
   ImGui_ImplSDLGPU3_Init(&init_info);
   return true;
 }
@@ -487,16 +486,17 @@ bool renderer_init() {
   ASSERT(!vertexShaderContents.empty(),
          SHADER_BIN_DIR "/shader.vertex.spv missing or empty");
 
-  SDL_GPUShaderCreateInfo vertexShaderInfo = {};
-  vertexShaderInfo.entrypoint = "main";
-  vertexShaderInfo.code = vertexShaderContents.data();
-  vertexShaderInfo.code_size = vertexShaderContents.size();
-  vertexShaderInfo.stage = SDL_GPU_SHADERSTAGE_VERTEX;
-  vertexShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-  vertexShaderInfo.num_samplers = 0;
-  vertexShaderInfo.num_storage_textures = 0;
-  vertexShaderInfo.num_storage_buffers = 0;
-  vertexShaderInfo.num_uniform_buffers = 1;
+  SDL_GPUShaderCreateInfo vertexShaderInfo = {
+      .code_size = vertexShaderContents.size(),
+      .code = vertexShaderContents.data(),
+      .entrypoint = "main",
+      .format = SDL_GPU_SHADERFORMAT_SPIRV,
+      .stage = SDL_GPU_SHADERSTAGE_VERTEX,
+      .num_samplers = 0,
+      .num_storage_textures = 0,
+      .num_storage_buffers = 0,
+      .num_uniform_buffers = 1,
+  };
 
   vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
   INIT_CHECK(vertexShader != nullptr, "vertex shader creation");
@@ -506,24 +506,26 @@ bool renderer_init() {
   ASSERT(!fragmentShaderContents.empty(),
          SHADER_BIN_DIR "/shader.fragment.spv missing or empty");
 
-  SDL_GPUShaderCreateInfo fragmentShaderInfo = {};
-  fragmentShaderInfo.entrypoint = "main";
-  fragmentShaderInfo.code = fragmentShaderContents.data();
-  fragmentShaderInfo.code_size = fragmentShaderContents.size();
-  fragmentShaderInfo.stage = SDL_GPU_SHADERSTAGE_FRAGMENT;
-  fragmentShaderInfo.format = SDL_GPU_SHADERFORMAT_SPIRV;
-  fragmentShaderInfo.num_samplers = 1;
-  fragmentShaderInfo.num_storage_textures = 0;
-  fragmentShaderInfo.num_storage_buffers = 0;
-  fragmentShaderInfo.num_uniform_buffers = 1;
+  SDL_GPUShaderCreateInfo fragmentShaderInfo = {
+      .code_size = fragmentShaderContents.size(),
+      .code = fragmentShaderContents.data(),
+      .entrypoint = "main",
+      .format = SDL_GPU_SHADERFORMAT_SPIRV,
+      .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
+      .num_samplers = 1,
+      .num_storage_textures = 0,
+      .num_storage_buffers = 0,
+      .num_uniform_buffers = 1,
+  };
 
   fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
   INIT_CHECK(fragmentShader != nullptr, "fragment shader creation");
 
-  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {};
-  pipelineInfo.vertex_shader = vertexShader;
-  pipelineInfo.fragment_shader = fragmentShader;
-  pipelineInfo.primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST;
+  SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {
+      .vertex_shader = vertexShader,
+      .fragment_shader = fragmentShader,
+      .primitive_type = SDL_GPU_PRIMITIVETYPE_TRIANGLELIST,
+  };
 
   SDL_GPUVertexBufferDescription vertexBufferDescription[2] = {};
 
@@ -592,8 +594,9 @@ bool renderer_init() {
   pipelineInfo.vertex_input_state.num_vertex_attributes = 8;
   pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
   
-  SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {};
-  colorTargetDescriptions[0].format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window);
+  SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {{
+      .format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window),
+  }};
 
   pipelineInfo.target_info.num_color_targets = 1;
   pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
@@ -603,10 +606,11 @@ bool renderer_init() {
   pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
 
   // Depth test
-  SDL_GPUDepthStencilState depthStencilState = {};
-  depthStencilState.enable_depth_write = true;
-  depthStencilState.enable_depth_test = true;
-  depthStencilState.compare_op = SDL_GPU_COMPAREOP_LESS;
+  SDL_GPUDepthStencilState depthStencilState = {
+      .compare_op = SDL_GPU_COMPAREOP_LESS,
+      .enable_depth_test = true,
+      .enable_depth_write = true,
+  };
 
   pipelineInfo.depth_stencil_state = depthStencilState;
   pipelineInfo.target_info.has_depth_stencil_target = true;
@@ -641,9 +645,10 @@ bool renderer_init() {
     INIT_CHECK(checkTexture != nullptr, "default texture creation");
 
     
-    SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {};
-    transferToTextureInfo.size = TEXTURE_SIZE;
-    transferToTextureInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = TEXTURE_SIZE,
+    };
     SDL_GPUTransferBuffer* transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
     INIT_CHECK(transferToTexture != nullptr, "texture transfer buffer creation");
 
@@ -652,22 +657,24 @@ bool renderer_init() {
     INIT_CHECK(mappedTransferToBytes != nullptr, "texture transfer buffer map");
     std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
 
-    SDL_GPUTextureTransferInfo textureTransferInfo = {};
-    textureTransferInfo.transfer_buffer = transferToTexture;
-    textureTransferInfo.offset = 0;
-    textureTransferInfo.pixels_per_row = tWidth;
-    textureTransferInfo.rows_per_layer = tHeight;
+    SDL_GPUTextureTransferInfo textureTransferInfo = {
+        .transfer_buffer = transferToTexture,
+        .offset = 0,
+        .pixels_per_row = tWidth,
+        .rows_per_layer = tHeight,
+    };
 
-    SDL_GPUTextureRegion textureRegion = {};
-    textureRegion.texture = checkTexture;
-    textureRegion.mip_level = 0;
-    textureRegion.layer = 0;
-    textureRegion.x = 0;
-    textureRegion.y = 0;
-    textureRegion.z = 0;
-    textureRegion.w = 512;
-    textureRegion.h = 512;
-    textureRegion.d = 1;
+    SDL_GPUTextureRegion textureRegion = {
+        .texture = checkTexture,
+        .mip_level = 0,
+        .layer = 0,
+        .x = 0,
+        .y = 0,
+        .z = 0,
+        .w = 512,
+        .h = 512,
+        .d = 1,
+    };
     SDL_GPUCommandBuffer* initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
     INIT_CHECK(initCmd != nullptr, "texture upload command buffer acquisition");
     SDL_GPUCopyPass* copyPass = SDL_BeginGPUCopyPass(initCmd);
@@ -678,12 +685,13 @@ bool renderer_init() {
     INIT_CHECK(SDL_SubmitGPUCommandBuffer(initCmd), "texture upload submission");
 
     // make the sampler here
-    SDL_GPUSamplerCreateInfo samplerInfo = {};
-    samplerInfo.mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST;
-    samplerInfo.min_filter = SDL_GPU_FILTER_NEAREST;
-    samplerInfo.mag_filter = SDL_GPU_FILTER_NEAREST;
-    samplerInfo.address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
-    samplerInfo.address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE;
+    SDL_GPUSamplerCreateInfo samplerInfo = {
+        .min_filter = SDL_GPU_FILTER_NEAREST,
+        .mag_filter = SDL_GPU_FILTER_NEAREST,
+        .mipmap_mode = SDL_GPU_SAMPLERMIPMAPMODE_NEAREST,
+        .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+        .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
+    };
 
     sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
     INIT_CHECK(sampler != nullptr, "sampler creation");
@@ -693,15 +701,16 @@ bool renderer_init() {
     textureSamplerBindings[0].texture = checkTexture;
 
     // make a depth texture here
-    SDL_GPUTextureCreateInfo depthTextureInfo = {};
-    depthTextureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-    depthTextureInfo.format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
-    depthTextureInfo.usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET;
-    depthTextureInfo.num_levels = 1;
-    depthTextureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    depthTextureInfo.layer_count_or_depth = 1;
-    depthTextureInfo.width = (u32)rendererConfig.resolution.x;
-    depthTextureInfo.height = (u32)rendererConfig.resolution.y;
+    SDL_GPUTextureCreateInfo depthTextureInfo = {
+        .type = SDL_GPU_TEXTURETYPE_2D,
+        .format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
+        .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
+        .width = (u32)rendererConfig.resolution.x,
+        .height = (u32)rendererConfig.resolution.y,
+        .layer_count_or_depth = 1,
+        .num_levels = 1,
+        .sample_count = SDL_GPU_SAMPLECOUNT_1,
+    };
 
     depthTexture =
       SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
@@ -754,10 +763,11 @@ void renderer_rebuild() {
   for (u64 i = 0; i < scene.mesh_count(); i++) {
     MeshHandle meshHandle = scene.mesh_at(i);
     const Mesh& mesh = scene.get_mesh(meshHandle);
-    MeshRegion meshRegionStorage = {};
-    meshRegionStorage.vertexOffset = vertIndexOffset;
-    meshRegionStorage.indexOffset = indexIndexOffset;
-    meshRegionStorage.indexCount = (u32)mesh.indices.size();
+    MeshRegion meshRegionStorage = {
+        .vertexOffset = vertIndexOffset,
+        .indexOffset = indexIndexOffset,
+        .indexCount = (u32)mesh.indices.size(),
+    };
     rendererState.meshRegions[meshHandle] = meshRegionStorage;
     
     for (auto &vertex : mesh.vertices) {
@@ -771,38 +781,43 @@ void renderer_rebuild() {
     indexIndexOffset += mesh.indices.size();
   }
 
-  SDL_GPUBufferCreateInfo vertexBufferInfo = {};
   const u32 VERTEX_BUFFER_SIZE = rendererState.vertices.size() * sizeof(Vertex);
-  vertexBufferInfo.size = VERTEX_BUFFER_SIZE;
-  vertexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+  SDL_GPUBufferCreateInfo vertexBufferInfo = {
+      .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+      .size = VERTEX_BUFFER_SIZE,
+  };
   vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(vertexBuffer != nullptr);
   
-  SDL_GPUBufferCreateInfo indexBufferInfo = {};
   const u32 INDEX_BUFFER_SIZE = rendererState.indices.size() * sizeof(u32);
-  indexBufferInfo.size = INDEX_BUFFER_SIZE;
-  indexBufferInfo.usage = SDL_GPU_BUFFERUSAGE_INDEX;
+  SDL_GPUBufferCreateInfo indexBufferInfo = {
+      .usage = SDL_GPU_BUFFERUSAGE_INDEX,
+      .size = INDEX_BUFFER_SIZE,
+  };
   indexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(indexBuffer != nullptr);
   
-  SDL_GPUBufferCreateInfo instanceBufferInfo = {};
-  instanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
-  instanceBufferInfo.usage = SDL_GPU_BUFFERUSAGE_VERTEX;
+  SDL_GPUBufferCreateInfo instanceBufferInfo = {
+      .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+      .size = INSTANCE_PREALLOCATED_SIZE,
+  };
   instanceBuffer = SDL_CreateGPUBuffer(gpuDevice, &instanceBufferInfo);
   sdlAssert(instanceBuffer != nullptr);
 
-  SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {};
-  transferToInstanceBufferInfo.size = INSTANCE_PREALLOCATED_SIZE;
-  transferToInstanceBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+  SDL_GPUTransferBufferCreateInfo transferToInstanceBufferInfo = {
+      .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+      .size = INSTANCE_PREALLOCATED_SIZE,
+  };
   transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
   sdlAssert(transferToInstanceBuffer != nullptr);
   
   // COPY:
   {
     // VERTEX BUFFER
-    SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {};
-    transferToVertexBufferInfo.size = VERTEX_BUFFER_SIZE;
-    transferToVertexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = VERTEX_BUFFER_SIZE,
+    };
     SDL_GPUTransferBuffer* transferToVertexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToVertexBufferInfo);
     sdlAssert(transferToVertexBuffer != nullptr);
 
@@ -811,19 +826,22 @@ void renderer_rebuild() {
     sdlAssert(mappedVertexInTransfer != nullptr);
     std::memcpy(mappedVertexInTransfer, rendererState.vertices.data(), VERTEX_BUFFER_SIZE);
 
-    SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {};
-    transferToVertexBufferLocation.offset = 0;
-    transferToVertexBufferLocation.transfer_buffer = transferToVertexBuffer;
+    SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {
+        .transfer_buffer = transferToVertexBuffer,
+        .offset = 0,
+    };
 
-    SDL_GPUBufferRegion vertexBufferRegion = {};
-    vertexBufferRegion.offset = 0;
-    vertexBufferRegion.buffer = vertexBuffer;
-    vertexBufferRegion.size = VERTEX_BUFFER_SIZE;
+    SDL_GPUBufferRegion vertexBufferRegion = {
+        .buffer = vertexBuffer,
+        .offset = 0,
+        .size = VERTEX_BUFFER_SIZE,
+    };
 
     // INDEX BUFFER
-    SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {};
-    transferToIndexBufferInfo.size = INDEX_BUFFER_SIZE;
-    transferToIndexBufferInfo.usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD;
+    SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {
+        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+        .size = INDEX_BUFFER_SIZE,
+    };
     SDL_GPUTransferBuffer* transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
     sdlAssert(transferToIndexBuffer != nullptr);
 
@@ -832,14 +850,16 @@ void renderer_rebuild() {
     sdlAssert(mappedIndicesInTransfer != nullptr);
     std::memcpy(mappedIndicesInTransfer, rendererState.indices.data(), INDEX_BUFFER_SIZE);
 
-    SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {};
-    transferToIndexBufferLocation.offset = 0;
-    transferToIndexBufferLocation.transfer_buffer = transferToIndexBuffer;
+    SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {
+        .transfer_buffer = transferToIndexBuffer,
+        .offset = 0,
+    };
 
-    SDL_GPUBufferRegion indexBufferRegion = {};
-    indexBufferRegion.offset = 0;
-    indexBufferRegion.buffer = indexBuffer;
-    indexBufferRegion.size = INDEX_BUFFER_SIZE;
+    SDL_GPUBufferRegion indexBufferRegion = {
+        .buffer = indexBuffer,
+        .offset = 0,
+        .size = INDEX_BUFFER_SIZE,
+    };
 
 
     SDL_GPUCommandBuffer* syncCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
