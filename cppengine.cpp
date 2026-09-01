@@ -309,23 +309,21 @@ struct RendererFrame {
 						     );
         glm::mat4 viewProjection = projection * view;
 
-        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
-        SDL_PushGPUFragmentUniformData(
-				       commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution)
-				       );
+	if (!scene.instances.empty()){
+	  SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+	  SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
+	  SDL_PushGPUFragmentUniformData(
+					 commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution)
+					 );
 
-        SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-        SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-        SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
-        SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
+	  SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
+	  SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
+	  SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+	  SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
+	}
     }
 
     void render_scene() {
-        std::sort(
-            scene.instances.begin(), scene.instances.end(),
-            [](const Instance &a, const Instance &b) { return a.mesh < b.mesh; }
-        );
         u64 i = 0;
         while (i < scene.instances.size()) {
             MeshHandle meshHandle = scene.instances[i].mesh;
