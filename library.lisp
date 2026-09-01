@@ -8,7 +8,6 @@
   (use-foreign-library libcppengine))
 
 (defctype %mesh-handle :uint64)
-(defctype %instance-handle :uint64)
 
 (defcstruct (%transform :class cffi-transform)
     (px :float) (py :float) (pz :float)
@@ -53,61 +52,38 @@
 (defcfun ("renderer_load_obj" c-renderer-load-obj) :uint64
   (path :string))
 
-(defcfun ("remove_mesh" c-remove-mesh) :bool
-  (mh %mesh-handle))
-
-(defcfun ("remove_instance" c-remove-instance) :bool
-  (i %instance-handle))
-
-(defcfun ("add_instance" c-add-instance) %instance-handle
-  (m %mesh-handle)
-  (xform (:struct %transform)))
-
-;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("mesh_alias" c-mesh-alias) :pointer
-  (mh %mesh-handle))
-
-(defun mesh-alias (mh)
-  (foreign-string-to-lisp (c-mesh-alias mh)))
-
-;; Returns a pointer into engine-owned memory; do not free.
-(defcfun ("instance_alias" c-instance-alias) :pointer
-  (ih %instance-handle))
-
-(defun instance-alias (ih)
-  (foreign-string-to-lisp (c-instance-alias ih)))
-
-(defcfun ("instance_get_transform" c-instance-get-transform)
-    (:struct %transform)
-  (i %instance-handle))
-
-(defcfun ("instance_set_transform"
-          c-instance-set-transform) :void
-  (i :uint64)
-  (xform (:struct %transform)))
-
 (defcfun ("mesh_count" c-mesh-count) :uint64)
 (defcfun ("mesh_at" c-mesh-at) %mesh-handle
   (index :uint64))
-(defcfun ("mesh_instance_count" c-mesh-instance-count) :uint64
-  (mesh %mesh-handle))
-(defcfun ("mesh_instance_at" c-mesh-instance-at) %instance-handle
-  (mesh %mesh-handle)
-  (index :uint64))
 
+;; Instances are a flat array: the handle is the index into the array.
+(defcfun ("instance_count" c-instance-count) :uint64)
 (defcfun ("ensure_instance_count" c-ensure-instance-count) :void
-  (mesh %mesh-handle)
   (n :uint64))
 
-(defun ensure-instance-count (mesh n)
-  "Ensure MESH has exactly N instances. Creates missing, prunes excess, no-op if equal."
-  (c-ensure-instance-count mesh n))
+(defun ensure-instance-count (n)
+  "Resize the flat instance array to exactly N entries. Creates missing,
+prunes excess, no-op if equal."
+  (c-ensure-instance-count n))
+
+(defcfun ("instance_set" c-instance-set) :void
+  (index :uint64)
+  (mesh %mesh-handle)
+  (xform (:struct %transform)))
+
+(defcfun ("instance_mesh" c-instance-mesh) %mesh-handle
+  (index :uint64))
+(defcfun ("instance_get_transform" c-instance-get-transform)
+    (:struct %transform)
+  (index :uint64))
+(defcfun ("instance_set_transform" c-instance-set-transform) :void
+  (index :uint64)
+  (xform (:struct %transform)))
 
 (defcfun ("renderer_rebuild" c-renderer-rebuild) :void)
 (defcfun ("renderer_render_begin" c-renderer-render-begin) :void)
 (defcfun ("renderer_render_scene" c-renderer-render-scene) :void)
 (defcfun ("renderer_render_end" c-renderer-render-end) :void)
-(defcfun ("renderer_render" c-renderer-render) :void)
 
 (defcfun ("ui_begin" c-ui-begin) :void)
 (defcfun ("ui_end" c-ui-end) :void)
@@ -172,10 +148,6 @@
   (captured :bool))
 
 (defcfun ("input_cursor_captured" c-input-cursor-captured-p) :bool)
-
-(defcfun ("renderer_camera_set" c-renderer-camera-set) :void
-  (px :float) (py :float) (pz :float)
-  (yaw :float) (pitch :float))
 
 (defcenum (%mouse-button :int)
     (:left 1)
@@ -387,32 +359,25 @@ item), run BODY, and close the popup."
               (foreign-slot-value ptr '(:struct %transform) 'ry)
               (foreign-slot-value ptr '(:struct %transform) 'rz)))
 
-;; The renderer owns a single implicit scene; the mesh/instance handles are
-;; the public references to objects inside it.
+;; The renderer owns a single implicit scene; meshes are referenced by handle
+;; and instances by their index into the flat instance array.
 
 (defun load-obj (path)
   "Load an OBJ into the renderer's single scene.  Returns the number of
 meshes added; traverse them with DO-MESHES."
   (c-renderer-load-obj path))
 
-(defun instance (mesh)
-  "Create a new instance of MESH in the single scene at the origin with
-unit scale.  Returns an InstanceHandle."
-  (c-add-instance mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+(defun add-instance (mesh)
+  "Append a new instance of MESH to the flat scene at the origin with
+unit scale.  Returns the new flat instance index."
+  (let ((index (c-instance-count)))
+    (c-ensure-instance-count (1+ index))
+    (c-instance-set index mesh (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0))
+    index))
 
-(defun instance-transform (ih)
-  (c-instance-get-transform ih))
+(defun instance-transform (index)
+  (c-instance-get-transform index))
 
-(defun (setf instance-transform) (value ih)
-  (c-instance-set-transform ih value)
+(defun (setf instance-transform) (value index)
+  (c-instance-set-transform index value)
   value)
-
-(defun remove-mesh (mh)
-  (c-remove-mesh mh))
-
-(defun remove-instance (ih)
-  (c-remove-instance ih))
-
-(defun render ()
-  "Render the renderer's single implicit scene."
-  (c-renderer-render))

@@ -3,7 +3,7 @@
 (deftype u64 () '(unsigned-byte 64))
 
 (defvar *selection* nil
-  "Currently selected instance handle (a raw InstanceHandle).")
+  "Currently selected instance (a flat instance index).")
 
 (defun selection-get (object)
   (eql *selection* object))
@@ -159,15 +159,12 @@
 
 (defun ui-mesh (mesh)
   "Mesh tree node. Double click adds a new instance of MESH."
-  (with-ui-tree (mesh-alias mesh) mesh-open
+  (with-ui-tree (format nil "Mesh ~D" mesh) mesh-open
     (ui-on-double-click :left
-      (instance mesh))
+      (add-instance mesh))
     (ui-on-context
       (ui-menu-item "Instantiate"
-        (instance mesh))
-      (ui-menu-item "Delete Mesh"
-        (when (remove-mesh mesh)
-          (c-renderer-rebuild))))
+        (add-instance mesh)))
     (when mesh-open
       (do-instances (instance mesh)
         (ui-instance instance)))))
@@ -178,19 +175,13 @@
     (c-renderer-camera-look-at px py pz)))
 
 (defun ui-instance (instance)
-  "Instance selectable. Left click selects and points the camera at the
-instance, middle click deletes."
+  "Instance selectable. Left click selects and points the camera at it."
   (with-ui-id instance
-    (ui-selectable (instance-alias instance)
+    (ui-selectable (format nil "Instance ~D" instance)
                    (selection-get instance))
     (ui-on-click :left
       (selection-set instance)
-      (look-at-instance instance))
-    (ui-on-click :middle
-      (remove-instance instance))
-    (ui-on-context
-      (ui-menu-item "Delete"
-        (remove-instance instance)))))
+      (look-at-instance instance))))
 
 (defun panel-inspector ()
   (with-ui-window "Inspector"
@@ -487,23 +478,20 @@ instance, middle click deletes."
 		 (try-placing-food))
 	       (snake-to-cubes()
 		 (let ((segments (snake-segments)))
-		   (ensure-instance-count cube (1+ (length segments)))
+		   (ensure-instance-count (1+ (length segments)))
 		   (dotimes (c (length segments))
 		     (destructuring-bind (x y) (aref segments c)
-		       (let* ((i (c-mesh-instance-at cube c))
-			      (tr (c-instance-get-transform i)))
-			 (c-instance-set-transform i
-						   (edit-transform (tr)
-						     (:position :z x)
-						     (:position :y y))))))
-		   (let* ((i (c-mesh-instance-at cube (length segments)))
-			  (food-tr (transform! 0.0 0.0 0.0
-					       0.9 0.9 0.9
-					       0.0 0.0 0.0)))
-		     (c-instance-set-transform i
-					       (edit-transform (food-tr)
-						 (:position :z (first food))
-						 (:position :y (second food))))))))
+		       (let ((tr (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+			 (c-instance-set c cube
+					 (edit-transform (tr)
+					   (:position :z x)
+					   (:position :y y))))))
+		   (let* ((i (length segments))
+			  (food-tr (transform! 0.0 0.0 0.0 0.9 0.9 0.9 0.0 0.0 0.0)))
+		     (c-instance-set i cube
+				     (edit-transform (food-tr)
+				       (:position :z (first food))
+				       (:position :y (second food))))))))
 
 	(init)
 	(snake-to-cubes)

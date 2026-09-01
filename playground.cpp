@@ -21,10 +21,10 @@ int main(int argc, char *argv[]) {
     u64 meshCount = renderer_load_obj("models/bmw.obj");
     std::cout << "Length " << meshCount << '\n';
 
+    ensure_instance_count(meshCount);
     for (u64 i = 0; i < meshCount; i++) {
-        MeshHandle mh = mesh_at(i);
-        add_instance(
-            mh,
+        instance_set(
+            i, mesh_at(i),
             {/*position*/ 0.0f,
              0.0f,
              0.0f,
@@ -75,13 +75,15 @@ int main(int argc, char *argv[]) {
         u64 mCount = mesh_count();
         for (u64 m = 0; m < mCount; m++) {
             MeshHandle mh = mesh_at(m);
-            const char *meshLabel = mesh_alias(mh);
-            if (ui_begin_tree(meshLabel)) {
-                u64 instCount = mesh_instance_count(mh);
+            std::string meshLabel = "Mesh " + std::to_string(m);
+            if (ui_begin_tree(meshLabel.c_str())) {
+                u64 instCount = instance_count();
                 for (u64 inst = 0; inst < instCount; inst++) {
-                    InstanceHandle ih = mesh_instance_at(mh, inst);
+                    if (instance_mesh(inst) != mh)
+                        continue;
                     bool selected = false;
-                    if (ui_selectable(instance_alias(ih), selected)) {
+                    std::string label = "Instance " + std::to_string(inst);
+                    if (ui_selectable(label.c_str(), selected)) {
                         selected = true;
                     }
                 }

@@ -254,13 +254,8 @@ static_global SDL_GPUBufferBinding indexBufferBinding[1] = {};
 static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
 static_global SDL_GPUTransferBuffer *transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
-static_global RendererState rendererState;
 
 static_global GeometryStorage geometryStorage;
-static_global SDL_GPUBuffer *geometryVertexBuffer = nullptr;
-static_global SDL_GPUBuffer *geometryIndexBuffer = nullptr;
-static_global SDL_GPUBufferBinding geometryVertexBufferBinding[1] = {};
-static_global SDL_GPUBufferBinding geometryIndexBufferBinding[1] = {};
 static_global bool shouldClose = false;
 
 struct RendererFrame {
@@ -307,13 +302,20 @@ struct RendererFrame {
     }
 
     void render_scene() {
-        for (auto &[meshHandle, instances] : scene.objects) {
-            auto regionIt = rendererState.meshRegions.find(meshHandle);
-            ASSERT(
-                regionIt != rendererState.meshRegions.end(), "mesh never synced - call renderer_rebuild_scene first"
-            );
-            MeshRegion meshRegion = regionIt->second;
-            draw_mesh(meshRegion, instances);
+        std::sort(
+            scene.instances.begin(), scene.instances.end(),
+            [](const Instance &a, const Instance &b) { return a.mesh < b.mesh; }
+        );
+        u64 i = 0;
+        while (i < scene.instances.size()) {
+            MeshHandle meshHandle = scene.instances[i].mesh;
+            u64 j = i;
+            while (j < scene.instances.size() && scene.instances[j].mesh == meshHandle)
+                j++;
+            auto regionIt = geometryStorage.meshRegions.find(meshHandle);
+            ASSERT(regionIt != geometryStorage.meshRegions.end(), "mesh never synced - call renderer_rebuild first");
+            draw_mesh(regionIt->second, scene.instances, i, j - i);
+            i = j;
         }
     }
 
@@ -323,7 +325,7 @@ struct RendererFrame {
     }
 
   private:
-    void draw_mesh(MeshRegion &meshRegion, Instances &instances) {
+    void draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
         ASSERT(
             renderPass != nullptr && commandBuffer != nullptr, "draw called outside renderer_render_begin/end block"
         );
@@ -347,7 +349,7 @@ struct RendererFrame {
         SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
         sdlAssert(frameCopyPass != nullptr);
 
-        const u32 requiredInstanceCopySize = instances.size() * sizeof(glm::mat4);
+        const u32 requiredInstanceCopySize = count * sizeof(glm::mat4);
         ASSERT(
             instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE,
             "instance buffer overflow - raise INSTANCE_PREALLOCATED_SIZE"
@@ -358,9 +360,8 @@ struct RendererFrame {
         sdlAssert(mappedToInstanceInTransfer != nullptr);
 
         glm::mat4 *dst = (glm::mat4 *)((u8 *)mappedToInstanceInTransfer + instanceBufferOffset);
-        for (auto &t : instances) {
-            *dst++ = transformToMat4(t.transform);
-        }
+        for (u64 k = 0; k < count; k++)
+            *dst++ = transformToMat4(instances[start + k].transform);
 
         SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {
             .transfer_buffer = transferToInstanceBuffer,
@@ -377,7 +378,7 @@ struct RendererFrame {
         SDL_EndGPUCopyPass(frameCopyPass);
 
         SDL_DrawGPUIndexedPrimitives(
-            renderPass, meshRegion.indexCount, instances.size(), meshRegion.indexOffset, meshRegion.vertexOffset, 0
+            renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
         );
         instanceBufferOffset += requiredInstanceCopySize;
     }
@@ -837,61 +838,41 @@ bool renderer_init() {
 
 u64 renderer_load_obj(const char *path) {
     std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
-    for (const auto &m : meshCollection) {
-        scene.add_mesh(m);
-    }
+    for (auto &m : meshCollection)
+        geometryStorage.add_mesh(std::move(m));
     return meshCollection.size();
 }
 
-bool remove_mesh(MeshHandle mh) {
-    return scene.remove_mesh(mh);
+u64 instance_count() {
+    return scene.instances.size();
 }
 
-InstanceHandle add_instance(MeshHandle m, Transform t) {
-    return scene.add_instance(m, t);
+void ensure_instance_count(u64 n) {
+    scene.ensure_instance_count(n);
 }
 
-const char *mesh_alias(MeshHandle mh) {
-    return scene.mesh_alias(mh);
+void instance_set(u64 index, MeshHandle m, Transform t) {
+    scene.set_instance(index, m, t);
 }
 
-const char *instance_alias(InstanceHandle ih) {
-    return scene.instance_alias(ih);
-}
-
-bool remove_instance(InstanceHandle ih) {
-    return scene.remove_instance(ih);
+MeshHandle instance_mesh(u64 index) {
+    ASSERT(index < scene.instances.size(), "instance index out of bounds");
+    return scene.instances[index].mesh;
 }
 
 void renderer_rebuild() {
     ASSERT(gpuDevice != nullptr, "renderer not initialized");
 
-    renderer_clear();
-
-    u32 vertIndexOffset = 0;
-    u32 indexIndexOffset = 0;
-    for (u64 i = 0; i < scene.mesh_count(); i++) {
-        MeshHandle meshHandle = scene.mesh_at(i);
-        const Mesh &mesh = scene.get_mesh(meshHandle);
-        MeshRegion meshRegionStorage = {
-            .vertexOffset = vertIndexOffset,
-            .indexOffset = indexIndexOffset,
-            .indexCount = (u32)mesh.indices.size(),
-        };
-        rendererState.meshRegions[meshHandle] = meshRegionStorage;
-
-        for (auto &vertex : mesh.vertices) {
-            rendererState.vertices.push_back(vertex);
-        }
-        for (auto &index : mesh.indices) {
-            rendererState.indices.push_back(index);
-        }
-
-        vertIndexOffset += mesh.vertices.size();
-        indexIndexOffset += mesh.indices.size();
+    if (vertexBuffer) {
+        SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+        vertexBuffer = nullptr;
+    }
+    if (indexBuffer) {
+        SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
+        indexBuffer = nullptr;
     }
 
-    const u32 VERTEX_BUFFER_SIZE = rendererState.vertices.size() * sizeof(Vertex);
+    const u32 VERTEX_BUFFER_SIZE = geometryStorage.vertices.size() * sizeof(Vertex);
     SDL_GPUBufferCreateInfo vertexBufferInfo = {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
         .size = VERTEX_BUFFER_SIZE,
@@ -899,7 +880,7 @@ void renderer_rebuild() {
     vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
     sdlAssert(vertexBuffer != nullptr);
 
-    const u32 INDEX_BUFFER_SIZE = rendererState.indices.size() * sizeof(u32);
+    const u32 INDEX_BUFFER_SIZE = geometryStorage.indices.size() * sizeof(u32);
     SDL_GPUBufferCreateInfo indexBufferInfo = {
         .usage = SDL_GPU_BUFFERUSAGE_INDEX,
         .size = INDEX_BUFFER_SIZE,
@@ -935,7 +916,7 @@ void renderer_rebuild() {
         Vertex *mappedVertexInTransfer =
             reinterpret_cast<Vertex *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
         sdlAssert(mappedVertexInTransfer != nullptr);
-        std::memcpy(mappedVertexInTransfer, rendererState.vertices.data(), VERTEX_BUFFER_SIZE);
+        std::memcpy(mappedVertexInTransfer, geometryStorage.vertices.data(), VERTEX_BUFFER_SIZE);
 
         SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {
             .transfer_buffer = transferToVertexBuffer,
@@ -960,7 +941,7 @@ void renderer_rebuild() {
         u32 *mappedIndicesInTransfer =
             reinterpret_cast<u32 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
         sdlAssert(mappedIndicesInTransfer != nullptr);
-        std::memcpy(mappedIndicesInTransfer, rendererState.indices.data(), INDEX_BUFFER_SIZE);
+        std::memcpy(mappedIndicesInTransfer, geometryStorage.indices.data(), INDEX_BUFFER_SIZE);
 
         SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {
             .transfer_buffer = transferToIndexBuffer,
@@ -1001,94 +982,12 @@ void renderer_rebuild() {
     indexBufferBinding[0].offset = 0;
 }
 
-void renderer_rebuild_geometry() {
-    ASSERT(gpuDevice != nullptr, "renderer not initialized");
-
-    if (geometryVertexBuffer) {
-        SDL_ReleaseGPUBuffer(gpuDevice, geometryVertexBuffer);
-        geometryVertexBuffer = nullptr;
-    }
-    if (geometryIndexBuffer) {
-        SDL_ReleaseGPUBuffer(gpuDevice, geometryIndexBuffer);
-        geometryIndexBuffer = nullptr;
-    }
-
-    if (geometryStorage.vertices.empty() && geometryStorage.indices.empty())
-        return;
-
-    const u32 VERTEX_BUFFER_SIZE = geometryStorage.vertices.size() * sizeof(Vertex);
-    const u32 INDEX_BUFFER_SIZE = geometryStorage.indices.size() * sizeof(u32);
-
-    SDL_GPUBufferCreateInfo vertexBufferInfo = {.usage = SDL_GPU_BUFFERUSAGE_VERTEX, .size = VERTEX_BUFFER_SIZE};
-    geometryVertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
-    sdlAssert(geometryVertexBuffer != nullptr);
-
-    SDL_GPUBufferCreateInfo indexBufferInfo = {.usage = SDL_GPU_BUFFERUSAGE_INDEX, .size = INDEX_BUFFER_SIZE};
-    geometryIndexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
-    sdlAssert(geometryIndexBuffer != nullptr);
-
-    SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = VERTEX_BUFFER_SIZE
-    };
-    SDL_GPUTransferBuffer *transferToVertexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToVertexBufferInfo);
-    sdlAssert(transferToVertexBuffer != nullptr);
-
-    Vertex *mappedVertexInTransfer =
-        reinterpret_cast<Vertex *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
-    sdlAssert(mappedVertexInTransfer != nullptr);
-
-    std::memcpy(mappedVertexInTransfer, geometryStorage.vertices.data(), VERTEX_BUFFER_SIZE);
-
-    SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {
-        .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = INDEX_BUFFER_SIZE
-    };
-    SDL_GPUTransferBuffer *transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
-    sdlAssert(transferToIndexBuffer != nullptr);
-    u32 *mappedIndicesInTransfer =
-        reinterpret_cast<u32 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
-    sdlAssert(mappedIndicesInTransfer != nullptr);
-    std::memcpy(mappedIndicesInTransfer, geometryStorage.indices.data(), INDEX_BUFFER_SIZE);
-
-    SDL_GPUCommandBuffer *syncCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-    sdlAssert(syncCmd != nullptr);
-    SDL_GPUCopyPass *copy = SDL_BeginGPUCopyPass(syncCmd);
-    sdlAssert(copy != nullptr);
-    SDL_GPUTransferBufferLocation uploadVertexLocation = {.transfer_buffer = transferToVertexBuffer, .offset = 0};
-    SDL_GPUBufferRegion vertexBufferRegion = {.buffer = geometryVertexBuffer, .offset = 0, .size = VERTEX_BUFFER_SIZE};
-    SDL_GPUTransferBufferLocation uploadIndexLocation = {.transfer_buffer = transferToIndexBuffer, .offset = 0};
-    SDL_GPUBufferRegion indexBufferRegion = {.buffer = geometryIndexBuffer, .offset = 0, .size = INDEX_BUFFER_SIZE};
-    SDL_UploadToGPUBuffer(copy, &uploadVertexLocation, &vertexBufferRegion, false);
-    SDL_UploadToGPUBuffer(copy, &uploadIndexLocation, &indexBufferRegion, false);
-    SDL_EndGPUCopyPass(copy);
-    sdlAssert(SDL_SubmitGPUCommandBuffer(syncCmd));
-
-    SDL_UnmapGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
-    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
-    SDL_UnmapGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
-    SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
-
-    geometryVertexBufferBinding[0] = {geometryVertexBuffer, 0};
-    geometryIndexBufferBinding[0] = {geometryIndexBuffer, 0};
-}
-
 u64 mesh_count() {
-    return scene.mesh_count();
+    return geometryStorage.mesh_count();
 }
 
 MeshHandle mesh_at(u64 index) {
-    return scene.mesh_at(index);
-}
-
-u64 mesh_instance_count(MeshHandle mesh) {
-    return scene.instance_count(mesh);
-}
-
-InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index) {
-    return scene.instance_at(mesh, index);
-}
-
-void ensure_instance_count(MeshHandle mesh, u64 n) {
-    scene.ensure_instance_count(mesh, n);
+    return geometryStorage.mesh_at(index);
 }
 
 void renderer_render_begin(void) {
@@ -1120,9 +1019,10 @@ void ui_end() {
 }
 
 bool renderer_clear(void) {
-    rendererState.vertices.clear();
-    rendererState.indices.clear();
-    rendererState.meshRegions.clear();
+    geometryStorage.vertices.clear();
+    geometryStorage.indices.clear();
+    geometryStorage.meshRegions.clear();
+    geometryStorage.meshOrder.clear();
     return true;
 }
 
@@ -1360,9 +1260,7 @@ void renderer_quit() {
     textureSamplerBindings[0].sampler = nullptr;
     frame = RendererFrame{};
 
-    rendererState.vertices.clear();
-    rendererState.indices.clear();
-    rendererState.meshRegions.clear();
+    geometryStorage = GeometryStorage{};
     scene = Scene{};
 
     shouldClose = false;
@@ -1486,10 +1384,12 @@ bool ui_item_clicked(MouseButton button) {
     return ImGui::IsItemClicked(imgui_button(button));
 }
 
-void instance_set_transform(InstanceHandle i, Transform t) {
-    scene.set_instance_transform(i, t);
+void instance_set_transform(u64 index, Transform t) {
+    ASSERT(index < scene.instances.size(), "instance index out of bounds");
+    scene.instances[index].transform = t;
 }
 
-Transform instance_get_transform(InstanceHandle i) {
-    return scene.get_instance_transform(i);
+Transform instance_get_transform(u64 index) {
+    ASSERT(index < scene.instances.size(), "instance index out of bounds");
+    return scene.instances[index].transform;
 }

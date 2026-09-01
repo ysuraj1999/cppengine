@@ -51,13 +51,14 @@ Iterates via the count/at C API without building an intermediate vector."
          ,@body))))
 
 (defmacro do-instances ((instance mesh) &body body)
-  "Traverse every instance of MESH (a mesh handle) in the single scene.
-INSTANCE is bound to an instance handle, a first-class value that may be
-saved or passed to functions."
+  "Traverse every instance of MESH (a mesh handle) in the flat instance
+array. INSTANCE is bound to the flat instance index, a first-class value
+that may be saved or passed to functions."
   (mu:with-gensyms (i)
-    `(dotimes (,i (c-mesh-instance-count ,mesh))
-       (let ((,instance (c-mesh-instance-at ,mesh ,i)))
-         ,@body))))
+    `(dotimes (,i (c-instance-count))
+       (when (eql (c-instance-mesh ,i) ,mesh)
+         (let ((,instance ,i))
+           ,@body)))))
 
 (defmacro do-input-events ((event) &body body)
   "Iterate the unified input event stream delivered this frame. BODY runs

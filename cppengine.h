@@ -5,7 +5,6 @@
 typedef uint64_t u64;
 typedef float f32;
 typedef u64 MeshHandle;
-typedef u64 InstanceHandle;
 
 typedef struct Transform {
     f32 px;
@@ -161,26 +160,22 @@ void renderer_render_end(void);
 bool renderer_clear(void);
 void renderer_quit(void);
 void renderer_rebuild(void);
-void renderer_rebuild_geometry(void);
 
 void renderer_camera_move(f32 forward, f32 right, f32 up);
 void renderer_camera_rotate(f32 dx, f32 dy);
 void renderer_camera_look_at(f32 x, f32 y, f32 z);
 
 u64 renderer_load_obj(const char *path);
-bool remove_mesh(MeshHandle mh);
-InstanceHandle add_instance(MeshHandle m, Transform t);
-const char *mesh_alias(MeshHandle mh);
-const char *instance_alias(InstanceHandle ih);
-void instance_set_transform(InstanceHandle i, Transform t);
-Transform instance_get_transform(InstanceHandle i);
-bool remove_instance(InstanceHandle i);
 
 u64 mesh_count(void);
 MeshHandle mesh_at(u64 index);
-u64 mesh_instance_count(MeshHandle mesh);
-InstanceHandle mesh_instance_at(MeshHandle mesh, u64 index);
-void ensure_instance_count(MeshHandle mesh, u64 n);
+
+u64 instance_count(void);
+void ensure_instance_count(u64 n);
+void instance_set(u64 index, MeshHandle m, Transform t);
+MeshHandle instance_mesh(u64 index);
+Transform instance_get_transform(u64 index);
+void instance_set_transform(u64 index, Transform t);
 
 void input_poll(void);
 bool input_should_close(void);

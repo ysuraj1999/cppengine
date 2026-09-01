@@ -157,153 +157,29 @@ struct GeometryStorage {
         ASSERT(index < meshOrder.size(), "mesh index out of bounds");
         return meshOrder.at(index);
     }
-    u64 load_from_obj(const char *path) {
-        std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
-        for (auto &m : meshCollection)
-            add_mesh(std::move(m));
-        return meshCollection.size();
-    }
 };
 
 using MeshHandle = u64;
 using InstanceHandle = u64;
 
 struct Instance {
-    InstanceHandle instanceHandle;
-    MeshHandle mesh; // redundant, for direct mapping
+    MeshHandle mesh;
     Transform transform;
-    std::string alias;
 };
 
 using Instances = std::vector<Instance>;
 
 struct Scene {
-    HandleCounter meshCounter;
-    HandleCounter instanceCounter;
+    std::vector<Instance> instances;
 
-    std::unordered_map<MeshHandle, Mesh> meshes;
-    std::vector<MeshHandle> meshOrder;
-    std::unordered_map<MeshHandle, Instances> objects;
-
-    // O(1) instance handle -> Instance lookup; rebuilt whenever the owning
-    // mesh's instance vector reallocates or shifts.
-    std::unordered_map<InstanceHandle, Instance *> instanceIndex;
-
-    MeshHandle add_mesh(Mesh m) {
-        MeshHandle h = meshCounter();
-        m.alias = (m.alias.empty() ? "Mesh" : m.alias) + "#" + std::to_string(h);
-        meshes[h] = m;
-        meshOrder.push_back(h);
-        return h;
+    void ensure_instance_count(u64 n) {
+        instances.resize(n);
     }
-    bool remove_mesh(MeshHandle mh) {
-        if (!meshes.contains(mh))
-            return false;
-        auto it = objects.find(mh);
-        if (it != objects.end()) {
-            for (auto &inst : it->second)
-                instanceIndex.erase(inst.instanceHandle);
-            objects.erase(it);
-        }
-        meshes.erase(mh);
-        meshOrder.erase(std::find(meshOrder.begin(), meshOrder.end(), mh));
-        return true;
+    void set_instance(u64 index, MeshHandle meshHandle, Transform t) {
+        ASSERT(index < instances.size(), "instance index out of bounds");
+        instances[index].mesh = meshHandle;
+        instances[index].transform = t;
     }
-    Mesh &get_mesh(MeshHandle mh) {
-        auto it = meshes.find(mh);
-        ASSERT(it != meshes.end(), "invalid mesh handle");
-        return it->second;
-    }
-    u64 mesh_count() const {
-        return meshOrder.size();
-    }
-    MeshHandle mesh_at(u64 index) const {
-        ASSERT(index < meshOrder.size(), "mesh index out of bounds");
-        return meshOrder[index];
-    }
-
-    InstanceHandle add_instance(MeshHandle m, Transform t) {
-        Mesh &mesh = get_mesh(m);
-        Instance inst = {};
-        inst.instanceHandle = instanceCounter();
-        inst.mesh = m;
-        inst.transform = t;
-        inst.alias = mesh.alias + "-instance#" + std::to_string(inst.instanceHandle);
-        objects[m].push_back(inst);
-        rebuild_instance_index(m);
-        return inst.instanceHandle;
-    }
-    bool remove_instance(InstanceHandle ih) {
-        for (auto &[mh, instances] : objects) {
-            for (u64 i = 0; i < instances.size(); i++)
-                if (instances[i].instanceHandle == ih) {
-                    instances.erase(instances.begin() + i);
-                    instanceIndex.erase(ih);
-                    rebuild_instance_index(mh);
-                    return true;
-                }
-        }
-        return false;
-    }
-    void rebuild_instance_index(MeshHandle mh) {
-        auto it = objects.find(mh);
-        if (it == objects.end())
-            return;
-        for (auto &inst : it->second)
-            instanceIndex[inst.instanceHandle] = &inst;
-    }
-    Instance &get_instance(InstanceHandle ih) {
-        auto it = instanceIndex.find(ih);
-        ASSERT(it != instanceIndex.end(), "instance handle not found");
-        return *it->second;
-    }
-    u64 instance_count(MeshHandle mh) const {
-        auto it = objects.find(mh);
-        return it == objects.end() ? 0 : it->second.size();
-    }
-    InstanceHandle instance_at(MeshHandle mh, u64 index) const {
-        auto it = objects.find(mh);
-        ASSERT(it != objects.end(), "mesh has no instances");
-        ASSERT(index < it->second.size(), "instance index out of bounds");
-        return it->second[index].instanceHandle;
-    }
-
-    void ensure_instance_count(MeshHandle mh, u64 n) {
-        u64 current = instance_count(mh);
-        if (current > n) {
-            for (u64 i = current; i > n; i--)
-                remove_instance(instance_at(mh, i - 1));
-        } else if (current < n) {
-            Transform identity = {};
-            identity.sx = identity.sy = identity.sz = 1.0f;
-            for (u64 i = current; i < n; i++)
-                add_instance(mh, identity);
-        }
-    }
-    void set_instance_transform(InstanceHandle ih, Transform t) {
-        get_instance(ih).transform = t;
-    }
-    Transform get_instance_transform(InstanceHandle ih) const {
-        auto it = instanceIndex.find(ih);
-        ASSERT(it != instanceIndex.end(), "instance handle not found");
-        return it->second->transform;
-    }
-    const char *mesh_alias(MeshHandle mh) const {
-        auto it = meshes.find(mh);
-        ASSERT(it != meshes.end(), "invalid mesh handle");
-        return it->second.alias.c_str();
-    }
-    const char *instance_alias(InstanceHandle ih) const {
-        auto it = instanceIndex.find(ih);
-        ASSERT(it != instanceIndex.end(), "instance handle not found");
-        return it->second->alias.c_str();
-    }
-};
-
-struct RendererState {
-    std::vector<Vertex> vertices;
-    std::vector<u32> indices;
-    std::unordered_map<MeshHandle, MeshRegion> meshRegions;
 };
 
 struct RendererConfig {
