@@ -169,6 +169,7 @@ static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
 static_global SDL_GPUTransferBuffer* transferToInstanceBuffer;
 static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
 static_global RendererState rendererState;
+
 static_global GeometryStorage geometryStorage;
 static_global SDL_GPUBuffer* geometryVertexBuffer = nullptr;
 static_global SDL_GPUBuffer* geometryIndexBuffer  = nullptr;
@@ -909,29 +910,40 @@ void renderer_rebuild_geometry() {
   const u32 INDEX_BUFFER_SIZE = geometryStorage.indices.size() * sizeof(u32);
 
   SDL_GPUBufferCreateInfo vertexBufferInfo = {
-      .usage = SDL_GPU_BUFFERUSAGE_VERTEX, .size = VERTEX_BUFFER_SIZE};
+    .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
+    .size = VERTEX_BUFFER_SIZE
+  };
   geometryVertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
   sdlAssert(geometryVertexBuffer != nullptr);
+
   SDL_GPUBufferCreateInfo indexBufferInfo = {
-      .usage = SDL_GPU_BUFFERUSAGE_INDEX, .size = INDEX_BUFFER_SIZE};
+    .usage = SDL_GPU_BUFFERUSAGE_INDEX,
+    .size = INDEX_BUFFER_SIZE
+  };
   geometryIndexBuffer = SDL_CreateGPUBuffer(gpuDevice, &indexBufferInfo);
   sdlAssert(geometryIndexBuffer != nullptr);
 
   SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {
-      .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = VERTEX_BUFFER_SIZE};
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = VERTEX_BUFFER_SIZE
+  };
   SDL_GPUTransferBuffer* transferToVertexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToVertexBufferInfo);
   sdlAssert(transferToVertexBuffer != nullptr);
-  Vertex* mappedVertexInTransfer = reinterpret_cast<Vertex*>(
-      SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
+
+  Vertex *mappedVertexInTransfer = reinterpret_cast<Vertex *>
+    (SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
   sdlAssert(mappedVertexInTransfer != nullptr);
+  
   std::memcpy(mappedVertexInTransfer, geometryStorage.vertices.data(), VERTEX_BUFFER_SIZE);
 
   SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {
-      .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD, .size = INDEX_BUFFER_SIZE};
+    .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+    .size = INDEX_BUFFER_SIZE
+  };
   SDL_GPUTransferBuffer* transferToIndexBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
   sdlAssert(transferToIndexBuffer != nullptr);
-  u32* mappedIndicesInTransfer = reinterpret_cast<u32*>(
-      SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
+  u32 *mappedIndicesInTransfer = reinterpret_cast<u32 *>
+    (SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
   sdlAssert(mappedIndicesInTransfer != nullptr);
   std::memcpy(mappedIndicesInTransfer, geometryStorage.indices.data(), INDEX_BUFFER_SIZE);
 
@@ -946,7 +958,10 @@ void renderer_rebuild_geometry() {
   SDL_GPUTransferBufferLocation uploadIndexLocation = {
       .transfer_buffer = transferToIndexBuffer, .offset = 0};
   SDL_GPUBufferRegion indexBufferRegion = {
-      .buffer = geometryIndexBuffer, .offset = 0, .size = INDEX_BUFFER_SIZE};
+    .buffer = geometryIndexBuffer,
+    .offset = 0,
+    .size = INDEX_BUFFER_SIZE
+  };
   SDL_UploadToGPUBuffer(copy, &uploadVertexLocation, &vertexBufferRegion, false);
   SDL_UploadToGPUBuffer(copy, &uploadIndexLocation, &indexBufferRegion, false);
   SDL_EndGPUCopyPass(copy);

@@ -147,10 +147,12 @@ struct GeometryStorage {
     meshOrder.push_back(h);
     return h;
   }
-  u64 mesh_count() const { return meshOrder.size(); }
+  u64 mesh_count() const {
+    return meshOrder.size();
+  }
   MeshHandle mesh_at(u64 index) const {
     ASSERT(index < meshOrder.size(), "mesh index out of bounds");
-    return meshOrder[index];
+    return meshOrder.at(index);
   }
   u64 load_from_obj(const char *path) {
     std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
