@@ -299,6 +299,26 @@ struct RendererFrame {
 
         renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
         sdlAssert(renderPass != nullptr);
+
+	ASSERT(
+	       renderPass != nullptr && commandBuffer != nullptr, "draw called outside renderer_render_begin/end block"
+	       );
+        glm::mat4 view = rendererConfig.camera.getViewMatrix();
+        glm::mat4 projection = glm::perspectiveLH_ZO(
+						     glm::radians(60.0f), rendererConfig.resolution.x / rendererConfig.resolution.y, 0.1f, 10000.0f
+						     );
+        glm::mat4 viewProjection = projection * view;
+
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
+        SDL_PushGPUFragmentUniformData(
+				       commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution)
+				       );
+
+        SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
+        SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
+        SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
+        SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
     }
 
     void render_scene() {
@@ -326,26 +346,6 @@ struct RendererFrame {
 
   private:
     void draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
-        ASSERT(
-            renderPass != nullptr && commandBuffer != nullptr, "draw called outside renderer_render_begin/end block"
-        );
-        glm::mat4 view = rendererConfig.camera.getViewMatrix();
-        glm::mat4 projection = glm::perspectiveLH_ZO(
-            glm::radians(60.0f), rendererConfig.resolution.x / rendererConfig.resolution.y, 0.1f, 10000.0f
-        );
-        glm::mat4 viewProjection = projection * view;
-
-        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
-        SDL_PushGPUFragmentUniformData(
-            commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution)
-        );
-
-        SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-        SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-        SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
-        SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-        SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
-
         SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
         sdlAssert(frameCopyPass != nullptr);
 
