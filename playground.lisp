@@ -195,7 +195,7 @@
       (ui-mesh mesh))))
 
 
-(defparameter *keyboard-sensitivity* 200.0)
+(defparameter *keyboard-sensitivity* 10.0)
 (defparameter *mouse-sensitivity* 10.0)
 
 (defvar *interaction-stack* '()
@@ -270,12 +270,7 @@
            (d-down (input :keyboard :d :down))
            (space-down (input :keyboard :space :down))
            (ctrl-down (input :keyboard :ctrl :down)))
-       (let* ((speed (sqrt (+ (* dx dx) (* dy dy))))
-	      (normalized-speed (clamp (/ speed 20.0) 0.0 1.0))
-	      (scale (cubic-bezier
-		      0.82 0.00 0.99 0.34
-		      normalized-speed))
-	      (move-speed (* *keyboard-sensitivity* dt))
+       (let* ((move-speed (* *keyboard-sensitivity* dt))
               (look-speed (* *mouse-sensitivity* dt)))
          (c-renderer-camera-rotate (* (- dx) look-speed) (* (- dy) look-speed))
          (c-renderer-camera-move
@@ -328,30 +323,6 @@
 		 (and (eq type :key-down)
                       (eq key :escape)))
 	 (exit-interaction))))))
-
-(defun cubic-bezier (x1 y1 x2 y2 input)
-  (labels ((bezier-value (p0 p1 p2 p3 parameter)
-             (let ((u (- 1.0 parameter)))
-               (+ (* u u u p0)
-                  (* 3.0 u u parameter p1)
-                  (* 3.0 u parameter parameter p2)
-                  (* parameter parameter parameter p3))))
-           
-           (bezier-x (parameter)
-             (bezier-value 0.0 x1 x2 1.0 parameter))
-           
-           (bezier-y (parameter)
-             (bezier-value 0.0 y1 y2 1.0 parameter)))
-    
-    (let ((parameter 0.5))
-      (dotimes (i 20)
-        (let ((current-x (bezier-x parameter)))
-          (setf parameter
-                (clamp (+ parameter
-                          (* (- input current-x) 0.5))
-                       0.0
-                       1.0))))
-      (bezier-y parameter))))
 
 (defun editor ()
   (when (c-renderer-init)
@@ -481,7 +452,7 @@
 		   (ensure-instance-count (1+ (length segments)))
 		   (dotimes (c (length segments))
 		     (destructuring-bind (x y) (aref segments c)
-		       (let ((tr (transform! 0.0 0.0 0.0 1.0 1.0 1.0 0.0 0.0 0.0)))
+		       (let ((tr (transform! 0.0 0.0 0.0 0.9 0.9 0.9 0.0 0.0 0.0)))
 			 (c-instance-set c cube
 					 (edit-transform (tr)
 					   (:position :z x)
