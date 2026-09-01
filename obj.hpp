@@ -1,6 +1,6 @@
 #pragma once
-#include <iostream>
 #include "types.hpp"
+#include <iostream>
 
 // tinyobj loader header-only interface (no implementation)
 #include "tiny_obj_loader.h"
