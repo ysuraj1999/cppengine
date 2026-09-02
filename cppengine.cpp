@@ -326,10 +326,20 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-// Boundary/helper functions implemented in cppengine.cpp.
-// TODO: make this into FPUContext closure with static env as well as methods begin/end
-void fpu_begin();
-void fpu_end();
+// FPUContext: RAII-style FPU exception-state save/restore via static env and
+// begin()/end() methods. Static env defined in the folded-in section below.
+struct FPUContext {
+    static std::fenv_t env;
+    static void begin() {
+        std::feholdexcept(&env);
+    }
+    static void end() {
+        std::fesetenv(&env);
+    }
+};
+std::fenv_t FPUContext::env;
+
+
 Key SDL_Scancode_to_Key(SDL_Scancode scancode);
 MouseButton SDL_MouseButton_to_MouseButton(Uint8 button);
 ImGuiMouseButton MouseButton_to_imgui_button(MouseButton button);
@@ -449,6 +459,15 @@ struct GPUResources {
 
     bool initialized() const {
         return gpuDevice != nullptr;
+    }
+
+    bool request_cursor_capture(bool captured) {
+        if (window)
+            SDL_SetWindowRelativeMouseMode(window, captured != false);
+        return true;
+    }
+    bool cursor_captured() const {
+        return window && SDL_GetWindowRelativeMouseMode(window);
     }
 
     bool init(RendererConfig &config) {
@@ -840,137 +859,129 @@ struct GPUResources {
 };
 
 //-----------------------------------------------------------------------------
-// Keyboard / Mouse: polled input state.
-//-----------------------------------------------------------------------------
-struct Keyboard {
-  bool current[KEY_COUNT] = {};
-  bool previous[KEY_COUNT] = {};
-
-  void begin() {
-    copy_current_state_into_previous_state();
-  }
-  void end() {
-    const bool *sdl_state = SDL_GetKeyboardState(nullptr);
-    memset(current, 0, sizeof(current));
-    for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
-      if (sdl_state[i]) {
-	Key k = SDL_Scancode_to_Key((SDL_Scancode)i);
-	if (k != KEY_UNKNOWN)
-	  current[k] = true;
-      }
-  }
-  bool down(Key k) const {
-    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-    return current[k];
-  }
-  bool up(Key k) const {
-    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-    return !current[k];
-  }
-  bool pressed(Key k) const {
-    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-    return current[k] && !previous[k];
-  }
-  bool released(Key k) const {
-    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-    return !current[k] && previous[k];
-  }
-  void clear() {
-    memset(current, 0, sizeof(current));
-  }
-
-private:
-  void copy_current_state_into_previous_state() {
-    memcpy(previous, current, sizeof(current));
-  }
-};
-
-struct Mouse {
-  f32 x = 0, y = 0;
-  f32 dx = 0, dy = 0;
-  f32 wheel_x = 0, wheel_y = 0;
-  bool down_current[MOUSE_BUTTON_COUNT] = {};
-  bool down_previous[MOUSE_BUTTON_COUNT] = {};
-
-  glm::vec2 position() const {
-    return {x, y};
-  }
-  glm::vec2 delta() const {
-    return {dx, dy};
-  }
-  glm::vec2 wheel() const {
-    return {wheel_x, wheel_y};
-  }
-  bool down(MouseButton b) const {
-    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-    return down_current[b];
-  }
-  bool up(MouseButton b) const {
-    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-    return !down_current[b];
-  }
-  bool pressed(MouseButton b) const {
-    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-    return down_current[b] && !down_previous[b];
-  }
-  bool released(MouseButton b) const {
-    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-    return !down_current[b] && down_previous[b];
-  }
-
-  
-  void clear() {
-    dx = 0;
-    dy = 0;
-    wheel_x = 0;
-    wheel_y = 0;
-  }
-  void begin() {
-    copy_current_state_into_previous_state();
-    clear();
-  }
-  void end() {
-  }
-
-  void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
-    x = nx;
-    y = ny;
-    dx += xrel;
-    dy += yrel;
-  }
-  void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
-    x = bx;
-    y = by;
-    if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
-      down_current[button] = true;
-  }
-  void on_button_up(MouseButton button, f32 bx, f32 by) {
-    x = bx;
-    y = by;
-    if (button > 0 && button < MOUSE_BUTTON_COUNT)
-      down_current[button] = false;
-  }
-  void on_wheel(f32 wx, f32 wy) {
-    wheel_x += wx;
-    wheel_y += wy;
-  }
-
-private:
-  void copy_current_state_into_previous_state() {
-    memcpy(down_previous, down_current, sizeof(down_current));
-  }
-
-};
-
-//-----------------------------------------------------------------------------
 // Input: polls SDL events, exposes keyboard / mouse / event-buffer queries.
 //-----------------------------------------------------------------------------
 struct Input {
-  // TODO move keyboard and mouse inside Input
+  struct Keyboard {
+    bool current[KEY_COUNT] = {};
+    bool previous[KEY_COUNT] = {};
+
+    void begin() {
+      copy_current_state_into_previous_state();
+    }
+    void end() {
+      const bool *sdl_state = SDL_GetKeyboardState(nullptr);
+      memset(current, 0, sizeof(current));
+      for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
+        if (sdl_state[i]) {
+          Key k = SDL_Scancode_to_Key((SDL_Scancode)i);
+          if (k != KEY_UNKNOWN)
+            current[k] = true;
+        }
+    }
+    bool down(Key k) const {
+      ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+      return current[k];
+    }
+    bool up(Key k) const {
+      ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+      return !current[k];
+    }
+    bool pressed(Key k) const {
+      ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+      return current[k] && !previous[k];
+    }
+    bool released(Key k) const {
+      ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+      return !current[k] && previous[k];
+    }
+    void clear() {
+      memset(current, 0, sizeof(current));
+    }
+
+  private:
+    void copy_current_state_into_previous_state() {
+      memcpy(previous, current, sizeof(current));
+    }
+  };
+
+  struct Mouse {
+    f32 x = 0, y = 0;
+    f32 dx = 0, dy = 0;
+    f32 wheel_x = 0, wheel_y = 0;
+    bool down_current[MOUSE_BUTTON_COUNT] = {};
+    bool down_previous[MOUSE_BUTTON_COUNT] = {};
+
+    glm::vec2 position() const {
+      return {x, y};
+    }
+    glm::vec2 delta() const {
+      return {dx, dy};
+    }
+    glm::vec2 wheel() const {
+      return {wheel_x, wheel_y};
+    }
+    bool down(MouseButton b) const {
+      ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+      return down_current[b];
+    }
+    bool up(MouseButton b) const {
+      ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+      return !down_current[b];
+    }
+    bool pressed(MouseButton b) const {
+      ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+      return down_current[b] && !down_previous[b];
+    }
+    bool released(MouseButton b) const {
+      ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+      return !down_current[b] && down_previous[b];
+    }
+
+    void clear() {
+      dx = 0;
+      dy = 0;
+      wheel_x = 0;
+      wheel_y = 0;
+    }
+    void begin() {
+      copy_current_state_into_previous_state();
+      clear();
+    }
+    void end() {
+    }
+
+    void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
+      x = nx;
+      y = ny;
+      dx += xrel;
+      dy += yrel;
+    }
+    void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
+      x = bx;
+      y = by;
+      if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
+        down_current[button] = true;
+    }
+    void on_button_up(MouseButton button, f32 bx, f32 by) {
+      x = bx;
+      y = by;
+      if (button > 0 && button < MOUSE_BUTTON_COUNT)
+        down_current[button] = false;
+    }
+    void on_wheel(f32 wx, f32 wy) {
+      wheel_x += wx;
+      wheel_y += wy;
+    }
+
+  private:
+    void copy_current_state_into_previous_state() {
+      memcpy(down_previous, down_current, sizeof(down_current));
+    }
+  };
+
     Keyboard keyboard;
     Mouse mouse;
-    InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
-    u32 count = 0;
     bool shouldClose = false;
 
     GPUResources &gpu;
@@ -979,34 +990,33 @@ struct Input {
     Input(GPUResources &g) : gpu(g) {
         prevCounter = SDL_GetPerformanceCounter();
     }
-    /*
-      struct Events {
-    InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
-    u32 count = 0;
 
-    void push(InputEvent e);
-    void clear();
+    struct Events {
+        InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
+        u32 count = 0;
 
-    InputEvent& operator[](u32 index) {
-        ASSERT(index < count, "event index out of bounds");
-        return buffer[index];
-    }
-};
+        void push(InputEvent e) {
+            if (count >= INPUT_EVENT_CAPACITY)
+                return;
+            buffer[count++] = e;
+        }
+        void clear() {
+            count = 0;
+        }
+        u32 size() const {
+            return count;
+        }
+        InputEvent &operator[](u32 index) {
+            ASSERT(index < count, "event index out of bounds");
+            return buffer[index];
+        }
+    };
 
-do this for events inside input
-     */
-    void push_event(InputEvent e) {
-        if (count >= INPUT_EVENT_CAPACITY)
-            return;
-        buffer[count++] = e;
-    }
-    void clear_events() {
-        count = 0;
-    }
+    Events events;
     void begin() {
         keyboard.begin();
         mouse.begin();
-        clear_events();
+        events.clear();
     }
     void poll() {
         begin();
@@ -1026,7 +1036,7 @@ do this for events inside input
                 const f32 xrel = io.WantCaptureMouse ? 0.0f : event.motion.xrel;
                 const f32 yrel = io.WantCaptureMouse ? 0.0f : event.motion.yrel;
                 mouse.on_motion(event.motion.x, event.motion.y, xrel, yrel);
-                push_event(
+                events.push(
                     {INPUT_EVENT_MOUSE_MOTION,
                      KEY_UNKNOWN,
                      MOUSE_BUTTON_NONE,
@@ -1044,7 +1054,7 @@ do this for events inside input
             case SDL_EVENT_MOUSE_BUTTON_DOWN: {
                 const MouseButton button = SDL_MouseButton_to_MouseButton(event.button.button);
                 mouse.on_button_down(button, event.button.x, event.button.y, !io.WantCaptureMouse);
-                push_event(
+                events.push(
                     {INPUT_EVENT_MOUSE_BUTTON_DOWN,
                      KEY_UNKNOWN,
                      button,
@@ -1062,7 +1072,7 @@ do this for events inside input
             case SDL_EVENT_MOUSE_BUTTON_UP: {
                 const MouseButton button = SDL_MouseButton_to_MouseButton(event.button.button);
                 mouse.on_button_up(button, event.button.x, event.button.y);
-                push_event(
+                events.push(
                     {INPUT_EVENT_MOUSE_BUTTON_UP,
                      KEY_UNKNOWN,
                      button,
@@ -1080,7 +1090,7 @@ do this for events inside input
             case SDL_EVENT_MOUSE_WHEEL: {
                 if (!io.WantCaptureMouse) {
                     mouse.on_wheel(event.wheel.x, event.wheel.y);
-                    push_event(
+                    events.push(
                         {INPUT_EVENT_MOUSE_WHEEL,
                          KEY_UNKNOWN,
                          MOUSE_BUTTON_NONE,
@@ -1101,7 +1111,7 @@ do this for events inside input
                 if (!io.WantCaptureKeyboard) {
                     const Key key = SDL_Scancode_to_Key(event.key.scancode);
                     const bool down = event.type == SDL_EVENT_KEY_DOWN;
-                    push_event(
+                    events.push(
                         {down ? INPUT_EVENT_KEY_DOWN : INPUT_EVENT_KEY_UP,
                          key,
                          MOUSE_BUTTON_NONE,
@@ -1129,22 +1139,13 @@ do this for events inside input
     bool should_close() {
         return shouldClose;
     }
-  // TODO can be delegated to gpu like gpu.request_cursor_capture(bool)
     void set_cursor_captured(bool captured) {
-        if (gpu.window)
-            SDL_SetWindowRelativeMouseMode(gpu.window, captured != false);
+        gpu.request_cursor_capture(captured);
     }
     bool cursor_captured() {
-        return gpu.window && SDL_GetWindowRelativeMouseMode(gpu.window);
+        return gpu.cursor_captured();
     }
 
-    u64 event_count() {
-        return count;
-    }
-    InputEvent event_at(u64 index) {
-        ASSERT(index < count, "input event index out of bounds");
-        return buffer[index];
-    }
     f32 time_dt() {
         static const u64 timerFrequency = SDL_GetPerformanceFrequency();
         const u64 now = SDL_GetPerformanceCounter();
@@ -1199,7 +1200,7 @@ namespace ui {
     }
 
     inline void begin() {
-        fpu_begin();
+  FPUContext::begin();
         ImGui_ImplSDLGPU3_NewFrame();
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
@@ -1210,7 +1211,7 @@ namespace ui {
         ImDrawData *draw_data = ImGui::GetDrawData();
         ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, commandBuffer);
         ImGui_ImplSDLGPU3_RenderDrawData(draw_data, commandBuffer, renderPass);
-        fpu_end();
+  FPUContext::end();
     }
 
     inline bool begin_window(const char *name) {
@@ -1421,15 +1422,15 @@ struct Renderer {
 
         input.shouldClose = false;
 
-        fpu_begin();
+  FPUContext::begin();
         gpu.init(config);
         if (!ui::init(gpu)) {
-            fpu_end();
+  FPUContext::end();
             gpu.destroy();
             return false;
         }
         frame.init();
-        fpu_end();
+  FPUContext::end();
         return true;
     }
     void quit() {
@@ -1450,13 +1451,13 @@ struct Renderer {
         return meshCollection.size();
     }
 
-    void render_begin() {
+    void begin() {
         frame.begin();
     }
-    void render_scene() {
+    void render() {
         frame.render_scene();
     }
-    void render_end() {
+    void end() {
         frame.end();
     }
 
@@ -1658,19 +1659,6 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
 }
 
 //---- boundary helpers --------------------------------------------------------
-
-// TODO This can be inside FPUContext
-#include <cfenv>
-
-static std::fenv_t env;
-
-void fpu_begin() {
-    std::feholdexcept(&env);
-}
-
-void fpu_end() {
-    std::fesetenv(&env);
-}
 
 Key SDL_Scancode_to_Key(SDL_Scancode scancode) {
     switch (scancode) {

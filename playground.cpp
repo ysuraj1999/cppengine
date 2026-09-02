@@ -13,16 +13,29 @@ int main(int argc, char *argv[]) {
     u64 meshCount = renderer.load_obj("models/bmw.obj");
     std::cout << "Length " << meshCount << '\n';
 
-    for (u64 i = 0; i < meshCount; i++) {
-        Transform t{/*position*/ 0.0f, 0.0f, 0.0f, /*scale*/ 1.0f, 1.0f, 1.0f, /*rotation*/ 0.0f, 0.0f, 0.0f};
-        renderer.scene.add(renderer.geometry[i], t);
+    f32 spacing = 100.0f;
+    u64 GRID = 2;
+    for (u64 x = 0; x < GRID; x++) {
+      for (u64 y = 0; y < GRID; y++) {
+	for (u64 z = 0; z < GRID; z++){
+	  for (u64 i = 0; i < meshCount; i++) {
+	    Transform t {
+	      /*position*/ spacing *x, spacing *y, spacing *z,
+	      /*scale*/ 1.0f, 1.0f, 1.0f,
+	      /*rotation*/ 0.0f, 0.0f, 0.0f
+	    };
+	    renderer.scene.add(renderer.geometry[i], t);
+	  }
+	}
+      }
     }
 
     renderer.rebuild();
     renderer.config.keyboardSensitivity = 200.0;
-    renderer.config.mouseSensitivity = 50.0;
+    renderer.config.mouseSensitivity = 10.0;
 
     bool running = true;
+    renderer.input.set_cursor_captured(true);
     while (running) {
         const f32 dt = renderer.input.time_dt();
 
@@ -36,35 +49,40 @@ int main(int argc, char *argv[]) {
         const glm::vec2 delta = renderer.input.mouse.delta();
 
         const bool w_down = renderer.input.keyboard.down(KEY_W);
+	const bool a_down = renderer.input.keyboard.down(KEY_A);
         const bool s_down = renderer.input.keyboard.down(KEY_S);
+        const bool d_down = renderer.input.keyboard.down(KEY_D);
+	const bool ctrl_down = renderer.input.keyboard.down(KEY_CTRL);
+        const bool space_down = renderer.input.keyboard.down(KEY_SPACE);
+
         const bool middle_click = renderer.input.mouse.down(MOUSE_BUTTON_MIDDLE);
 
         const f32 move_speed = renderer.config.keyboardSensitivity * dt;
         const f32 look_speed = renderer.config.mouseSensitivity * dt;
 
-        renderer.camera.rotate(-wheel.x * look_speed, wheel.y * look_speed);
+        renderer.camera.rotate(delta.x * look_speed, delta.y * look_speed);
         renderer.camera.move(
-            (w_down ? move_speed : 0.0f) + (s_down ? -move_speed : 0.0f),
-            middle_click ? -delta.x * look_speed : 0.0f,
-            middle_click ? delta.y * look_speed : 0.0f
-        );
+			     (w_down ? move_speed : 0.0f) + (s_down ? -move_speed : 0.0f),
+			     (a_down ? -move_speed : 0.0f) + (d_down ? move_speed : 0.0f),
+			     (space_down ? move_speed : 0.0f) + (ctrl_down ? -move_speed : 0.0f)
+			     );
 
-        renderer.render_begin();
-        renderer.render_scene();
+        renderer.begin();
+        renderer.render();
         ui::begin();
         ui::begin_window("Inspector");
         u64 mCount = renderer.geometry.size();
         for (u64 m = 0; m < mCount; m++) {
-            MeshHandle mh = renderer.geometry[m];
-            std::string meshLabel = "Mesh " + std::to_string(m);
-            if (ui::begin_tree(meshLabel.c_str())) {
-                ui::text(("handle " + std::to_string(mh)).c_str());
-                ui::end_tree();
-            }
+	  MeshHandle mh = renderer.geometry[m];
+	  std::string meshLabel = "Mesh " + std::to_string(m);
+	  if (ui::begin_tree(meshLabel.c_str())) {
+	    ui::text(("Instance " + std::to_string(mh)).c_str());
+	    ui::end_tree();
+	  }
         }
         ui::end_window();
         ui::end(renderer.command_buffer(), renderer.render_pass());
-        renderer.render_end();
+        renderer.end();
     }
 
     renderer.quit();
