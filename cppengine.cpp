@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -69,8 +70,8 @@ typedef float f32;
 typedef double f64;
 typedef std::size_t usize;
 
-using MeshHandle = u64;
-using InstanceHandle = u64;
+typedef u64 MeshHandle;
+typedef u64 InstanceHandle;
 
 #define static_global   static
 #define static_local    static
@@ -265,6 +266,7 @@ struct Camera {
     void rotate(f32 dYaw, f32 dPitch) {
         yaw = glm::mod(yaw + dYaw, 360.0f);
         pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
+        update();
     }
 
     void look_at(glm::vec3 target) {
@@ -339,9 +341,10 @@ struct GeometryStorage {
     std::vector<u32> indices;
     std::vector<MeshHandle> meshOrder;
     std::unordered_map<MeshHandle, MeshRegion> meshRegions;
+    std::unordered_map<std::string, MeshHandle> aliasMap;
     HandleCounter meshCounter;
 
-    MeshHandle add_mesh(Mesh &&mesh) {
+    MeshHandle add(Mesh &&mesh) {
         MeshHandle handle = meshCounter();
         MeshRegion region{};
         region.vertexOffset = (u32)vertices.size();
@@ -350,23 +353,33 @@ struct GeometryStorage {
         vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
         indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
         meshRegions[handle] = region;
+        if (!mesh.alias.empty())
+            aliasMap[mesh.alias] = handle;
         meshOrder.push_back(handle);
         return handle;
     }
+
     u64 size() const {
         return meshOrder.size();
     }
-  MeshHandle operator[](u64 i){
-    return meshOrder.at(i);
-  }
 
-  void clear() {
-      vertices.clear();
-      indices.clear();
-      meshOrder.clear();
-      meshRegions.clear();
-      meshCounter.reset();
-  }
+    MeshHandle operator[](u64 i) const {
+        return meshOrder.at(i);
+    }
+
+    MeshHandle find(const std::string &name) const {
+        auto it = aliasMap.find(name);
+        return it != aliasMap.end() ? it->second : static_cast<MeshHandle>(-1);
+    }
+
+    void clear() {
+        vertices.clear();
+        indices.clear();
+        meshOrder.clear();
+        meshRegions.clear();
+        aliasMap.clear();
+        meshCounter.reset();
+    }
 };
 
 struct Instance {
@@ -374,7 +387,7 @@ struct Instance {
     Transform transform;
 };
 
-using Instances = std::vector<Instance>;
+typedef std::vector<Instance> Instances;
 
 // Scene holds only instances; meshes live in GeometryStorage. scene[i] is the
 // i-th instance; set its .mesh (a MeshHandle) and .transform directly.
@@ -384,15 +397,22 @@ struct Scene {
   Instance &operator[](u64 i) {
     return instances.at(i);
   }
+  const Instance &operator[](u64 i) const {
+    return instances.at(i);
+  }
   u64 size() const {
     return instances.size();
   }
-  void resize(u64 n) {
-    instances.resize(n);
-  }
-  Instance& add(MeshHandle mh, Transform t) {
-    instances.push_back({mh, t});
+  Instance& add(MeshHandle mesh, Transform transform) {
+    instances.push_back({mesh, transform});
     return instances.back();
+  }
+  void remove(u64 i) {
+    ASSERT(i < size(), "scene index out of bounds");
+    instances.erase(instances.begin() + static_cast<std::ptrdiff_t>(i));
+  }
+  void clear() {
+    instances.clear();
   }
 };
 
@@ -401,22 +421,12 @@ struct RendererConfig {
     glm::vec4 backgroundColor;
     f32 keyboardSensitivity;
     f32 mouseSensitivity;
-    Camera camera;
 };
 
 //-----------------------------------------------------------------------------
 // GPUResources: owns every SDL window / device / buffer / texture / sampler /
 // pipeline object and the per-frame bindings.
 //-----------------------------------------------------------------------------
-#define GPU_INIT_CHECK(cond, msg)                                                                                      \
-    do {                                                                                                               \
-        if (!(cond)) {                                                                                                 \
-            std::fprintf(stderr, "%s:%d: gpu_init failed: %s (%s)\n", __FILE__, __LINE__, #cond, msg);                  \
-            destroy();                                                                                                 \
-            return false;                                                                                              \
-        }                                                                                                              \
-    } while (0)
-
 struct GPUResources {
     SDL_Window *window = nullptr;
     SDL_GPUDevice *gpuDevice = nullptr;
@@ -451,20 +461,19 @@ struct GPUResources {
             return false;
         }
 
-        GPU_INIT_CHECK(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS), "SDL subsystem initialization");
+        SDL_ASSERT(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS));
 
         window = SDL_CreateWindow("Lens", (u32)config.resolution.x, (u32)config.resolution.y, 0);
-        GPU_INIT_CHECK(window != nullptr, "window creation");
+        SDL_ASSERT(window != nullptr);
 
         gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
-        GPU_INIT_CHECK(gpuDevice != nullptr, "GPU device creation");
+        SDL_ASSERT(gpuDevice != nullptr);
 
-        GPU_INIT_CHECK(SDL_ClaimWindowForGPUDevice(gpuDevice, window), "claim window for GPU device");
+        SDL_ASSERT(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
 
-        GPU_INIT_CHECK(
-            SDL_SetGPUSwapchainParameters(gpuDevice, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC),
-            "swapchain configuration"
-        );
+        SDL_ASSERT(SDL_SetGPUSwapchainParameters(
+            gpuDevice, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC
+        ));
 
         std::vector<u8> vertexShaderContents = readFile(SHADER_BIN_DIR "/shader.vertex.spv");
         ASSERT(!vertexShaderContents.empty(), SHADER_BIN_DIR "/shader.vertex.spv missing or empty");
@@ -481,7 +490,7 @@ struct GPUResources {
             .num_uniform_buffers = 1,
         };
         vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
-        GPU_INIT_CHECK(vertexShader != nullptr, "vertex shader creation");
+        SDL_ASSERT(vertexShader != nullptr);
 
         std::vector<u8> fragmentShaderContents = readFile(SHADER_BIN_DIR "/shader.fragment.spv");
         ASSERT(!fragmentShaderContents.empty(), SHADER_BIN_DIR "/shader.fragment.spv missing or empty");
@@ -498,7 +507,7 @@ struct GPUResources {
             .num_uniform_buffers = 1,
         };
         fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
-        GPU_INIT_CHECK(fragmentShader != nullptr, "fragment shader creation");
+        SDL_ASSERT(fragmentShader != nullptr);
 
         SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {
             .vertex_shader = vertexShader,
@@ -575,7 +584,7 @@ struct GPUResources {
         pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
         pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
-        GPU_INIT_CHECK(pipeline != nullptr, "graphics pipeline creation");
+        SDL_ASSERT(pipeline != nullptr);
 
         {
             SDL_GPUTextureCreateInfo textureInfo = {};
@@ -598,18 +607,18 @@ struct GPUResources {
             const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
 
             checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
-            GPU_INIT_CHECK(checkTexture != nullptr, "default texture creation");
+            SDL_ASSERT(checkTexture != nullptr);
 
             SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {
                 .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
                 .size = TEXTURE_SIZE,
             };
             SDL_GPUTransferBuffer *transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
-            GPU_INIT_CHECK(transferToTexture != nullptr, "texture transfer buffer creation");
+            SDL_ASSERT(transferToTexture != nullptr);
 
             u8 *mappedTransferToBytes =
                 reinterpret_cast<u8 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
-            GPU_INIT_CHECK(mappedTransferToBytes != nullptr, "texture transfer buffer map");
+            SDL_ASSERT(mappedTransferToBytes != nullptr);
             std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
 
             SDL_GPUTextureTransferInfo textureTransferInfo = {
@@ -630,12 +639,12 @@ struct GPUResources {
                 .d = 1,
             };
             SDL_GPUCommandBuffer *initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-            GPU_INIT_CHECK(initCmd != nullptr, "texture upload command buffer acquisition");
+            SDL_ASSERT(initCmd != nullptr);
             SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(initCmd);
-            GPU_INIT_CHECK(copyPass != nullptr, "texture copy pass begin");
+            SDL_ASSERT(copyPass != nullptr);
             SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
             SDL_EndGPUCopyPass(copyPass);
-            GPU_INIT_CHECK(SDL_SubmitGPUCommandBuffer(initCmd), "texture upload submission");
+            SDL_ASSERT(SDL_SubmitGPUCommandBuffer(initCmd));
 
             SDL_UnmapGPUTransferBuffer(gpuDevice, transferToTexture);
             SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToTexture);
@@ -648,7 +657,7 @@ struct GPUResources {
                 .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
             };
             sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
-            GPU_INIT_CHECK(sampler != nullptr, "sampler creation");
+            SDL_ASSERT(sampler != nullptr);
 
             textureSamplerBindings[0].sampler = sampler;
             textureSamplerBindings[0].texture = checkTexture;
@@ -664,7 +673,7 @@ struct GPUResources {
                 .sample_count = SDL_GPU_SAMPLECOUNT_1,
             };
             depthTexture = SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
-            GPU_INIT_CHECK(depthTexture != nullptr, "depth texture creation");
+            SDL_ASSERT(depthTexture != nullptr);
         }
 
         return true;
@@ -885,6 +894,16 @@ struct Mouse {
     f32 wheel_x = 0, wheel_y = 0;
     bool down_current[MOUSE_BUTTON_COUNT] = {};
     bool down_previous[MOUSE_BUTTON_COUNT] = {};
+
+    glm::vec2 position() const {
+        return {x, y};
+    }
+    glm::vec2 delta() const {
+        return {dx, dy};
+    }
+    glm::vec2 wheel() const {
+        return {wheel_x, wheel_y};
+    }
 
     void copy_current_state_into_previous_state() {
         memcpy(down_previous, down_current, sizeof(down_current));
@@ -1244,10 +1263,11 @@ struct RendererFrame {
     GPUResources &gpu;
     GeometryStorage &geometry;
     Scene &scene;
+    Camera &camera;
     RendererConfig &config;
 
-    RendererFrame(GPUResources &g, GeometryStorage &geo, Scene &s, RendererConfig &c)
-        : gpu(g), geometry(geo), scene(s), config(c) {
+    RendererFrame(GPUResources &g, GeometryStorage &geo, Scene &s, Camera &cam, RendererConfig &c)
+        : gpu(g), geometry(geo), scene(s), camera(cam), config(c) {
     }
 
     void init() {
@@ -1280,7 +1300,7 @@ struct RendererFrame {
 
         ASSERT(renderPass != nullptr && commandBuffer != nullptr, "draw called outside render_begin/end block");
 
-        glm::mat4 view = config.camera.viewMatrix();
+        glm::mat4 view = camera.viewMatrix();
         glm::mat4 projection =
             glm::perspectiveLH_ZO(glm::radians(60.0f), config.resolution.x / config.resolution.y, 0.1f, 10000.0f);
         glm::mat4 viewProjection = projection * view;
@@ -1359,12 +1379,13 @@ struct Renderer {
     GPUResources gpu;
     GeometryStorage geometry;
     Scene scene;
+    Camera camera;
     RendererConfig config;
 
     Input input;
     RendererFrame frame;
 
-    Renderer() : input(gpu), frame(gpu, geometry, scene, config) {
+    Renderer() : input(gpu), frame(gpu, geometry, scene, camera, config) {
     }
 
     bool init() {
@@ -1378,17 +1399,14 @@ struct Renderer {
             .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
             .keyboardSensitivity = 200.0f,
             .mouseSensitivity = 0.1f,
-            .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
         };
-        config.camera.update();
+        camera = Camera{.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f};
+        camera.update();
 
         input.shouldClose = false;
 
         fpu_begin();
-        if (!gpu.init(config)) {
-            fpu_end();
-            return false;
-        }
+        gpu.init(config);
         if (!ui::init(gpu)) {
             fpu_end();
             gpu.destroy();
@@ -1403,10 +1421,7 @@ struct Renderer {
         gpu.destroy();
     }
     bool clear() {
-        geometry.vertices.clear();
-        geometry.indices.clear();
-        geometry.meshRegions.clear();
-        geometry.meshOrder.clear();
+        geometry.clear();
         return true;
     }
     void rebuild() {
@@ -1415,19 +1430,8 @@ struct Renderer {
     u64 load_obj(const char *path) {
         std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
         for (auto &m : meshCollection)
-            geometry.add_mesh(std::move(m));
+            geometry.add(std::move(m));
         return meshCollection.size();
-    }
-
-    void camera_move(f32 forward, f32 right, f32 up) {
-        config.camera.move(forward, right, up);
-    }
-    void camera_rotate(f32 yaw, f32 pitch) {
-        config.camera.rotate(yaw, pitch);
-        config.camera.update();
-    }
-    void camera_look_at(f32 x, f32 y, f32 z) {
-        config.camera.look_at(glm::vec3(x, y, z));
     }
 
     void render_begin() {

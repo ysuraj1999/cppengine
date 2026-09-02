@@ -13,10 +13,9 @@ int main(int argc, char *argv[]) {
     u64 meshCount = renderer.load_obj("models/bmw.obj");
     std::cout << "Length " << meshCount << '\n';
 
-    renderer.scene.resize(meshCount);
     for (u64 i = 0; i < meshCount; i++) {
-        renderer.scene[i].meshHandle = renderer.geometry[i];
-        renderer.scene[i].transform = {/*position*/ 0.0f, 0.0f, 0.0f, /*scale*/ 1.0f, 1.0f, 1.0f, /*rotation*/ 0.0f, 0.0f, 0.0f};
+        Transform t{/*position*/ 0.0f, 0.0f, 0.0f, /*scale*/ 1.0f, 1.0f, 1.0f, /*rotation*/ 0.0f, 0.0f, 0.0f};
+        renderer.scene.add(renderer.geometry[i], t);
     }
 
     renderer.rebuild();
@@ -33,10 +32,8 @@ int main(int argc, char *argv[]) {
             running = false;
         }
 
-        const f32 wheel_x = renderer.input.mouse.wheel_x;
-        const f32 wheel_y = renderer.input.mouse.wheel_y;
-        const f32 dx = renderer.input.mouse.dx;
-        const f32 dy = renderer.input.mouse.dy;
+        const glm::vec2 wheel = renderer.input.mouse.wheel();
+        const glm::vec2 delta = renderer.input.mouse.delta();
 
         const bool w_down = renderer.input.keyboard.down(KEY_W);
         const bool s_down = renderer.input.keyboard.down(KEY_S);
@@ -45,11 +42,11 @@ int main(int argc, char *argv[]) {
         const f32 move_speed = renderer.config.keyboardSensitivity * dt;
         const f32 look_speed = renderer.config.mouseSensitivity * dt;
 
-        renderer.camera_rotate(-wheel_x * look_speed, wheel_y * look_speed);
-        renderer.camera_move(
+        renderer.camera.rotate(-wheel.x * look_speed, wheel.y * look_speed);
+        renderer.camera.move(
             (w_down ? move_speed : 0.0f) + (s_down ? -move_speed : 0.0f),
-            middle_click ? -dx * look_speed : 0.0f,
-            middle_click ? dy * look_speed : 0.0f
+            middle_click ? -delta.x * look_speed : 0.0f,
+            middle_click ? delta.y * look_speed : 0.0f
         );
 
         renderer.render_begin();
