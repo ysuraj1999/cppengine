@@ -1,4 +1,3 @@
-#include "cppengine.h"
 #include "types.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_events.h>
@@ -232,382 +231,39 @@ static MouseButton sdl_to_mouse_button(Uint8 button) {
     }
 }
 
-RendererConfig rendererConfig = {};
-glm::vec3 WORLD_UP = glm::vec3(0.0f, 1.0f, 0.0f);
+//-----------------------------------------------------------------------------
+// GPUResources
+//-----------------------------------------------------------------------------
 
-// The renderer owns exactly one implicit scene.
-static_global Scene scene;
-static_global SDL_Window *window;
-static_global SDL_GPUDevice *gpuDevice;
-static_global SDL_GPUBuffer *vertexBuffer;
-static_global SDL_GPUTexture *checkTexture;
-static_global SDL_GPUShader *vertexShader;
-static_global SDL_GPUShader *fragmentShader;
-static_global SDL_GPUSampler *sampler;
-static_global SDL_GPUBuffer *instanceBuffer;
-static_global SDL_GPUBuffer *indexBuffer;
-static_global SDL_GPUTexture *depthTexture;
-static_global SDL_GPUGraphicsPipeline *pipeline;
-static_global SDL_GPUBufferBinding vertexBufferBinding[1] = {};
-static_global SDL_GPUBufferBinding instanceBufferBinding[1] = {};
-static_global SDL_GPUBufferBinding indexBufferBinding[1] = {};
-static_global SDL_GPUTextureSamplerBinding textureSamplerBindings[1] = {};
-static_global SDL_GPUTransferBuffer *transferToInstanceBuffer;
-static_global u32 INSTANCE_PREALLOCATED_SIZE = 10 * 1024 * 1024;
-
-static_global GeometryStorage geometryStorage;
-static_global bool shouldClose = false;
-
-struct RendererFrame {
-    SDL_GPURenderPass *renderPass;
-    SDL_GPUCommandBuffer *commandBuffer;
-    SDL_GPUTexture *swapchainTexture;
-    u32 swapchainWidth;
-    u32 swapchainHeight;
-    SDL_GPUColorTargetInfo colorTargetInfo;
-    SDL_GPUDepthStencilTargetInfo depthTargetInfo;
-    u32 instanceBufferOffset = 0;
-
-    void init() {
-        colorTargetInfo = {
-            .clear_color =
-                {rendererConfig.backgroundColor.r,
-                 rendererConfig.backgroundColor.g,
-                 rendererConfig.backgroundColor.b,
-                 rendererConfig.backgroundColor.a},
-            .load_op = SDL_GPU_LOADOP_CLEAR,
-            .store_op = SDL_GPU_STOREOP_STORE,
-        };
-        depthTargetInfo = {
-            .texture = depthTexture,
-            .clear_depth = 1.0f,
-            .load_op = SDL_GPU_LOADOP_CLEAR,
-            .store_op = SDL_GPU_STOREOP_DONT_CARE,
-        };
-    }
-
-    void begin() {
-        instanceBufferOffset = 0;
-        commandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
-        sdlAssert(commandBuffer != nullptr);
-
-        sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
-            commandBuffer, window, &swapchainTexture, &swapchainWidth, &swapchainHeight
-        ));
-
-        colorTargetInfo.texture = swapchainTexture;
-
-        renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
-        sdlAssert(renderPass != nullptr);
-
-	ASSERT(
-	       renderPass != nullptr && commandBuffer != nullptr, "draw called outside renderer_render_begin/end block"
-	       );
-        glm::mat4 view = rendererConfig.camera.getViewMatrix();
-        glm::mat4 projection = glm::perspectiveLH_ZO(
-						     glm::radians(60.0f), rendererConfig.resolution.x / rendererConfig.resolution.y, 0.1f, 10000.0f
-						     );
-        glm::mat4 viewProjection = projection * view;
-
-	if (!scene.instances.empty()){
-	  SDL_BindGPUGraphicsPipeline(renderPass, pipeline);
-	  SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
-	  SDL_PushGPUFragmentUniformData(
-					 commandBuffer, 0, &rendererConfig.resolution, (u32)sizeof(rendererConfig.resolution)
-					 );
-
-	  SDL_BindGPUVertexBuffers(renderPass, 0, vertexBufferBinding, 1);
-	  SDL_BindGPUVertexBuffers(renderPass, 1, instanceBufferBinding, 1);
-	  SDL_BindGPUIndexBuffer(renderPass, indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
-	  SDL_BindGPUFragmentSamplers(renderPass, 0, textureSamplerBindings, 1);
-	}
-    }
-
-    void render_scene() {
-        u64 i = 0;
-        while (i < scene.instances.size()) {
-            MeshHandle meshHandle = scene.instances[i].mesh;
-            u64 j = i;
-            while (j < scene.instances.size() && scene.instances[j].mesh == meshHandle)
-                j++;
-            auto regionIt = geometryStorage.meshRegions.find(meshHandle);
-            ASSERT(regionIt != geometryStorage.meshRegions.end(), "mesh never synced - call renderer_rebuild first");
-            draw_mesh(regionIt->second, scene.instances, i, j - i);
-            i = j;
-        }
-    }
-
-    void end() {
-        SDL_EndGPURenderPass(renderPass);
-        sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
-    }
-
-  private:
-    void draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
-        SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
-        sdlAssert(frameCopyPass != nullptr);
-
-        const u32 requiredInstanceCopySize = count * sizeof(glm::mat4);
-        ASSERT(
-            instanceBufferOffset + requiredInstanceCopySize <= INSTANCE_PREALLOCATED_SIZE,
-            "instance buffer overflow - raise INSTANCE_PREALLOCATED_SIZE"
-        );
-
-        glm::mat4 *mappedToInstanceInTransfer =
-            reinterpret_cast<glm::mat4 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToInstanceBuffer, false));
-        sdlAssert(mappedToInstanceInTransfer != nullptr);
-
-        glm::mat4 *dst = (glm::mat4 *)((u8 *)mappedToInstanceInTransfer + instanceBufferOffset);
-        for (u64 k = 0; k < count; k++)
-            *dst++ = transformToMat4(instances[start + k].transform);
-
-        SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {
-            .transfer_buffer = transferToInstanceBuffer,
-            .offset = instanceBufferOffset,
-        };
-
-        SDL_GPUBufferRegion instanceBufferRegion = {
-            .buffer = instanceBuffer,
-            .offset = instanceBufferOffset,
-            .size = requiredInstanceCopySize,
-        };
-
-        SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation, &instanceBufferRegion, false);
-        SDL_EndGPUCopyPass(frameCopyPass);
-
-        SDL_DrawGPUIndexedPrimitives(
-            renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
-        );
-        instanceBufferOffset += requiredInstanceCopySize;
-    }
-};
-
-struct Keyboard {
-    bool current[KEY_COUNT] = {};
-    bool previous[KEY_COUNT] = {};
-
-    void copy_current_state_into_previous_state() {
-        memcpy(previous, current, sizeof(current));
-    }
-
-    void begin() {
-        copy_current_state_into_previous_state();
-    }
-    void end() {
-        const bool *sdl_state = SDL_GetKeyboardState(nullptr);
-        memset(current, 0, sizeof(current));
-        for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
-            if (sdl_state[i]) {
-                Key k = sdl_to_key((SDL_Scancode)i);
-                if (k != KEY_UNKNOWN)
-                    current[k] = true;
-            }
-    }
-    void clear_current_state() {
-        memset(current, 0, sizeof(current));
-    }
-
-    bool down(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return current[k];
-    }
-    bool up(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return !current[k];
-    }
-    bool pressed(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return current[k] && !previous[k];
-    }
-    bool released(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return !current[k] && previous[k];
-    }
-};
-
-struct Mouse {
-    f32 x = 0, y = 0;
-    f32 dx = 0, dy = 0;
-    f32 wheel_x = 0, wheel_y = 0;
-    bool down_current[MOUSE_BUTTON_COUNT] = {};
-    bool down_previous[MOUSE_BUTTON_COUNT] = {};
-
-    void copy_current_state_into_previous_state() {
-        memcpy(down_previous, down_current, sizeof(down_current));
-    }
-    void clear_transient() {
-        dx = 0;
-        dy = 0;
-        wheel_x = 0;
-        wheel_y = 0;
-    }
-
-    void begin() {
-        copy_current_state_into_previous_state();
-        clear_transient();
-    }
-    void end() {
-    }
-
-    void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
-        x = nx;
-        y = ny;
-        dx += xrel;
-        dy += yrel;
-    }
-    void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
-        x = bx;
-        y = by;
-        if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
-            down_current[button] = true;
-    }
-    void on_button_up(MouseButton button, f32 bx, f32 by) {
-        x = bx;
-        y = by;
-        if (button > 0 && button < MOUSE_BUTTON_COUNT)
-            down_current[button] = false;
-    }
-    void on_wheel(f32 wx, f32 wy) {
-        wheel_x += wx;
-        wheel_y += wy;
-    }
-
-    bool down(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return down_current[b];
-    }
-    bool up(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return !down_current[b];
-    }
-    bool pressed(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return down_current[b] && !down_previous[b];
-    }
-    bool released(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return !down_current[b] && down_previous[b];
-    }
-};
-
-struct Input {
-    Keyboard keyboard;
-    Mouse mouse;
-    InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
-    u32 count = 0;
-
-    void push_event(InputEvent e) {
-        if (count >= INPUT_EVENT_CAPACITY)
-            return;
-        buffer[count++] = e;
-    }
-    void clear_events() {
-        count = 0;
-    }
-
-    void begin() {
-        keyboard.begin();
-        mouse.begin();
-        clear_events();
-    }
-    void poll();
-};
-
-static_global Input input = {};
-
-static_global const u64 timerFrequency = SDL_GetPerformanceFrequency();
-static_global RendererFrame frame = {};
-
-// Lifecycle init check: log, release any partial state, fail gracefully.
-#define INIT_CHECK(cond, msg)                                                                                          \
+#define GPU_INIT_CHECK(cond, msg)                                                                                      \
     do {                                                                                                               \
         if (!(cond)) {                                                                                                 \
-            std::fprintf(stderr, "%s:%d: renderer_init failed: %s (%s)\n", __FILE__, __LINE__, #cond, msg);            \
-            fpu_end();                                                                                                 \
-            renderer_quit();                                                                                           \
+            std::fprintf(stderr, "%s:%d: gpu_init failed: %s (%s)\n", __FILE__, __LINE__, #cond, msg);                  \
+            destroy();                                                                                                 \
             return false;                                                                                              \
         }                                                                                                              \
     } while (0)
 
-bool ui_init() {
-    if (ImGui::GetCurrentContext() != nullptr) {
-        std::fprintf(stderr, "ui_init: already initialized (call ui_quit first)\n");
-        return false;
-    }
-    IMGUI_CHECKVERSION();
-    ImGui::CreateContext();
-    ImGuiIO &io = ImGui::GetIO();
-    (void)io;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
-
-    ImGui::StyleColorsDark();
-    ImGuiStyle &style = ImGui::GetStyle();
-    style.ScaleAllSizes(1.0f);
-    style.FontScaleDpi = 1.25f;
-
-    // Setup Platform/Renderer backends
-    ImGui_ImplSDL3_InitForSDLGPU(window);
-    ImGui_ImplSDLGPU3_InitInfo init_info = {
-        .Device = gpuDevice,
-        .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window),
-        .MSAASamples = SDL_GPU_SAMPLECOUNT_1,
-        .SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
-        .PresentMode = SDL_GPU_PRESENTMODE_VSYNC,
-    };
-    ImGui_ImplSDLGPU3_Init(&init_info);
-    return true;
-}
-
-void ui_quit() {
-    if (!ImGui::GetCurrentContext())
-        return;
-    ImGuiIO &io = ImGui::GetIO();
-    if (io.BackendRendererUserData)
-        ImGui_ImplSDLGPU3_Shutdown();
-    if (io.BackendPlatformUserData)
-        ImGui_ImplSDL3_Shutdown();
-    ImGui::DestroyContext();
-}
-
-bool renderer_init() {
+bool GPUResources::init(RendererConfig &config) {
     if (gpuDevice != nullptr || window != nullptr) {
-        std::fprintf(stderr, "renderer_init: already initialized (call renderer_quit first)\n");
+        std::fprintf(stderr, "GPUResources::init: already initialized (call destroy first)\n");
         return false;
     }
 
-    fpu_begin();
-    RendererConfig config = {
-        .resolution = {1800.0f, 1000.0f},
-        .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
-        .keyboardSensitivity = 200.0f,
-        .mouseSensitivity = 0.1f,
-        .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
-    };
+    GPU_INIT_CHECK(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS), "SDL subsystem initialization");
 
-    shouldClose = false;
-
-    rendererConfig = config;
-
-    rendererConfig.camera.update();
-
-    INIT_CHECK(SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS), "SDL subsystem initialization");
-
-    window = SDL_CreateWindow("Lens", (u32)rendererConfig.resolution.x, (u32)rendererConfig.resolution.y, 0);
-    INIT_CHECK(window != nullptr, "window creation");
+    window = SDL_CreateWindow("Lens", (u32)config.resolution.x, (u32)config.resolution.y, 0);
+    GPU_INIT_CHECK(window != nullptr, "window creation");
 
     gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
-    INIT_CHECK(gpuDevice != nullptr, "GPU device creation");
+    GPU_INIT_CHECK(gpuDevice != nullptr, "GPU device creation");
 
-    INIT_CHECK(SDL_ClaimWindowForGPUDevice(gpuDevice, window), "claim window for GPU device");
+    GPU_INIT_CHECK(SDL_ClaimWindowForGPUDevice(gpuDevice, window), "claim window for GPU device");
 
-    INIT_CHECK(
+    GPU_INIT_CHECK(
         SDL_SetGPUSwapchainParameters(gpuDevice, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC),
         "swapchain configuration"
     );
-
-    INIT_CHECK(ui_init(), "imgui initialization");
-    // IMGUI END
 
     std::vector<u8> vertexShaderContents = readFile(SHADER_BIN_DIR "/shader.vertex.spv");
     ASSERT(!vertexShaderContents.empty(), SHADER_BIN_DIR "/shader.vertex.spv missing or empty");
@@ -623,9 +279,8 @@ bool renderer_init() {
         .num_storage_buffers = 0,
         .num_uniform_buffers = 1,
     };
-
     vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
-    INIT_CHECK(vertexShader != nullptr, "vertex shader creation");
+    GPU_INIT_CHECK(vertexShader != nullptr, "vertex shader creation");
 
     std::vector<u8> fragmentShaderContents = readFile(SHADER_BIN_DIR "/shader.fragment.spv");
     ASSERT(!fragmentShaderContents.empty(), SHADER_BIN_DIR "/shader.fragment.spv missing or empty");
@@ -641,9 +296,8 @@ bool renderer_init() {
         .num_storage_buffers = 0,
         .num_uniform_buffers = 1,
     };
-
     fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
-    INIT_CHECK(fragmentShader != nullptr, "fragment shader creation");
+    GPU_INIT_CHECK(fragmentShader != nullptr, "fragment shader creation");
 
     SDL_GPUGraphicsPipelineCreateInfo pipelineInfo = {
         .vertex_shader = vertexShader,
@@ -653,7 +307,6 @@ bool renderer_init() {
 
     SDL_GPUVertexBufferDescription vertexBufferDescription[2] = {};
 
-    // How each vertex is defined
     vertexBufferDescription[0].slot = 0;
     vertexBufferDescription[0].input_rate = SDL_GPU_VERTEXINPUTRATE_VERTEX;
     vertexBufferDescription[0].instance_step_rate = 0;
@@ -667,7 +320,6 @@ bool renderer_init() {
     pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
     pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
 
-    // Vertex attributes
     SDL_GPUVertexAttribute vertexAttributes[8] = {};
     vertexAttributes[0].buffer_slot = 0;
     vertexAttributes[0].location = 0;
@@ -689,17 +341,13 @@ bool renderer_init() {
     vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
     vertexAttributes[3].offset = offsetof(Vertex, uv);
 
-    // Instance attributes
     vertexAttributes[4] = {.location = 4, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 0};
-
     vertexAttributes[5] = {
         .location = 5, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = sizeof(glm::vec4)
     };
-
     vertexAttributes[6] = {
         .location = 6, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 2 * sizeof(glm::vec4)
     };
-
     vertexAttributes[7] = {
         .location = 7, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * sizeof(glm::vec4)
     };
@@ -710,27 +358,23 @@ bool renderer_init() {
     SDL_GPUColorTargetDescription colorTargetDescriptions[1] = {{
         .format = SDL_GetGPUSwapchainTextureFormat(gpuDevice, window),
     }};
-
     pipelineInfo.target_info.num_color_targets = 1;
     pipelineInfo.target_info.color_target_descriptions = colorTargetDescriptions;
 
-    // Culling
     pipelineInfo.rasterizer_state.cull_mode = SDL_GPU_CULLMODE_BACK;
     pipelineInfo.rasterizer_state.front_face = SDL_GPU_FRONTFACE_CLOCKWISE;
 
-    // Depth test
     SDL_GPUDepthStencilState depthStencilState = {
         .compare_op = SDL_GPU_COMPAREOP_LESS,
         .enable_depth_test = true,
         .enable_depth_write = true,
     };
-
     pipelineInfo.depth_stencil_state = depthStencilState;
     pipelineInfo.target_info.has_depth_stencil_target = true;
     pipelineInfo.target_info.depth_stencil_format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT;
 
     pipeline = SDL_CreateGPUGraphicsPipeline(gpuDevice, &pipelineInfo);
-    INIT_CHECK(pipeline != nullptr, "graphics pipeline creation");
+    GPU_INIT_CHECK(pipeline != nullptr, "graphics pipeline creation");
 
     {
         SDL_GPUTextureCreateInfo textureInfo = {};
@@ -741,7 +385,6 @@ bool renderer_init() {
         textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
         textureInfo.layer_count_or_depth = 1;
 
-        // LOAD TEXTURE
         int w, h, channels;
         u8 *pixels = stbi_load(TEXTURE_BIN_DIR "/default.png", &w, &h, &channels, 4);
         ASSERT(pixels != nullptr, TEXTURE_BIN_DIR "/default.png failed to load");
@@ -754,18 +397,18 @@ bool renderer_init() {
         const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
 
         checkTexture = SDL_CreateGPUTexture(gpuDevice, &textureInfo);
-        INIT_CHECK(checkTexture != nullptr, "default texture creation");
+        GPU_INIT_CHECK(checkTexture != nullptr, "default texture creation");
 
         SDL_GPUTransferBufferCreateInfo transferToTextureInfo = {
             .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
             .size = TEXTURE_SIZE,
         };
         SDL_GPUTransferBuffer *transferToTexture = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToTextureInfo);
-        INIT_CHECK(transferToTexture != nullptr, "texture transfer buffer creation");
+        GPU_INIT_CHECK(transferToTexture != nullptr, "texture transfer buffer creation");
 
         u8 *mappedTransferToBytes =
             reinterpret_cast<u8 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToTexture, false));
-        INIT_CHECK(mappedTransferToBytes != nullptr, "texture transfer buffer map");
+        GPU_INIT_CHECK(mappedTransferToBytes != nullptr, "texture transfer buffer map");
         std::memcpy(mappedTransferToBytes, pixels, TEXTURE_SIZE);
 
         SDL_GPUTextureTransferInfo textureTransferInfo = {
@@ -774,7 +417,6 @@ bool renderer_init() {
             .pixels_per_row = tWidth,
             .rows_per_layer = tHeight,
         };
-
         SDL_GPUTextureRegion textureRegion = {
             .texture = checkTexture,
             .mip_level = 0,
@@ -782,19 +424,21 @@ bool renderer_init() {
             .x = 0,
             .y = 0,
             .z = 0,
-            .w = 512,
-            .h = 512,
+            .w = tWidth,
+            .h = tHeight,
             .d = 1,
         };
         SDL_GPUCommandBuffer *initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-        INIT_CHECK(initCmd != nullptr, "texture upload command buffer acquisition");
+        GPU_INIT_CHECK(initCmd != nullptr, "texture upload command buffer acquisition");
         SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(initCmd);
-        INIT_CHECK(copyPass != nullptr, "texture copy pass begin");
+        GPU_INIT_CHECK(copyPass != nullptr, "texture copy pass begin");
         SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
         SDL_EndGPUCopyPass(copyPass);
-        INIT_CHECK(SDL_SubmitGPUCommandBuffer(initCmd), "texture upload submission");
+        GPU_INIT_CHECK(SDL_SubmitGPUCommandBuffer(initCmd), "texture upload submission");
 
-        // make the sampler here
+        SDL_UnmapGPUTransferBuffer(gpuDevice, transferToTexture);
+        SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToTexture);
+
         SDL_GPUSamplerCreateInfo samplerInfo = {
             .min_filter = SDL_GPU_FILTER_NEAREST,
             .mag_filter = SDL_GPU_FILTER_NEAREST,
@@ -802,63 +446,30 @@ bool renderer_init() {
             .address_mode_u = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
             .address_mode_v = SDL_GPU_SAMPLERADDRESSMODE_CLAMP_TO_EDGE,
         };
-
         sampler = SDL_CreateGPUSampler(gpuDevice, &samplerInfo);
-        INIT_CHECK(sampler != nullptr, "sampler creation");
+        GPU_INIT_CHECK(sampler != nullptr, "sampler creation");
 
-        // bind texture and sampler here
         textureSamplerBindings[0].sampler = sampler;
         textureSamplerBindings[0].texture = checkTexture;
 
-        // make a depth texture here
         SDL_GPUTextureCreateInfo depthTextureInfo = {
             .type = SDL_GPU_TEXTURETYPE_2D,
             .format = SDL_GPU_TEXTUREFORMAT_D32_FLOAT,
             .usage = SDL_GPU_TEXTUREUSAGE_DEPTH_STENCIL_TARGET,
-            .width = (u32)rendererConfig.resolution.x,
-            .height = (u32)rendererConfig.resolution.y,
+            .width = (u32)config.resolution.x,
+            .height = (u32)config.resolution.y,
             .layer_count_or_depth = 1,
             .num_levels = 1,
             .sample_count = SDL_GPU_SAMPLECOUNT_1,
         };
-
         depthTexture = SDL_CreateGPUTexture(gpuDevice, &depthTextureInfo);
-        INIT_CHECK(depthTexture != nullptr, "depth texture creation");
-
-        // std::cout << "width " << tWidth << " height " << tHeight << '\n';
+        GPU_INIT_CHECK(depthTexture != nullptr, "depth texture creation");
     }
 
-    frame.init();
-
-    fpu_end();
     return true;
 }
 
-u64 renderer_load_obj(const char *path) {
-    std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
-    for (auto &m : meshCollection)
-        geometryStorage.add_mesh(std::move(m));
-    return meshCollection.size();
-}
-
-u64 instance_count() {
-    return scene.instances.size();
-}
-
-void ensure_instance_count(u64 n) {
-    scene.ensure_instance_count(n);
-}
-
-void instance_set(u64 index, MeshHandle m, Transform t) {
-    scene.set_instance(index, m, t);
-}
-
-MeshHandle instance_mesh(u64 index) {
-    ASSERT(index < scene.instances.size(), "instance index out of bounds");
-    return scene.instances[index].mesh;
-}
-
-void renderer_rebuild() {
+void GPUResources::rebuild(const GeometryStorage &geometry) {
     ASSERT(gpuDevice != nullptr, "renderer not initialized");
 
     if (vertexBuffer) {
@@ -870,7 +481,7 @@ void renderer_rebuild() {
         indexBuffer = nullptr;
     }
 
-    const u32 VERTEX_BUFFER_SIZE = geometryStorage.vertices.size() * sizeof(Vertex);
+    const u32 VERTEX_BUFFER_SIZE = geometry.vertices.size() * sizeof(Vertex);
     SDL_GPUBufferCreateInfo vertexBufferInfo = {
         .usage = SDL_GPU_BUFFERUSAGE_VERTEX,
         .size = VERTEX_BUFFER_SIZE,
@@ -878,7 +489,7 @@ void renderer_rebuild() {
     vertexBuffer = SDL_CreateGPUBuffer(gpuDevice, &vertexBufferInfo);
     sdlAssert(vertexBuffer != nullptr);
 
-    const u32 INDEX_BUFFER_SIZE = geometryStorage.indices.size() * sizeof(u32);
+    const u32 INDEX_BUFFER_SIZE = geometry.indices.size() * sizeof(u32);
     SDL_GPUBufferCreateInfo indexBufferInfo = {
         .usage = SDL_GPU_BUFFERUSAGE_INDEX,
         .size = INDEX_BUFFER_SIZE,
@@ -900,9 +511,7 @@ void renderer_rebuild() {
     transferToInstanceBuffer = SDL_CreateGPUTransferBuffer(gpuDevice, &transferToInstanceBufferInfo);
     sdlAssert(transferToInstanceBuffer != nullptr);
 
-    // COPY:
-    {
-        // VERTEX BUFFER
+    if (VERTEX_BUFFER_SIZE > 0) {
         SDL_GPUTransferBufferCreateInfo transferToVertexBufferInfo = {
             .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
             .size = VERTEX_BUFFER_SIZE,
@@ -914,114 +523,430 @@ void renderer_rebuild() {
         Vertex *mappedVertexInTransfer =
             reinterpret_cast<Vertex *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToVertexBuffer, false));
         sdlAssert(mappedVertexInTransfer != nullptr);
-        std::memcpy(mappedVertexInTransfer, geometryStorage.vertices.data(), VERTEX_BUFFER_SIZE);
+        std::memcpy(mappedVertexInTransfer, geometry.vertices.data(), VERTEX_BUFFER_SIZE);
 
         SDL_GPUTransferBufferLocation transferToVertexBufferLocation = {
             .transfer_buffer = transferToVertexBuffer,
             .offset = 0,
         };
-
         SDL_GPUBufferRegion vertexBufferRegion = {
             .buffer = vertexBuffer,
             .offset = 0,
             .size = VERTEX_BUFFER_SIZE,
         };
 
-        // INDEX BUFFER
-        SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {
-            .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-            .size = INDEX_BUFFER_SIZE,
-        };
-        SDL_GPUTransferBuffer *transferToIndexBuffer =
-            SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
-        sdlAssert(transferToIndexBuffer != nullptr);
+        if (INDEX_BUFFER_SIZE > 0) {
+            SDL_GPUTransferBufferCreateInfo transferToIndexBufferInfo = {
+                .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+                .size = INDEX_BUFFER_SIZE,
+            };
+            SDL_GPUTransferBuffer *transferToIndexBuffer =
+                SDL_CreateGPUTransferBuffer(gpuDevice, &transferToIndexBufferInfo);
+            sdlAssert(transferToIndexBuffer != nullptr);
 
-        u32 *mappedIndicesInTransfer =
-            reinterpret_cast<u32 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
-        sdlAssert(mappedIndicesInTransfer != nullptr);
-        std::memcpy(mappedIndicesInTransfer, geometryStorage.indices.data(), INDEX_BUFFER_SIZE);
+            u32 *mappedIndicesInTransfer =
+                reinterpret_cast<u32 *>(SDL_MapGPUTransferBuffer(gpuDevice, transferToIndexBuffer, false));
+            sdlAssert(mappedIndicesInTransfer != nullptr);
+            std::memcpy(mappedIndicesInTransfer, geometry.indices.data(), INDEX_BUFFER_SIZE);
 
-        SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {
-            .transfer_buffer = transferToIndexBuffer,
-            .offset = 0,
-        };
+            SDL_GPUTransferBufferLocation transferToIndexBufferLocation = {
+                .transfer_buffer = transferToIndexBuffer,
+                .offset = 0,
+            };
+            SDL_GPUBufferRegion indexBufferRegion = {
+                .buffer = indexBuffer,
+                .offset = 0,
+                .size = INDEX_BUFFER_SIZE,
+            };
 
-        SDL_GPUBufferRegion indexBufferRegion = {
-            .buffer = indexBuffer,
-            .offset = 0,
-            .size = INDEX_BUFFER_SIZE,
-        };
+            SDL_GPUCommandBuffer *syncCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
+            sdlAssert(syncCmd != nullptr);
+            SDL_GPUCopyPass *initialCopyPass = SDL_BeginGPUCopyPass(syncCmd);
+            sdlAssert(initialCopyPass != nullptr);
 
-        SDL_GPUCommandBuffer *syncCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-        sdlAssert(syncCmd != nullptr);
-        SDL_GPUCopyPass *initialCopyPass = SDL_BeginGPUCopyPass(syncCmd);
-        sdlAssert(initialCopyPass != nullptr);
+            SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation, &vertexBufferRegion, false);
+            SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation, &indexBufferRegion, false);
+            SDL_EndGPUCopyPass(initialCopyPass);
+            sdlAssert(SDL_SubmitGPUCommandBuffer(syncCmd));
 
-        SDL_UploadToGPUBuffer(initialCopyPass, &transferToVertexBufferLocation, &vertexBufferRegion, false);
-        SDL_UploadToGPUBuffer(initialCopyPass, &transferToIndexBufferLocation, &indexBufferRegion, false);
-        SDL_EndGPUCopyPass(initialCopyPass);
-        sdlAssert(SDL_SubmitGPUCommandBuffer(syncCmd));
-
-        // Unmap and release transfer buffer once uploaded
-        SDL_UnmapGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
-        SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
-
-        SDL_UnmapGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
-        SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
+            SDL_UnmapGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
+            SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToVertexBuffer);
+            SDL_UnmapGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
+            SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToIndexBuffer);
+        }
     }
 
     vertexBufferBinding[0].buffer = vertexBuffer;
     vertexBufferBinding[0].offset = 0;
-
     instanceBufferBinding[0].buffer = instanceBuffer;
     instanceBufferBinding[0].offset = 0;
-
     indexBufferBinding[0].buffer = indexBuffer;
     indexBufferBinding[0].offset = 0;
 }
 
-u64 mesh_count() {
-    return geometryStorage.mesh_count();
+void GPUResources::destroy() {
+    if (gpuDevice) {
+        if (checkTexture)
+            SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
+        if (depthTexture)
+            SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
+        if (pipeline)
+            SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
+        if (fragmentShader)
+            SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
+        if (vertexShader)
+            SDL_ReleaseGPUShader(gpuDevice, vertexShader);
+        if (vertexBuffer)
+            SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
+        if (indexBuffer)
+            SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
+        if (instanceBuffer)
+            SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
+        if (transferToInstanceBuffer)
+            SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
+        if (sampler)
+            SDL_ReleaseGPUSampler(gpuDevice, sampler);
+        SDL_DestroyGPUDevice(gpuDevice);
+    }
+
+    if (window)
+        SDL_DestroyWindow(window);
+    SDL_Quit();
+
+    window = nullptr;
+    gpuDevice = nullptr;
+    vertexBuffer = nullptr;
+    indexBuffer = nullptr;
+    instanceBuffer = nullptr;
+    transferToInstanceBuffer = nullptr;
+    checkTexture = nullptr;
+    depthTexture = nullptr;
+    pipeline = nullptr;
+    sampler = nullptr;
+    vertexShader = nullptr;
+    fragmentShader = nullptr;
+    vertexBufferBinding[0].buffer = nullptr;
+    instanceBufferBinding[0].buffer = nullptr;
+    indexBufferBinding[0].buffer = nullptr;
+    textureSamplerBindings[0].texture = nullptr;
+    textureSamplerBindings[0].sampler = nullptr;
 }
 
-MeshHandle mesh_at(u64 index) {
-    return geometryStorage.mesh_at(index);
+//-----------------------------------------------------------------------------
+// Renderer
+//-----------------------------------------------------------------------------
+
+bool Renderer::init() {
+    if (gpu.initialized()) {
+        std::fprintf(stderr, "Renderer::init: already initialized (call quit first)\n");
+        return false;
+    }
+
+    config = RendererConfig{
+        .resolution = {1800.0f, 1000.0f},
+        .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
+        .keyboardSensitivity = 200.0f,
+        .mouseSensitivity = 0.1f,
+        .camera = {.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f},
+    };
+    config.camera.update();
+
+    shouldClose = false;
+
+    fpu_begin();
+    if (!gpu.init(config)) {
+        fpu_end();
+        return false;
+    }
+    frame.init();
+    fpu_end();
+    return true;
 }
 
-void renderer_render_begin(void) {
-    frame.begin();
-}
-void renderer_render_scene(void) {
-    frame.render_scene();
-}
-void renderer_render_end(void) {
-    frame.end();
+void Renderer::quit() {
+    gpu.destroy();
+    shouldClose = false;
 }
 
-void ui_begin() {
+bool Renderer::clear() {
+    geometry.vertices.clear();
+    geometry.indices.clear();
+    geometry.meshRegions.clear();
+    geometry.meshOrder.clear();
+    return true;
+}
+
+void Renderer::rebuild() {
+    gpu.rebuild(geometry);
+}
+
+u64 Renderer::load_obj(const char *path) {
+    std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
+    for (auto &m : meshCollection)
+        geometry.add_mesh(std::move(m));
+    return meshCollection.size();
+}
+
+void Renderer::camera_move(f32 forward, f32 right, f32 up) {
+    config.camera.move(forward, right, up);
+}
+
+void Renderer::camera_rotate(f32 yaw, f32 pitch) {
+    config.camera.rotate(yaw, pitch);
+    config.camera.update();
+}
+
+void Renderer::camera_look_at(f32 x, f32 y, f32 z) {
+    config.camera.look_at(glm::vec3(x, y, z));
+}
+
+//-----------------------------------------------------------------------------
+// RendererFrame
+//-----------------------------------------------------------------------------
+
+void RendererFrame::init() {
+    colorTargetInfo = {
+        .clear_color =
+            {config.backgroundColor.r, config.backgroundColor.g, config.backgroundColor.b, config.backgroundColor.a},
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_STORE,
+    };
+    depthTargetInfo = {
+        .texture = gpu.depthTexture,
+        .clear_depth = 1.0f,
+        .load_op = SDL_GPU_LOADOP_CLEAR,
+        .store_op = SDL_GPU_STOREOP_DONT_CARE,
+    };
+}
+
+void RendererFrame::begin() {
+    instanceBufferOffset = 0;
+    commandBuffer = SDL_AcquireGPUCommandBuffer(gpu.gpuDevice);
+    sdlAssert(commandBuffer != nullptr);
+
+    sdlAssert(SDL_WaitAndAcquireGPUSwapchainTexture(
+        commandBuffer, gpu.window, &swapchainTexture, &swapchainWidth, &swapchainHeight
+    ));
+
+    colorTargetInfo.texture = swapchainTexture;
+
+    renderPass = SDL_BeginGPURenderPass(commandBuffer, &colorTargetInfo, 1, &depthTargetInfo);
+    sdlAssert(renderPass != nullptr);
+
+    ASSERT(renderPass != nullptr && commandBuffer != nullptr, "draw called outside render_begin/end block");
+
+    glm::mat4 view = config.camera.getViewMatrix();
+    glm::mat4 projection =
+        glm::perspectiveLH_ZO(glm::radians(60.0f), config.resolution.x / config.resolution.y, 0.1f, 10000.0f);
+    glm::mat4 viewProjection = projection * view;
+
+    if (!scene.instances.empty()) {
+        SDL_BindGPUGraphicsPipeline(renderPass, gpu.pipeline);
+        SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
+        SDL_PushGPUFragmentUniformData(commandBuffer, 0, &config.resolution, (u32)sizeof(config.resolution));
+        SDL_BindGPUVertexBuffers(renderPass, 0, gpu.vertexBufferBinding, 1);
+        SDL_BindGPUVertexBuffers(renderPass, 1, gpu.instanceBufferBinding, 1);
+        SDL_BindGPUIndexBuffer(renderPass, gpu.indexBufferBinding, SDL_GPU_INDEXELEMENTSIZE_32BIT);
+        SDL_BindGPUFragmentSamplers(renderPass, 0, gpu.textureSamplerBindings, 1);
+    }
+}
+
+void RendererFrame::render_scene() {
+    u64 i = 0;
+    while (i < scene.instances.size()) {
+        MeshHandle meshHandle = scene.instances[i].mesh;
+        u64 j = i;
+        while (j < scene.instances.size() && scene.instances[j].mesh == meshHandle)
+            j++;
+        auto regionIt = geometry.meshRegions.find(meshHandle);
+        ASSERT(regionIt != geometry.meshRegions.end(), "mesh never synced - call rebuild first");
+        draw_mesh(regionIt->second, scene.instances, i, j - i);
+        i = j;
+    }
+}
+
+void RendererFrame::end() {
+    SDL_EndGPURenderPass(renderPass);
+    sdlAssert(SDL_SubmitGPUCommandBuffer(commandBuffer));
+}
+
+void RendererFrame::draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
+    SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    sdlAssert(frameCopyPass != nullptr);
+
+    const u32 requiredInstanceCopySize = count * sizeof(glm::mat4);
+    ASSERT(
+        instanceBufferOffset + requiredInstanceCopySize <= gpu.INSTANCE_PREALLOCATED_SIZE,
+        "instance buffer overflow - raise INSTANCE_PREALLOCATED_SIZE"
+    );
+
+    glm::mat4 *mappedToInstanceInTransfer =
+        reinterpret_cast<glm::mat4 *>(SDL_MapGPUTransferBuffer(gpu.gpuDevice, gpu.transferToInstanceBuffer, false));
+    sdlAssert(mappedToInstanceInTransfer != nullptr);
+
+    glm::mat4 *dst = (glm::mat4 *)((u8 *)mappedToInstanceInTransfer + instanceBufferOffset);
+    for (u64 k = 0; k < count; k++)
+        *dst++ = transformToMat4(instances[start + k].transform);
+
+    SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {
+        .transfer_buffer = gpu.transferToInstanceBuffer,
+        .offset = instanceBufferOffset,
+    };
+    SDL_GPUBufferRegion instanceBufferRegion = {
+        .buffer = gpu.instanceBuffer,
+        .offset = instanceBufferOffset,
+        .size = requiredInstanceCopySize,
+    };
+
+    SDL_UploadToGPUBuffer(frameCopyPass, &transferToInstanceBufferLocation, &instanceBufferRegion, false);
+    SDL_EndGPUCopyPass(frameCopyPass);
+
+    SDL_DrawGPUIndexedPrimitives(
+        renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
+    );
+    instanceBufferOffset += requiredInstanceCopySize;
+}
+
+//-----------------------------------------------------------------------------
+// UI
+//-----------------------------------------------------------------------------
+
+bool UI::init(GPUResources &gpu) {
+    if (ImGui::GetCurrentContext() != nullptr) {
+        std::fprintf(stderr, "UI::init: already initialized (call quit first)\n");
+        return false;
+    }
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ctx = ImGui::GetCurrentContext();
+    ImGuiIO &io = ImGui::GetIO();
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+
+    ImGui::StyleColorsDark();
+    ImGuiStyle &style = ImGui::GetStyle();
+    style.ScaleAllSizes(1.0f);
+    style.FontScaleDpi = 1.25f;
+
+    ImGui_ImplSDL3_InitForSDLGPU(gpu.window);
+    ImGui_ImplSDLGPU3_InitInfo init_info = {
+        .Device = gpu.gpuDevice,
+        .ColorTargetFormat = SDL_GetGPUSwapchainTextureFormat(gpu.gpuDevice, gpu.window),
+        .MSAASamples = SDL_GPU_SAMPLECOUNT_1,
+        .SwapchainComposition = SDL_GPU_SWAPCHAINCOMPOSITION_SDR,
+        .PresentMode = SDL_GPU_PRESENTMODE_VSYNC,
+    };
+    ImGui_ImplSDLGPU3_Init(&init_info);
+    return true;
+}
+
+void UI::quit() {
+    if (!ImGui::GetCurrentContext())
+        return;
+    ImGuiIO &io = ImGui::GetIO();
+    if (io.BackendRendererUserData)
+        ImGui_ImplSDLGPU3_Shutdown();
+    if (io.BackendPlatformUserData)
+        ImGui_ImplSDL3_Shutdown();
+    ImGui::DestroyContext();
+    ctx = nullptr;
+}
+
+void UI::begin() {
     fpu_begin();
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
 }
 
-void ui_end() {
-    // edit styles
-    // ImGui::ShowStyleEditor();
-
+void UI::end(SDL_GPUCommandBuffer *commandBuffer, SDL_GPURenderPass *renderPass) {
     ImGui::Render();
     ImDrawData *draw_data = ImGui::GetDrawData();
-    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, frame.commandBuffer);
-    ImGui_ImplSDLGPU3_RenderDrawData(draw_data, frame.commandBuffer, frame.renderPass);
+    ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, commandBuffer);
+    ImGui_ImplSDLGPU3_RenderDrawData(draw_data, commandBuffer, renderPass);
     fpu_end();
 }
 
-bool renderer_clear(void) {
-    geometryStorage.vertices.clear();
-    geometryStorage.indices.clear();
-    geometryStorage.meshRegions.clear();
-    geometryStorage.meshOrder.clear();
-    return true;
+bool UI::begin_window(const char *name) {
+    return ImGui::Begin(name);
+}
+void UI::end_window() {
+    ImGui::End();
+}
+bool UI::button(const char *label) {
+    return ImGui::Button(label);
+}
+bool UI::begin_tree(const char *label) {
+    return ImGui::TreeNode(label);
+}
+void UI::end_tree() {
+    ImGui::TreePop();
+}
+bool UI::selectable(const char *label, bool selected) {
+    return ImGui::Selectable(label, selected);
+}
+void UI::sameline() {
+    ImGui::SameLine();
+}
+void UI::text(const char *text) {
+    ImGui::Text("%s", text);
+}
+void UI::push_id(int id) {
+    ImGui::PushID(id);
+}
+void UI::pop_id() {
+    ImGui::PopID();
+}
+bool UI::begin_context_menu_item() {
+    return ImGui::BeginPopupContextItem();
+}
+bool UI::begin_context_menu_window() {
+    return ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_NoOpenOverItems);
+}
+void UI::end_context_menu() {
+    ImGui::EndPopup();
+}
+bool UI::menu_item(const char *label) {
+    return ImGui::MenuItem(label);
+}
+
+static ImGuiMouseButton imgui_button(MouseButton button) {
+    switch (button) {
+    case MOUSE_BUTTON_LEFT:
+        return ImGuiMouseButton_Left;
+    case MOUSE_BUTTON_RIGHT:
+        return ImGuiMouseButton_Right;
+    case MOUSE_BUTTON_MIDDLE:
+        return ImGuiMouseButton_Middle;
+    case MOUSE_BUTTON_X1:
+        return ImGuiMouseButton_Left;
+    case MOUSE_BUTTON_X2:
+        return ImGuiMouseButton_Right;
+    default:
+        return ImGuiMouseButton_Left;
+    }
+}
+
+bool UI::item_double_clicked(MouseButton button) {
+    return ImGui::IsMouseDoubleClicked(imgui_button(button)) && ImGui::IsItemHovered(ImGuiHoveredFlags_None);
+}
+bool UI::item_clicked(MouseButton button) {
+    return ImGui::IsItemClicked(imgui_button(button));
+}
+
+//-----------------------------------------------------------------------------
+// Input
+//-----------------------------------------------------------------------------
+
+void Keyboard::end() {
+    const bool *sdl_state = SDL_GetKeyboardState(nullptr);
+    memset(current, 0, sizeof(current));
+    for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
+        if (sdl_state[i]) {
+            Key k = sdl_to_key((SDL_Scancode)i);
+            if (k != KEY_UNKNOWN)
+                current[k] = true;
+        }
 }
 
 void Input::poll() {
@@ -1142,252 +1067,10 @@ void Input::poll() {
         keyboard.clear_current_state();
 }
 
-void input_poll(void) {
-    input.poll();
-}
-
-bool input_should_close() {
-    return shouldClose;
-}
-
-void input_set_cursor_captured(bool captured) {
-    if (window)
-        SDL_SetWindowRelativeMouseMode(window, captured != false);
-}
-
-bool input_cursor_captured() {
-    return window && SDL_GetWindowRelativeMouseMode(window);
-}
-
-f32 input_mouse_x(void) {
-    return input.mouse.x;
-}
-
-f32 input_mouse_y(void) {
-    return input.mouse.y;
-}
-
-f32 input_mouse_dx(void) {
-    return input.mouse.dx;
-}
-
-f32 input_mouse_dy(void) {
-    return input.mouse.dy;
-}
-
-f32 input_mouse_wheel_x(void) {
-    return input.mouse.wheel_x;
-}
-
-f32 input_mouse_wheel_y(void) {
-    return input.mouse.wheel_y;
-}
-
-bool input_mouse_down(MouseButton button) {
-    return input.mouse.down(button);
-}
-
-bool input_mouse_up(MouseButton button) {
-    return input.mouse.up(button);
-}
-
-bool input_mouse_pressed(MouseButton button) {
-    return input.mouse.pressed(button);
-}
-
-bool input_mouse_released(MouseButton button) {
-    return input.mouse.released(button);
-}
-
-u64 input_event_count(void) {
-    return input.count;
-}
-
-InputEvent input_event_at(u64 index) {
-    ASSERT(index < input.count, "input event index out of bounds");
-    return input.buffer[index];
-}
-
-void renderer_quit() {
-    ui_quit();
-
-    if (gpuDevice) {
-        if (checkTexture)
-            SDL_ReleaseGPUTexture(gpuDevice, checkTexture);
-        if (depthTexture)
-            SDL_ReleaseGPUTexture(gpuDevice, depthTexture);
-        if (pipeline)
-            SDL_ReleaseGPUGraphicsPipeline(gpuDevice, pipeline);
-        if (fragmentShader)
-            SDL_ReleaseGPUShader(gpuDevice, fragmentShader);
-        if (vertexShader)
-            SDL_ReleaseGPUShader(gpuDevice, vertexShader);
-        if (vertexBuffer)
-            SDL_ReleaseGPUBuffer(gpuDevice, vertexBuffer);
-        if (indexBuffer)
-            SDL_ReleaseGPUBuffer(gpuDevice, indexBuffer);
-        if (instanceBuffer)
-            SDL_ReleaseGPUBuffer(gpuDevice, instanceBuffer);
-        if (transferToInstanceBuffer)
-            SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToInstanceBuffer);
-        if (sampler)
-            SDL_ReleaseGPUSampler(gpuDevice, sampler);
-        SDL_DestroyGPUDevice(gpuDevice);
-    }
-
-    if (window)
-        SDL_DestroyWindow(window);
-    SDL_Quit();
-
-    gpuDevice = nullptr;
-    window = nullptr;
-    vertexBuffer = nullptr;
-    indexBuffer = nullptr;
-    instanceBuffer = nullptr;
-    transferToInstanceBuffer = nullptr;
-    checkTexture = nullptr;
-    depthTexture = nullptr;
-    pipeline = nullptr;
-    sampler = nullptr;
-    vertexShader = nullptr;
-    fragmentShader = nullptr;
-    vertexBufferBinding[0].buffer = nullptr;
-    instanceBufferBinding[0].buffer = nullptr;
-    indexBufferBinding[0].buffer = nullptr;
-    textureSamplerBindings[0].texture = nullptr;
-    textureSamplerBindings[0].sampler = nullptr;
-    frame = RendererFrame{};
-
-    geometryStorage = GeometryStorage{};
-    scene = Scene{};
-
-    shouldClose = false;
-    input = Input{};
-}
-
-void renderer_camera_move(f32 forward, f32 right, f32 up) {
-    rendererConfig.camera.move(forward, right, up);
-}
-
-void renderer_camera_rotate(f32 yaw, f32 pitch) {
-    rendererConfig.camera.rotate(yaw, pitch);
-    rendererConfig.camera.update();
-}
-
-void renderer_camera_look_at(f32 x, f32 y, f32 z) {
-    rendererConfig.camera.look_at(glm::vec3(x, y, z));
-}
-
-bool input_key_down(Key key) {
-    return input.keyboard.down(key);
-}
-
-bool input_key_up(Key key) {
-    return input.keyboard.up(key);
-}
-
-bool input_key_pressed(Key key) {
-    return input.keyboard.pressed(key);
-}
-
-bool input_key_released(Key key) {
-    return input.keyboard.released(key);
-}
-f32 time_dt(void) {
-    static_local u64 previous = SDL_GetPerformanceCounter();
+f32 Input::time_dt() {
+    static const u64 timerFrequency = SDL_GetPerformanceFrequency();
     const u64 now = SDL_GetPerformanceCounter();
-    const f32 dt = static_cast<f32>(now - previous) / static_cast<f32>(timerFrequency);
-    previous = now;
+    const f32 dt = static_cast<f32>(now - prevCounter) / static_cast<f32>(timerFrequency);
+    prevCounter = now;
     return dt;
-}
-
-void ui_begin_window(const char *name) {
-    ImGui::Begin(name);
-}
-
-void ui_end_window() {
-    ImGui::End();
-}
-
-bool ui_button(const char *label) {
-    return ImGui::Button(label);
-}
-
-bool ui_begin_tree(const char *label) {
-    return ImGui::TreeNode(label);
-}
-
-void ui_end_tree() {
-    ImGui::TreePop();
-}
-
-bool ui_selectable(const char *label, bool selected) {
-    return ImGui::Selectable(label, selected);
-}
-
-void ui_sameline() {
-    ImGui::SameLine();
-}
-
-void ui_text(const char *text) {
-    ImGui::Text("%s", text);
-}
-
-void ui_push_id(int id) {
-    ImGui::PushID(id);
-}
-
-void ui_pop_id() {
-    ImGui::PopID();
-}
-
-bool ui_begin_context_menu_item() {
-    return ImGui::BeginPopupContextItem();
-}
-
-bool ui_begin_context_menu_window() {
-    return ImGui::BeginPopupContextWindow(nullptr, ImGuiPopupFlags_NoOpenOverItems);
-}
-
-void ui_end_context_menu() {
-    ImGui::EndPopup();
-}
-
-bool ui_menu_item(const char *label) {
-    return ImGui::MenuItem(label);
-}
-
-static ImGuiMouseButton imgui_button(MouseButton button) {
-    switch (button) {
-    case MOUSE_BUTTON_LEFT:
-        return ImGuiMouseButton_Left; // 1 -> 0
-    case MOUSE_BUTTON_RIGHT:
-        return ImGuiMouseButton_Right; // 3 -> 1
-    case MOUSE_BUTTON_MIDDLE:
-        return ImGuiMouseButton_Middle; // 2 -> 2
-    case MOUSE_BUTTON_X1:
-        return ImGuiMouseButton_Left; // 4 -> n/a
-    case MOUSE_BUTTON_X2:
-        return ImGuiMouseButton_Right; // 5 -> n/a
-    default:
-        return ImGuiMouseButton_Left;
-    }
-}
-
-bool ui_item_double_clicked(MouseButton button) {
-    return ImGui::IsMouseDoubleClicked(imgui_button(button)) && ImGui::IsItemHovered(ImGuiHoveredFlags_None);
-}
-
-bool ui_item_clicked(MouseButton button) {
-    return ImGui::IsItemClicked(imgui_button(button));
-}
-
-void instance_set_transform(u64 index, Transform t) {
-    ASSERT(index < scene.instances.size(), "instance index out of bounds");
-    scene.instances[index].transform = t;
-}
-
-Transform instance_get_transform(u64 index) {
-    ASSERT(index < scene.instances.size(), "instance index out of bounds");
-    return scene.instances[index].transform;
 }
