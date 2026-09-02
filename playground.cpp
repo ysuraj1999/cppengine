@@ -41,7 +41,7 @@ int main(int argc, char *argv[]) {
 
         renderer.input.poll();
 
-        if (renderer.input.should_close() || renderer.input.keyboard.down(KEY_ESCAPE)) {
+        if (renderer.input.events.close_requested() || renderer.input.keyboard.down(KEY_ESCAPE)) {
             running = false;
         }
 

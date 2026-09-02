@@ -982,7 +982,6 @@ struct Input {
 
     Keyboard keyboard;
     Mouse mouse;
-    bool shouldClose = false;
 
     GPUResources &gpu;
     u64 prevCounter = 0;
@@ -994,6 +993,7 @@ struct Input {
     struct Events {
         InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
         u32 count = 0;
+        bool closeRequested = false;
 
         void push(InputEvent e) {
             if (count >= INPUT_EVENT_CAPACITY)
@@ -1002,6 +1002,13 @@ struct Input {
         }
         void clear() {
             count = 0;
+            closeRequested = false;
+        }
+        void request_close() {
+            closeRequested = true;
+        }
+        bool close_requested() const {
+            return closeRequested;
         }
         u32 size() const {
             return count;
@@ -1029,7 +1036,7 @@ struct Input {
 
             switch (event.type) {
             case SDL_EVENT_QUIT: {
-                shouldClose = true;
+                events.request_close();
                 break;
             }
             case SDL_EVENT_MOUSE_MOTION: {
@@ -1136,9 +1143,6 @@ struct Input {
             keyboard.clear();
     }
 
-    bool should_close() {
-        return shouldClose;
-    }
     void set_cursor_captured(bool captured) {
         gpu.request_cursor_capture(captured);
     }
@@ -1420,7 +1424,7 @@ struct Renderer {
         };
         camera = Camera{.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f};
 
-        input.shouldClose = false;
+        input.events.clear();
 
   FPUContext::begin();
         gpu.init(config);
