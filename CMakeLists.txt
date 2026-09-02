@@ -17,11 +17,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(glm)
 
-add_library(cppengine SHARED
-  cppengine.cpp
-  obj.cpp
-  utils.cpp
-  stb_image.cpp
+add_executable(playground
+  playground.cpp
 
   includes/imgui/imgui.cpp
   includes/imgui/imgui_demo.cpp
@@ -32,27 +29,21 @@ add_library(cppengine SHARED
   includes/imgui/backends/imgui_impl_sdlgpu3.cpp
 )
 
-target_include_directories(cppengine PUBLIC
+target_include_directories(playground PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${CMAKE_CURRENT_SOURCE_DIR}/includes
   ${CMAKE_CURRENT_SOURCE_DIR}/includes/imgui)
 
-target_link_libraries(cppengine PUBLIC
+target_link_libraries(playground PRIVATE
   SDL3::SDL3
   glm::glm)
-
-add_executable(playground
-  playground.cpp
-)
-
-target_link_libraries(playground PRIVATE cppengine)
 
 # SHADERS
 set(SHADER_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/shaders)
 set(SHADER_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/shaders)
 set(TEXTURE_BIN_DIR ${CMAKE_CURRENT_BINARY_DIR}/textures)
 
-target_compile_definitions(cppengine PRIVATE
+target_compile_definitions(playground PRIVATE
   SHADER_BIN_DIR="${SHADER_BIN_DIR}"
   TEXTURE_BIN_DIR="${TEXTURE_BIN_DIR}"
 )
