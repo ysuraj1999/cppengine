@@ -77,6 +77,9 @@ typedef u64 InstanceHandle;
 #define static_local    static
 #define static_internal static
 
+// CONSTANTS
+inline constexpr glm::vec3 WORLD_UP = {0.0f, 1.0f, 0.0f};
+
 struct HandleCounter {
   u64 next = 0;
   u64 operator()() {
@@ -217,17 +220,17 @@ typedef enum InputEventType {
     INPUT_EVENT_MOUSE_WHEEL,
 } InputEventType;
 
-#define INPUT_EVENT_CAPACITY 512
+#define INPUT_EVENT_CAPACITY 256
 
 typedef struct InputEvent {
-    InputEventType type;  // INPUT_EVENT_*
-    Key key;              // KEY_* (key events, else KEY_UNKNOWN)
-    MouseButton button;   // MOUSE_BUTTON_* (button events, else MOUSE_BUTTON_NONE)
-    bool down;            // true = press, false = release (key/button events)
-    bool repeat;          // OS auto-repeat flag (key down only)
-    f32 x, y;             // absolute cursor position (mouse events)
-    f32 dx, dy;           // motion delta (motion events)
-    f32 wheel_x, wheel_y; // wheel delta (wheel events)
+    InputEventType type;
+    Key key;
+    MouseButton button;
+    bool down;
+    bool repeat;
+    f32 x, y;
+    f32 dx, dy;
+    f32 wheel_x, wheel_y;
 } InputEvent;
 
 struct Vertex {
@@ -237,52 +240,50 @@ struct Vertex {
     glm::vec2 uv;
 };
 
-inline constexpr glm::vec3 WORLD_UP = {0.0f, 1.0f, 0.0f};
-
 struct Camera {
-    glm::vec3 position{0.0f, 0.0f, 0.0f};
-    f32 yaw = 0.0f;
-    f32 pitch = 0.0f;
-    glm::vec3 forward{1.0f, 0.0f, 0.0f};
-    glm::vec3 right{0.0f, 0.0f, 1.0f};
+  glm::vec3 position{0.0f, 0.0f, 0.0f};
+  f32 yaw = 0.0f;
+  f32 pitch = 0.0f;
+  glm::vec3 forward{1.0f, 0.0f, 0.0f};
+  glm::vec3 right{0.0f, 0.0f, 1.0f};
 
-    void update() {
-        forward = glm::normalize(
-            glm::vec3{
-                cos(glm::radians(pitch)) * cos(glm::radians(yaw)),
-                sin(glm::radians(pitch)),
-                cos(glm::radians(pitch)) * sin(glm::radians(yaw))
-            }
-        );
-        right = glm::cross(WORLD_UP, forward);
-    }
+  void move(f32 fwd, f32 rght, f32 up) {
+    position += forward * fwd;
+    position += right * rght;
+    position += WORLD_UP * up;
+  }
 
-    void move(f32 fwd, f32 rght, f32 up) {
-        position += forward * fwd;
-        position += right * rght;
-        position += WORLD_UP * up;
-    }
+  void rotate(f32 dYaw, f32 dPitch) {
+    yaw = glm::mod(yaw + dYaw, 360.0f);
+    pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
+    update();
+  }
 
-    void rotate(f32 dYaw, f32 dPitch) {
-        yaw = glm::mod(yaw + dYaw, 360.0f);
-        pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
-        update();
-    }
+  void look_at(glm::vec3 target) {
+    glm::vec3 dir = target - position;
+    if (glm::dot(dir, dir) < 1e-12f)
+      return;
+    dir = glm::normalize(dir);
 
-    void look_at(glm::vec3 target) {
-        glm::vec3 dir = target - position;
-        if (glm::dot(dir, dir) < 1e-12f)
-            return;
-        dir = glm::normalize(dir);
+    yaw = glm::mod(glm::degrees(glm::atan(dir.z, dir.x)), 360.0f);
+    pitch = glm::clamp(glm::degrees(glm::asin(glm::clamp(dir.y, -1.0f, 1.0f))), -89.99f, 89.99f);
+    update();
+  }
 
-        yaw = glm::mod(glm::degrees(glm::atan(dir.z, dir.x)), 360.0f);
-        pitch = glm::clamp(glm::degrees(glm::asin(glm::clamp(dir.y, -1.0f, 1.0f))), -89.99f, 89.99f);
-        update();
-    }
-
-    glm::mat4 viewMatrix() const {
-        return glm::lookAtLH(position, position + forward, WORLD_UP);
-    }
+  glm::mat4 viewMatrix() const {
+    return glm::lookAtLH(position, position + forward, WORLD_UP);
+  }
+private:
+  void update() {
+    forward = glm::normalize(
+			     glm::vec3{
+			       cos(glm::radians(pitch)) * cos(glm::radians(yaw)),
+			       sin(glm::radians(pitch)),
+			       cos(glm::radians(pitch)) * sin(glm::radians(yaw))
+			     }
+			     );
+    right = glm::cross(WORLD_UP, forward);
+  }
 };
 
 struct Mat4 {
@@ -326,11 +327,12 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
 #include "stb_image.h"
 
 // Boundary/helper functions implemented in cppengine.cpp.
+// TODO: make this into FPUContext closure with static env as well as methods begin/end
 void fpu_begin();
 void fpu_end();
-Key SDL_to_Key(SDL_Scancode scancode);
-MouseButton SDL_to_MouseButton(Uint8 button);
-ImGuiMouseButton imgui_button(MouseButton button);
+Key SDL_Scancode_to_Key(SDL_Scancode scancode);
+MouseButton SDL_MouseButton_to_MouseButton(Uint8 button);
+ImGuiMouseButton MouseButton_to_imgui_button(MouseButton button);
 
 // Implemented in utils.cpp.
 std::vector<u8> readFile(const char *path);
@@ -389,8 +391,6 @@ struct Instance {
 
 typedef std::vector<Instance> Instances;
 
-// Scene holds only instances; meshes live in GeometryStorage. scene[i] is the
-// i-th instance; set its .mesh (a MeshHandle) and .transform directly.
 struct Scene {
   Instances instances;
 
@@ -409,7 +409,7 @@ struct Scene {
   }
   void remove(u64 i) {
     ASSERT(i < size(), "scene index out of bounds");
-    instances.erase(instances.begin() + static_cast<std::ptrdiff_t>(i));
+    instances.erase(instances.begin() + i);
   }
   void clear() {
     instances.clear();
@@ -423,17 +423,13 @@ struct RendererConfig {
     f32 mouseSensitivity;
 };
 
-//-----------------------------------------------------------------------------
-// GPUResources: owns every SDL window / device / buffer / texture / sampler /
-// pipeline object and the per-frame bindings.
-//-----------------------------------------------------------------------------
 struct GPUResources {
     SDL_Window *window = nullptr;
     SDL_GPUDevice *gpuDevice = nullptr;
 
     SDL_GPUBuffer *vertexBuffer = nullptr;
-    SDL_GPUBuffer *instanceBuffer = nullptr;
     SDL_GPUBuffer *indexBuffer = nullptr;
+    SDL_GPUBuffer *instanceBuffer = nullptr;
     SDL_GPUTransferBuffer *transferToInstanceBuffer = nullptr;
 
     SDL_GPUTexture *checkTexture = nullptr;
@@ -638,13 +634,13 @@ struct GPUResources {
                 .h = tHeight,
                 .d = 1,
             };
-            SDL_GPUCommandBuffer *initCmd = SDL_AcquireGPUCommandBuffer(gpuDevice);
-            SDL_ASSERT(initCmd != nullptr);
-            SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(initCmd);
+            SDL_GPUCommandBuffer *initCommandBuffer = SDL_AcquireGPUCommandBuffer(gpuDevice);
+            SDL_ASSERT(initCommandBuffer != nullptr);
+            SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(initCommandBuffer);
             SDL_ASSERT(copyPass != nullptr);
             SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
             SDL_EndGPUCopyPass(copyPass);
-            SDL_ASSERT(SDL_SubmitGPUCommandBuffer(initCmd));
+            SDL_ASSERT(SDL_SubmitGPUCommandBuffer(initCommandBuffer));
 
             SDL_UnmapGPUTransferBuffer(gpuDevice, transferToTexture);
             SDL_ReleaseGPUTransferBuffer(gpuDevice, transferToTexture);
@@ -847,125 +843,130 @@ struct GPUResources {
 // Keyboard / Mouse: polled input state.
 //-----------------------------------------------------------------------------
 struct Keyboard {
-    bool current[KEY_COUNT] = {};
-    bool previous[KEY_COUNT] = {};
+  bool current[KEY_COUNT] = {};
+  bool previous[KEY_COUNT] = {};
 
-    void copy_current_state_into_previous_state() {
-        memcpy(previous, current, sizeof(current));
-    }
-    void begin() {
-        copy_current_state_into_previous_state();
-    }
-    void end() {
-        const bool *sdl_state = SDL_GetKeyboardState(nullptr);
-        memset(current, 0, sizeof(current));
-        for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
-            if (sdl_state[i]) {
-                Key k = SDL_to_Key((SDL_Scancode)i);
-                if (k != KEY_UNKNOWN)
-                    current[k] = true;
-            }
-    }
-    void clear_current_state() {
-        memset(current, 0, sizeof(current));
-    }
+  void begin() {
+    copy_current_state_into_previous_state();
+  }
+  void end() {
+    const bool *sdl_state = SDL_GetKeyboardState(nullptr);
+    memset(current, 0, sizeof(current));
+    for (int i = 0; i < SDL_SCANCODE_COUNT; i++)
+      if (sdl_state[i]) {
+	Key k = SDL_Scancode_to_Key((SDL_Scancode)i);
+	if (k != KEY_UNKNOWN)
+	  current[k] = true;
+      }
+  }
+  bool down(Key k) const {
+    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+    return current[k];
+  }
+  bool up(Key k) const {
+    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+    return !current[k];
+  }
+  bool pressed(Key k) const {
+    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+    return current[k] && !previous[k];
+  }
+  bool released(Key k) const {
+    ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
+    return !current[k] && previous[k];
+  }
+  void clear() {
+    memset(current, 0, sizeof(current));
+  }
 
-    bool down(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return current[k];
-    }
-    bool up(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return !current[k];
-    }
-    bool pressed(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return current[k] && !previous[k];
-    }
-    bool released(Key k) const {
-        ASSERT(k > KEY_UNKNOWN && k < KEY_COUNT, "key out of range");
-        return !current[k] && previous[k];
-    }
+private:
+  void copy_current_state_into_previous_state() {
+    memcpy(previous, current, sizeof(current));
+  }
 };
 
 struct Mouse {
-    f32 x = 0, y = 0;
-    f32 dx = 0, dy = 0;
-    f32 wheel_x = 0, wheel_y = 0;
-    bool down_current[MOUSE_BUTTON_COUNT] = {};
-    bool down_previous[MOUSE_BUTTON_COUNT] = {};
+  f32 x = 0, y = 0;
+  f32 dx = 0, dy = 0;
+  f32 wheel_x = 0, wheel_y = 0;
+  bool down_current[MOUSE_BUTTON_COUNT] = {};
+  bool down_previous[MOUSE_BUTTON_COUNT] = {};
 
-    glm::vec2 position() const {
-        return {x, y};
-    }
-    glm::vec2 delta() const {
-        return {dx, dy};
-    }
-    glm::vec2 wheel() const {
-        return {wheel_x, wheel_y};
-    }
+  glm::vec2 position() const {
+    return {x, y};
+  }
+  glm::vec2 delta() const {
+    return {dx, dy};
+  }
+  glm::vec2 wheel() const {
+    return {wheel_x, wheel_y};
+  }
+  bool down(MouseButton b) const {
+    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+    return down_current[b];
+  }
+  bool up(MouseButton b) const {
+    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+    return !down_current[b];
+  }
+  bool pressed(MouseButton b) const {
+    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+    return down_current[b] && !down_previous[b];
+  }
+  bool released(MouseButton b) const {
+    ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
+    return !down_current[b] && down_previous[b];
+  }
 
-    void copy_current_state_into_previous_state() {
-        memcpy(down_previous, down_current, sizeof(down_current));
-    }
-    void clear_transient() {
-        dx = 0;
-        dy = 0;
-        wheel_x = 0;
-        wheel_y = 0;
-    }
-    void begin() {
-        copy_current_state_into_previous_state();
-        clear_transient();
-    }
-    void end() {
-    }
+  
+  void clear() {
+    dx = 0;
+    dy = 0;
+    wheel_x = 0;
+    wheel_y = 0;
+  }
+  void begin() {
+    copy_current_state_into_previous_state();
+    clear();
+  }
+  void end() {
+  }
 
-    void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
-        x = nx;
-        y = ny;
-        dx += xrel;
-        dy += yrel;
-    }
-    void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
-        x = bx;
-        y = by;
-        if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
-            down_current[button] = true;
-    }
-    void on_button_up(MouseButton button, f32 bx, f32 by) {
-        x = bx;
-        y = by;
-        if (button > 0 && button < MOUSE_BUTTON_COUNT)
-            down_current[button] = false;
-    }
-    void on_wheel(f32 wx, f32 wy) {
-        wheel_x += wx;
-        wheel_y += wy;
-    }
+  void on_motion(f32 nx, f32 ny, f32 xrel, f32 yrel) {
+    x = nx;
+    y = ny;
+    dx += xrel;
+    dy += yrel;
+  }
+  void on_button_down(MouseButton button, f32 bx, f32 by, bool track) {
+    x = bx;
+    y = by;
+    if (track && button > 0 && button < MOUSE_BUTTON_COUNT)
+      down_current[button] = true;
+  }
+  void on_button_up(MouseButton button, f32 bx, f32 by) {
+    x = bx;
+    y = by;
+    if (button > 0 && button < MOUSE_BUTTON_COUNT)
+      down_current[button] = false;
+  }
+  void on_wheel(f32 wx, f32 wy) {
+    wheel_x += wx;
+    wheel_y += wy;
+  }
 
-    bool down(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return down_current[b];
-    }
-    bool up(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return !down_current[b];
-    }
-    bool pressed(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return down_current[b] && !down_previous[b];
-    }
-    bool released(MouseButton b) const {
-        ASSERT(b > 0 && b < MOUSE_BUTTON_COUNT, "invalid mouse button");
-        return !down_current[b] && down_previous[b];
-    }
+private:
+  void copy_current_state_into_previous_state() {
+    memcpy(down_previous, down_current, sizeof(down_current));
+  }
+
 };
 
 //-----------------------------------------------------------------------------
 // Input: polls SDL events, exposes keyboard / mouse / event-buffer queries.
 //-----------------------------------------------------------------------------
 struct Input {
+  // TODO move keyboard and mouse inside Input
     Keyboard keyboard;
     Mouse mouse;
     InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
@@ -978,7 +979,22 @@ struct Input {
     Input(GPUResources &g) : gpu(g) {
         prevCounter = SDL_GetPerformanceCounter();
     }
+    /*
+      struct Events {
+    InputEvent buffer[INPUT_EVENT_CAPACITY] = {};
+    u32 count = 0;
 
+    void push(InputEvent e);
+    void clear();
+
+    InputEvent& operator[](u32 index) {
+        ASSERT(index < count, "event index out of bounds");
+        return buffer[index];
+    }
+};
+
+do this for events inside input
+     */
     void push_event(InputEvent e) {
         if (count >= INPUT_EVENT_CAPACITY)
             return;
@@ -1026,7 +1042,7 @@ struct Input {
                 break;
             }
             case SDL_EVENT_MOUSE_BUTTON_DOWN: {
-                const MouseButton button = SDL_to_MouseButton(event.button.button);
+                const MouseButton button = SDL_MouseButton_to_MouseButton(event.button.button);
                 mouse.on_button_down(button, event.button.x, event.button.y, !io.WantCaptureMouse);
                 push_event(
                     {INPUT_EVENT_MOUSE_BUTTON_DOWN,
@@ -1044,7 +1060,7 @@ struct Input {
                 break;
             }
             case SDL_EVENT_MOUSE_BUTTON_UP: {
-                const MouseButton button = SDL_to_MouseButton(event.button.button);
+                const MouseButton button = SDL_MouseButton_to_MouseButton(event.button.button);
                 mouse.on_button_up(button, event.button.x, event.button.y);
                 push_event(
                     {INPUT_EVENT_MOUSE_BUTTON_UP,
@@ -1083,7 +1099,7 @@ struct Input {
             case SDL_EVENT_KEY_DOWN:
             case SDL_EVENT_KEY_UP: {
                 if (!io.WantCaptureKeyboard) {
-                    const Key key = SDL_to_Key(event.key.scancode);
+                    const Key key = SDL_Scancode_to_Key(event.key.scancode);
                     const bool down = event.type == SDL_EVENT_KEY_DOWN;
                     push_event(
                         {down ? INPUT_EVENT_KEY_DOWN : INPUT_EVENT_KEY_UP,
@@ -1107,12 +1123,13 @@ struct Input {
         mouse.end();
         keyboard.end();
         if (io.WantCaptureKeyboard)
-            keyboard.clear_current_state();
+            keyboard.clear();
     }
 
     bool should_close() {
         return shouldClose;
     }
+  // TODO can be delegated to gpu like gpu.request_cursor_capture(bool)
     void set_cursor_captured(bool captured) {
         if (gpu.window)
             SDL_SetWindowRelativeMouseMode(gpu.window, captured != false);
@@ -1239,10 +1256,10 @@ namespace ui {
         return ImGui::MenuItem(label);
     }
     inline bool item_double_clicked(MouseButton button) {
-        return ImGui::IsMouseDoubleClicked(imgui_button(button)) && ImGui::IsItemHovered(ImGuiHoveredFlags_None);
+        return ImGui::IsMouseDoubleClicked(MouseButton_to_imgui_button(button)) && ImGui::IsItemHovered(ImGuiHoveredFlags_None);
     }
     inline bool item_clicked(MouseButton button) {
-        return ImGui::IsItemClicked(imgui_button(button));
+        return ImGui::IsItemClicked(MouseButton_to_imgui_button(button));
     }
 }
 
@@ -1401,7 +1418,6 @@ struct Renderer {
             .mouseSensitivity = 0.1f,
         };
         camera = Camera{.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f};
-        camera.update();
 
         input.shouldClose = false;
 
@@ -1642,6 +1658,8 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
 }
 
 //---- boundary helpers --------------------------------------------------------
+
+// TODO This can be inside FPUContext
 #include <cfenv>
 
 static std::fenv_t env;
@@ -1654,7 +1672,7 @@ void fpu_end() {
     std::fesetenv(&env);
 }
 
-Key SDL_to_Key(SDL_Scancode scancode) {
+Key SDL_Scancode_to_Key(SDL_Scancode scancode) {
     switch (scancode) {
     case SDL_SCANCODE_A: return KEY_A;
     case SDL_SCANCODE_B: return KEY_B;
@@ -1742,7 +1760,7 @@ Key SDL_to_Key(SDL_Scancode scancode) {
     }
 }
 
-MouseButton SDL_to_MouseButton(Uint8 button) {
+MouseButton SDL_MouseButton_to_MouseButton(Uint8 button) {
     switch (button) {
     case SDL_BUTTON_LEFT: return MOUSE_BUTTON_LEFT;
     case SDL_BUTTON_MIDDLE: return MOUSE_BUTTON_MIDDLE;
@@ -1753,7 +1771,7 @@ MouseButton SDL_to_MouseButton(Uint8 button) {
     }
 }
 
-ImGuiMouseButton imgui_button(MouseButton button) {
+ImGuiMouseButton MouseButton_to_imgui_button(MouseButton button) {
     switch (button) {
     case MOUSE_BUTTON_LEFT: return ImGuiMouseButton_Left;
     case MOUSE_BUTTON_RIGHT: return ImGuiMouseButton_Right;
