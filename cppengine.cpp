@@ -474,7 +474,7 @@ struct GPUResources {
     window = SDL_CreateWindow("Lens", (u32)config.resolution.x, (u32)config.resolution.y, 0);
     SDL_ASSERT(window != nullptr);
 
-    gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+    gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, true, "vulkan");
     SDL_ASSERT(gpuDevice != nullptr);
 
     SDL_ASSERT(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
@@ -532,7 +532,7 @@ struct GPUResources {
 
     vertexBufferDescription[1].slot = 1;
     vertexBufferDescription[1].input_rate = SDL_GPU_VERTEXINPUTRATE_INSTANCE;
-    vertexBufferDescription[1].instance_step_rate = 1;
+    vertexBufferDescription[1].instance_step_rate = 0;
     vertexBufferDescription[1].pitch = (u32)sizeof(glm::mat4);
 
     pipelineInfo.vertex_input_state.num_vertex_buffers = 2;
