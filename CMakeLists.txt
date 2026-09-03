@@ -51,30 +51,71 @@ target_compile_definitions(playground PRIVATE
 find_program(GLSLANG_VALIDATOR glslangValidator)
 
 if(GLSLANG_VALIDATOR)
+    set(SPIRV_OUTPUTS
+        ${SHADER_BIN_DIR}/shader.vertex.spv
+        ${SHADER_BIN_DIR}/shader.fragment.spv
+    )
+
     add_custom_command(
-        OUTPUT
-            ${SHADER_BIN_DIR}/shader.vertex.spv
-            ${SHADER_BIN_DIR}/shader.fragment.spv
+        OUTPUT ${SPIRV_OUTPUTS}
         COMMAND ${CMAKE_COMMAND} -E make_directory ${SHADER_BIN_DIR}
-        COMMAND ${GLSLANG_VALIDATOR} -V -S vert ${SHADER_SRC_DIR}/shader.vert.glsl -o ${SHADER_BIN_DIR}/shader.vertex.spv
-        COMMAND ${GLSLANG_VALIDATOR} -V -S frag ${SHADER_SRC_DIR}/shader.frag.glsl -o ${SHADER_BIN_DIR}/shader.fragment.spv
+        COMMAND ${GLSLANG_VALIDATOR} -V -S vert
+                ${SHADER_SRC_DIR}/shader.vert.glsl
+                -o ${SHADER_BIN_DIR}/shader.vertex.spv
+        COMMAND ${GLSLANG_VALIDATOR} -V -S frag
+                ${SHADER_SRC_DIR}/shader.frag.glsl
+                -o ${SHADER_BIN_DIR}/shader.fragment.spv
         DEPENDS
             ${SHADER_SRC_DIR}/shader.vert.glsl
             ${SHADER_SRC_DIR}/shader.frag.glsl
-        COMMENT "Compiling shaders with glslangValidator"
+        COMMENT "Compiling shaders to SPIR-V"
         VERBATIM
+    )
+
+    set(SHADER_OUTPUTS ${SPIRV_OUTPUTS})
+
+    if(APPLE)
+        find_program(SHADERCROSS shadercross)
+
+        if(SHADERCROSS)
+            set(MSL_OUTPUTS
+                ${SHADER_BIN_DIR}/shader.vertex.metal
+                ${SHADER_BIN_DIR}/shader.fragment.metal
+            )
+
+            add_custom_command(
+                OUTPUT ${MSL_OUTPUTS}
+                COMMAND ${SHADERCROSS}
+                        ${SHADER_BIN_DIR}/shader.vertex.spv
+                        -s SPIRV -d MSL -t vertex -e main
+                        -o ${SHADER_BIN_DIR}/shader.vertex.metal
+                COMMAND ${SHADERCROSS}
+                        ${SHADER_BIN_DIR}/shader.fragment.spv
+                        -s SPIRV -d MSL -t fragment -e main
+                        -o ${SHADER_BIN_DIR}/shader.fragment.metal
+                DEPENDS ${SPIRV_OUTPUTS}
+                COMMENT "Cross-compiling shaders to MSL"
+                VERBATIM
+            )
+
+            list(APPEND SHADER_OUTPUTS ${MSL_OUTPUTS})
+        else()
+            message(WARNING
+                "shadercross not found - building SPIR-V shaders only"
+            )
+        endif()
+    endif()
+
+    add_custom_target(shaders ALL
+        DEPENDS ${SHADER_OUTPUTS}
     )
 else()
     message(WARNING "glslangValidator not found")
 endif()
 
-add_custom_target(shaders ALL
-    DEPENDS
-        ${SHADER_BIN_DIR}/shader.vertex.spv
-        ${SHADER_BIN_DIR}/shader.fragment.spv
-)
-
-add_dependencies(playground shaders)
+if(TARGET shaders)
+    add_dependencies(playground shaders)
+endif()
 
 # TEXTURES
 set(TEXTURE_SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/textures)

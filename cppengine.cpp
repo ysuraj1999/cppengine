@@ -474,7 +474,23 @@ struct GPUResources {
     window = SDL_CreateWindow("Lens", (u32)config.resolution.x, (u32)config.resolution.y, 0);
     SDL_ASSERT(window != nullptr);
 
-    gpuDevice = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, false, "vulkan");
+    #if defined(__APPLE__)
+    constexpr SDL_GPUShaderFormat kShaderFormat = SDL_GPU_SHADERFORMAT_MSL;
+    constexpr const char *kGPUDriver = "metal";
+    constexpr const char *kShaderEntrypoint = "main0";
+    constexpr const char *kVertexShaderPath = SHADER_BIN_DIR "/shader.vertex.metal";
+    constexpr const char *kFragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.metal";
+#elif defined(__linux__)
+    constexpr SDL_GPUShaderFormat kShaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
+    constexpr const char *kGPUDriver = "vulkan";
+    constexpr const char *kShaderEntrypoint = "main";
+    constexpr const char *kVertexShaderPath = SHADER_BIN_DIR "/shader.vertex.spv";
+    constexpr const char *kFragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.spv";
+#else
+#error "Unsupported platform: only macOS and Linux are supported"
+#endif
+
+    gpuDevice = SDL_CreateGPUDevice(kShaderFormat, false, kGPUDriver);
     SDL_ASSERT(gpuDevice != nullptr);
 
     SDL_ASSERT(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
@@ -483,14 +499,14 @@ struct GPUResources {
 					     gpuDevice, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC
 					     ));
 
-    std::vector<u8> vertexShaderContents = readFile(SHADER_BIN_DIR "/shader.vertex.spv");
-    ASSERT(!vertexShaderContents.empty(), SHADER_BIN_DIR "/shader.vertex.spv missing or empty");
+    std::vector<u8> vertexShaderContents = readFile(kVertexShaderPath);
+    ASSERT(!vertexShaderContents.empty(), kVertexShaderPath);
 
     SDL_GPUShaderCreateInfo vertexShaderInfo = {
       .code_size = vertexShaderContents.size(),
       .code = vertexShaderContents.data(),
-      .entrypoint = "main",
-      .format = SDL_GPU_SHADERFORMAT_SPIRV,
+      .entrypoint = kShaderEntrypoint,
+      .format = kShaderFormat,
       .stage = SDL_GPU_SHADERSTAGE_VERTEX,
       .num_samplers = 0,
       .num_storage_textures = 0,
@@ -500,14 +516,14 @@ struct GPUResources {
     vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
     SDL_ASSERT(vertexShader != nullptr);
 
-    std::vector<u8> fragmentShaderContents = readFile(SHADER_BIN_DIR "/shader.fragment.spv");
-    ASSERT(!fragmentShaderContents.empty(), SHADER_BIN_DIR "/shader.fragment.spv missing or empty");
+    std::vector<u8> fragmentShaderContents = readFile(kFragmentShaderPath);
+    ASSERT(!fragmentShaderContents.empty(), kFragmentShaderPath);
 
     SDL_GPUShaderCreateInfo fragmentShaderInfo = {
       .code_size = fragmentShaderContents.size(),
       .code = fragmentShaderContents.data(),
-      .entrypoint = "main",
-      .format = SDL_GPU_SHADERFORMAT_SPIRV,
+      .entrypoint = kShaderEntrypoint,
+      .format = kShaderFormat,
       .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
       .num_samplers = 1,
       .num_storage_textures = 0,
