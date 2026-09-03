@@ -329,16 +329,16 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
 
 // FPUContext: RAII-style FPU exception-state save/restore via static env and
 // begin()/end() methods. Static env defined in the folded-in section below.
-struct FPUContext {
+struct FPUEnvironment {
   static std::fenv_t env;
-  static void begin() {
+  static void save() {
     std::feholdexcept(&env);
   }
-  static void end() {
+  static void restore() {
     std::fesetenv(&env);
   }
 };
-std::fenv_t FPUContext::env;
+std::fenv_t FPUEnvironment::env;
 
 
 Key SDL_Scancode_to_Key(SDL_Scancode scancode);
@@ -354,7 +354,6 @@ struct GeometryStorage {
   std::vector<u32> indices;
   std::vector<MeshHandle> meshOrder;
   std::unordered_map<MeshHandle, MeshRegion> meshRegions;
-  std::unordered_map<std::string, MeshHandle> aliasMap;
   HandleCounter meshCounter;
 
   MeshHandle add(Mesh &&mesh) {
@@ -367,8 +366,6 @@ struct GeometryStorage {
     vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
     meshRegions[handle] = region;
-    if (!mesh.alias.empty())
-      aliasMap[mesh.alias] = handle;
     meshOrder.push_back(handle);
     return handle;
   }
@@ -381,17 +378,11 @@ struct GeometryStorage {
     return meshOrder.at(i);
   }
 
-  MeshHandle find(const std::string &name) const {
-    auto it = aliasMap.find(name);
-    return it != aliasMap.end() ? it->second : static_cast<MeshHandle>(-1);
-  }
-
   void clear() {
     vertices.clear();
     indices.clear();
     meshOrder.clear();
     meshRegions.clear();
-    aliasMap.clear();
     meshCounter.reset();
   }
 };
@@ -1163,6 +1154,12 @@ struct Input {
     return gpu.cursor_captured();
   }
 
+  void clear() {
+    keyboard.clear();
+    mouse.clear();
+    events.clear();
+  }
+  
   f32 time_dt() {
     static const u64 timerFrequency = SDL_GetPerformanceFrequency();
     const u64 now = SDL_GetPerformanceCounter();
@@ -1217,7 +1214,7 @@ namespace ui {
   }
 
   inline void begin() {
-    FPUContext::begin();
+    FPUEnvironment::save();
     ImGui_ImplSDLGPU3_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
@@ -1228,7 +1225,7 @@ namespace ui {
     ImDrawData *draw_data = ImGui::GetDrawData();
     ImGui_ImplSDLGPU3_PrepareDrawData(draw_data, commandBuffer);
     ImGui_ImplSDLGPU3_RenderDrawData(draw_data, commandBuffer, renderPass);
-    FPUContext::end();
+    FPUEnvironment::restore();
   }
 
   inline bool begin_window(const char *name) {
@@ -1368,6 +1365,7 @@ struct RendererFrame {
     SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
 
+private:
   void draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
     SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
     SDL_ASSERT(frameCopyPass != nullptr);
@@ -1437,17 +1435,17 @@ struct Renderer {
     };
     camera = Camera{.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f};
 
-    input.events.clear();
+    input.clear();
 
-    FPUContext::begin();
+    FPUEnvironment::save();
     gpu.init(config);
     if (!ui::init(gpu)) {
-      FPUContext::end();
+      FPUEnvironment::restore();
       gpu.destroy();
       return false;
     }
     frame.init();
-    FPUContext::end();
+    FPUEnvironment::restore();
     return true;
   }
   void quit() {
