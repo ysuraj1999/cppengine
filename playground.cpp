@@ -66,7 +66,7 @@ int main(int argc, char *argv[]) {
 			     );
 
         renderer.begin();
-        renderer.prepare();
+        renderer.prepare(); // copy pass
 
         FPUEnvironment::save();
         ui::begin_frame();
@@ -83,9 +83,9 @@ int main(int argc, char *argv[]) {
         ui::end_window();
         ImDrawData *draw_data = ui::end_frame();
 
-        ui::prepare(draw_data, renderer.command_buffer());
+        ui::prepare(draw_data, renderer.command_buffer()); // copy pass
 
-        renderer.render();
+        renderer.render(); // render start
 
         ui::render(draw_data, renderer.command_buffer(), renderer.render_pass());
         FPUEnvironment::restore();
