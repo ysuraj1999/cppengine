@@ -10,11 +10,11 @@ int main(int argc, char *argv[]) {
     Renderer renderer;
     renderer.init();
 
-    u64 meshCount = renderer.load_obj("models/bmw.obj");
+    u64 meshCount = renderer.load_obj("models/cube.obj");
     std::cout << "Length " << meshCount << '\n';
 
-    f32 spacing = 100.0f;
-    u64 GRID = 2;
+    f32 spacing = 2.0f;
+    u64 GRID = 10;
     for (u64 x = 0; x < GRID; x++) {
       for (u64 y = 0; y < GRID; y++) {
 	for (u64 z = 0; z < GRID; z++){
@@ -31,7 +31,7 @@ int main(int argc, char *argv[]) {
     }
 
     renderer.rebuild();
-    renderer.config.keyboardSensitivity = 200.0;
+    renderer.config.keyboardSensitivity = 20.0;
     renderer.config.mouseSensitivity = 10.0;
 
     bool running = true;
@@ -55,8 +55,6 @@ int main(int argc, char *argv[]) {
 	const bool ctrl_down = renderer.input.keyboard.down(KEY_CTRL);
         const bool space_down = renderer.input.keyboard.down(KEY_SPACE);
 
-        const bool middle_click = renderer.input.mouse.down(MOUSE_BUTTON_MIDDLE);
-
         const f32 move_speed = renderer.config.keyboardSensitivity * dt;
         const f32 look_speed = renderer.config.mouseSensitivity * dt;
 
@@ -68,8 +66,10 @@ int main(int argc, char *argv[]) {
 			     );
 
         renderer.begin();
-        renderer.render();
-        ui::begin();
+        renderer.prepare();
+
+        FPUEnvironment::save();
+        ui::begin_frame();
         ui::begin_window("Inspector");
         u64 mCount = renderer.geometry.size();
         for (u64 m = 0; m < mCount; m++) {
@@ -81,7 +81,14 @@ int main(int argc, char *argv[]) {
 	  }
         }
         ui::end_window();
-        ui::end(renderer.command_buffer(), renderer.render_pass());
+        ImDrawData *draw_data = ui::end_frame();
+
+        ui::prepare(draw_data, renderer.command_buffer());
+
+        renderer.render();
+
+        ui::render(draw_data, renderer.command_buffer(), renderer.render_pass());
+        FPUEnvironment::restore();
         renderer.end();
     }
 
