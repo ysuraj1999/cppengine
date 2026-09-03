@@ -475,22 +475,22 @@ struct GPUResources {
     SDL_ASSERT(window != nullptr);
 
     #if defined(__APPLE__)
-    constexpr SDL_GPUShaderFormat kShaderFormat = SDL_GPU_SHADERFORMAT_MSL;
-    constexpr const char *kGPUDriver = "metal";
-    constexpr const char *kShaderEntrypoint = "main0";
-    constexpr const char *kVertexShaderPath = SHADER_BIN_DIR "/shader.vertex.metal";
-    constexpr const char *kFragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.metal";
+    constexpr SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_MSL;
+    constexpr const char *GPUDriver = "metal";
+    constexpr const char *shaderEntryPoint = "main0";
+    constexpr const char *vertexShaderPath = SHADER_BIN_DIR "/shader.vertex.metal";
+    constexpr const char *fragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.metal";
 #elif defined(__linux__)
-    constexpr SDL_GPUShaderFormat kShaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
-    constexpr const char *kGPUDriver = "vulkan";
-    constexpr const char *kShaderEntrypoint = "main";
-    constexpr const char *kVertexShaderPath = SHADER_BIN_DIR "/shader.vertex.spv";
-    constexpr const char *kFragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.spv";
+    constexpr SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
+    constexpr const char *GPUDriver = "vulkan";
+    constexpr const char *shaderEntryPoint = "main";
+    constexpr const char *vertexShaderPath = SHADER_BIN_DIR "/shader.vertex.spv";
+    constexpr const char *fragmentShaderPath = SHADER_BIN_DIR "/shader.fragment.spv";
 #else
 #error "Unsupported platform: only macOS and Linux are supported"
 #endif
 
-    gpuDevice = SDL_CreateGPUDevice(kShaderFormat, false, kGPUDriver);
+    gpuDevice = SDL_CreateGPUDevice(shaderFormat, false, GPUDriver);
     SDL_ASSERT(gpuDevice != nullptr);
 
     SDL_ASSERT(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
@@ -499,14 +499,14 @@ struct GPUResources {
 					     gpuDevice, window, SDL_GPU_SWAPCHAINCOMPOSITION_SDR, SDL_GPU_PRESENTMODE_VSYNC
 					     ));
 
-    std::vector<u8> vertexShaderContents = readFile(kVertexShaderPath);
-    ASSERT(!vertexShaderContents.empty(), kVertexShaderPath);
+    std::vector<u8> vertexShaderContents = readFile(vertexShaderPath);
+    ASSERT(!vertexShaderContents.empty(), vertexShaderPath);
 
     SDL_GPUShaderCreateInfo vertexShaderInfo = {
       .code_size = vertexShaderContents.size(),
       .code = vertexShaderContents.data(),
-      .entrypoint = kShaderEntrypoint,
-      .format = kShaderFormat,
+      .entrypoint = shaderEntryPoint,
+      .format = shaderFormat,
       .stage = SDL_GPU_SHADERSTAGE_VERTEX,
       .num_samplers = 0,
       .num_storage_textures = 0,
@@ -516,14 +516,14 @@ struct GPUResources {
     vertexShader = SDL_CreateGPUShader(gpuDevice, &vertexShaderInfo);
     SDL_ASSERT(vertexShader != nullptr);
 
-    std::vector<u8> fragmentShaderContents = readFile(kFragmentShaderPath);
-    ASSERT(!fragmentShaderContents.empty(), kFragmentShaderPath);
+    std::vector<u8> fragmentShaderContents = readFile(fragmentShaderPath);
+    ASSERT(!fragmentShaderContents.empty(), fragmentShaderPath);
 
     SDL_GPUShaderCreateInfo fragmentShaderInfo = {
       .code_size = fragmentShaderContents.size(),
       .code = fragmentShaderContents.data(),
-      .entrypoint = kShaderEntrypoint,
-      .format = kShaderFormat,
+      .entrypoint = shaderEntryPoint,
+      .format = shaderFormat,
       .stage = SDL_GPU_SHADERSTAGE_FRAGMENT,
       .num_samplers = 1,
       .num_storage_textures = 0,
