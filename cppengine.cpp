@@ -315,6 +315,7 @@ struct MeshRegion {
   u32 vertexOffset;
   u32 indexOffset;
   u32 indexCount;
+  std::string alias;
 };
 
 std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
@@ -362,6 +363,7 @@ struct GeometryStorage {
     region.vertexOffset = (u32)vertices.size();
     region.indexOffset = (u32)indices.size();
     region.indexCount = (u32)mesh.indices.size();
+    region.alias = mesh.alias;
     vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
     meshRegions[handle] = region;
@@ -546,6 +548,7 @@ struct GPUResources {
     pipelineInfo.vertex_input_state.vertex_buffer_descriptions = vertexBufferDescription;
 
     SDL_GPUVertexAttribute vertexAttributes[8] = {};
+    // VERTICES
     vertexAttributes[0].buffer_slot = 0;
     vertexAttributes[0].location = 0;
     vertexAttributes[0].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT3;
@@ -566,16 +569,26 @@ struct GPUResources {
     vertexAttributes[3].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT2;
     vertexAttributes[3].offset = offsetof(Vertex, uv);
 
-    vertexAttributes[4] = {.location = 4, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 0};
-    vertexAttributes[5] = {
-      .location = 5, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = sizeof(glm::vec4)
-    };
-    vertexAttributes[6] = {
-      .location = 6, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 2 * sizeof(glm::vec4)
-    };
-    vertexAttributes[7] = {
-      .location = 7, .buffer_slot = 1, .format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4, .offset = 3 * sizeof(glm::vec4)
-    };
+    // INSTANCES
+    vertexAttributes[4].buffer_slot = 1;
+    vertexAttributes[4].location = 4;
+    vertexAttributes[4].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    vertexAttributes[4].offset = 0;
+
+    vertexAttributes[5].buffer_slot = 1;
+    vertexAttributes[5].location = 5;
+    vertexAttributes[5].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    vertexAttributes[5].offset = sizeof(glm::vec4);
+
+    vertexAttributes[6].buffer_slot = 1;
+    vertexAttributes[6].location = 6;
+    vertexAttributes[6].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    vertexAttributes[6].offset = 2 * sizeof(glm::vec4);
+
+    vertexAttributes[7].buffer_slot = 1;
+    vertexAttributes[7].location = 7;
+    vertexAttributes[7].format = SDL_GPU_VERTEXELEMENTFORMAT_FLOAT4;
+    vertexAttributes[7].offset = 3 * sizeof(glm::vec4);
 
     pipelineInfo.vertex_input_state.num_vertex_attributes = 8;
     pipelineInfo.vertex_input_state.vertex_attributes = vertexAttributes;
@@ -1496,10 +1509,6 @@ static std::random_device rd;
 static std::mt19937 gen(rd());
 static std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 
-float degToRad(float deg) {
-  return deg * (M_PI / 180.0f);
-}
-
 std::vector<u8> readFile(const char *path) {
   std::ifstream file(path, std::ios::binary | std::ios::ate);
   if (!file) {
@@ -1553,24 +1562,6 @@ glm::mat4 transformToMat4(const Transform &t) {
   glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rz), glm::vec3(0.0f, 0.0f, 1.0f));
   glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(t.sx, t.sy, t.sz));
   return translation * rotationZ * rotationY * rotationX * scale;
-}
-
-Mat4 translateMatrix(const f32 v[4]) {
-  Mat4 result;
-  result.m0 = 1.0f;  result.m1 = 0.0f;  result.m2 = 0.0f;  result.m3 = -v[0];
-  result.m4 = 0.0f;  result.m5 = 1.0f;  result.m6 = 0.0f;  result.m7 = -v[1];
-  result.m8 = 0.0f;  result.m9 = 0.0f;  result.m10 = 1.0f; result.m11 = -v[2];
-  result.m12 = 0.0f; result.m13 = 0.0f; result.m14 = 0.0f; result.m15 = 1.0f;
-  return result;
-}
-
-Mat4 translateMatrix(const glm::vec3 &v) {
-  Mat4 result;
-  result.m0 = 1.0f;  result.m1 = 0.0f;  result.m2 = 0.0f;  result.m3 = -v.x;
-  result.m4 = 0.0f;  result.m5 = 1.0f;  result.m6 = 0.0f;  result.m7 = -v.y;
-  result.m8 = 0.0f;  result.m9 = 0.0f;  result.m10 = 1.0f; result.m11 = -v.z;
-  result.m12 = 0.0f; result.m13 = 0.0f; result.m14 = 0.0f; result.m15 = 1.0f;
-  return result;
 }
 
 //---- obj loading -------------------------------------------------------------
