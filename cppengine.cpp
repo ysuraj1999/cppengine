@@ -72,6 +72,7 @@ typedef std::size_t usize;
 
 typedef u64 MeshHandle;
 typedef u64 InstanceHandle;
+typedef u64 MaterialHandle;
 
 #define static_global   static
 #define static_local    static
@@ -308,6 +309,7 @@ struct Mat4 {
 struct Mesh {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
+  std::vector<MaterialHandle> materialHandles;
   std::string alias;
 };
 
@@ -318,7 +320,7 @@ struct MeshRegion {
   std::string alias;
 };
 
-std::vector<Mesh> loadAllMeshFromObj(const char *inputfile);
+
 
 #include <cfenv>
 #include "imgui/backends/imgui_impl_sdl3.h"
@@ -349,9 +351,45 @@ ImGuiMouseButton MouseButton_to_imgui_button(MouseButton button);
 std::vector<u8> readFile(const char *path);
 glm::mat4 transformToMat4(const Transform &t);
 
+struct Material {
+  glm::vec4 baseColor;
+};
+
+struct MaterialStorage {
+  std::vector<Material> materials;
+  std::vector<MaterialHandle> materialOrder;
+  std::unordered_map<MaterialHandle, u32> materialIndices;
+  HandleCounter materialCounter;
+
+  MaterialHandle add(Material &&mat) {
+    MaterialHandle handle = materialCounter();
+    u32 index = (u32)materials.size();
+    materials.push_back(std::move(mat));
+    materialOrder.push_back(handle);
+    materialIndices[handle] = index;
+    return handle;
+  }
+
+  u64 size() const {
+    return materialOrder.size();
+  }
+
+  MaterialHandle operator[](u64 i) const {
+    return materialOrder.at(i);
+  }
+
+  void clear() {
+    materials.clear();
+    materialOrder.clear();
+    materialIndices.clear();
+    materialCounter.reset();
+  }
+};
+
 struct GeometryStorage {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
+  std::vector<MaterialHandle> materialHandles;
   std::vector<MeshHandle> meshOrder;
   std::unordered_map<MeshHandle, MeshRegion> meshRegions;
   HandleCounter meshCounter;
@@ -365,6 +403,7 @@ struct GeometryStorage {
     region.alias = mesh.alias;
     vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
+    materialHandles.insert(materialHandles.end(), mesh.materialHandles.begin(), mesh.materialHandles.end());
     meshRegions[handle] = region;
     meshOrder.push_back(handle);
     return handle;
@@ -381,6 +420,7 @@ struct GeometryStorage {
   void clear() {
     vertices.clear();
     indices.clear();
+    materialHandles.clear();
     meshOrder.clear();
     meshRegions.clear();
     meshCounter.reset();
@@ -1453,9 +1493,11 @@ private:
 // Renderer: sole owner of GPUResources, geometry storage, scene, input, and
 // the per-frame draw state. The app drives it through renderer.<member>.*.
 //-----------------------------------------------------------------------------
+u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m);
 struct Renderer {
   GPUResources gpu;
   GeometryStorage geometry;
+  MaterialStorage materialStorage;
   Scene scene;
   Camera camera;
   RendererConfig config;
@@ -1499,16 +1541,14 @@ struct Renderer {
   }
   bool clear() {
     geometry.clear();
+    materialStorage.clear();
     return true;
   }
   void rebuild() {
     gpu.rebuild(geometry);
   }
   u64 load_obj(const char *path) {
-    std::vector<Mesh> meshCollection = loadAllMeshFromObj(path);
-    for (auto &m : meshCollection)
-      geometry.add(std::move(m));
-    return meshCollection.size();
+    return ::load_obj(path, geometry, materialStorage);
   }
 
   void begin() {
@@ -1611,20 +1651,18 @@ glm::mat4 transformToMat4(const Transform &t) {
 }
 
 //---- obj loading -------------------------------------------------------------
-std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
-  std::vector<Mesh> meshCollection;
-
+u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m) {
   std::string warn, err;
 
-  tinyobj::ObjReaderConfig reader_config;
-  reader_config.vertex_color = true;
-  reader_config.triangulate = true;
+  tinyobj::ObjReaderConfig readerConfig;
+  readerConfig.vertex_color = true;
+  readerConfig.triangulate = true;
 
   tinyobj::ObjReader reader;
 
-  if (!reader.ParseFromFile(inputfile, reader_config)) {
+  if (!reader.ParseFromFile(path, readerConfig)) {
     std::fprintf(
-		 stderr, "%s:%d: obj load failed: '%s': %s\n", __FILE__, __LINE__, inputfile, reader.Error().c_str()
+		 stderr, "%s:%d: obj load failed: '%s': %s\n", __FILE__, __LINE__, path, reader.Error().c_str()
 		 );
     std::abort();
   }
@@ -1635,6 +1673,21 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
 
   auto &attrib = reader.GetAttrib();
   auto &shapes = reader.GetShapes();
+  auto &objMaterials = reader.GetMaterials();
+
+  std::vector<MaterialHandle> materialIdToMaterialHandle;
+  materialIdToMaterialHandle.reserve(objMaterials.size());
+  for (auto &mat : objMaterials) {
+    Material engineMaterial{};
+    engineMaterial.baseColor = {
+      mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.0f,
+    };
+    materialIdToMaterialHandle.push_back(m.add(std::move(engineMaterial)));
+  }
+
+  Material defaultMaterial{};
+  defaultMaterial.baseColor = glm::vec4(1.0f);
+  MaterialHandle defaultMaterialHandle = m.add(std::move(defaultMaterial));
 
   for (u32 shapeIndex = 0; shapeIndex < shapes.size(); shapeIndex++) {
     auto &shape = shapes[shapeIndex];
@@ -1644,6 +1697,10 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
     std::map<std::tuple<int, int, int>, u32> vertexMap;
     u32 indexOffset = 0;
     for (u32 faceIndex = 0; faceIndex < shape.mesh.num_face_vertices.size(); faceIndex++) {
+
+      int materialId = shape.mesh.material_ids[faceIndex];
+      MaterialHandle faceMaterialHandle =
+	materialId < 0 ? defaultMaterialHandle : materialIdToMaterialHandle[(u32)materialId];
 
       Vertex vertexStorage{};
       for (u32 vertIndex = 0; vertIndex < 3; vertIndex++) {
@@ -1688,15 +1745,16 @@ std::vector<Mesh> loadAllMeshFromObj(const char *inputfile) {
 	}
 
 	mesh.indices.push_back(it->second);
+	mesh.materialHandles.push_back(faceMaterialHandle);
       }
 
       indexOffset += 3;
     }
 
-    meshCollection.push_back(mesh);
+    g.add(std::move(mesh));
   }
 
-  return meshCollection;
+  return shapes.size();
 }
 
 //---- boundary helpers --------------------------------------------------------
