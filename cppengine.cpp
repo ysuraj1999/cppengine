@@ -1433,7 +1433,7 @@ struct RendererFrame {
       auto start = drawBatch.firstInstance;
       auto count = drawBatch.instanceCount;
       auto region = geometry.meshRegions[meshHandle];
-      draw_mesh(region, scene.instances, start, count);
+      draw_batch(region, scene.instances, start, count);
     }
   }
   void end() {
@@ -1442,7 +1442,7 @@ struct RendererFrame {
   }
 
 private:
-  void draw_mesh(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
+  void draw_batch(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
 				 );
