@@ -74,7 +74,7 @@ int main(int argc, char *argv[]) {
         u64 mCount = renderer.geometry.size();
         for (u64 m = 0; m < mCount; m++) {
 	  MeshHandle mh = renderer.geometry[m];
-	  std::string meshLabel = "Mesh " + std::to_string(m);
+	  std::string meshLabel = renderer.geometry.meshRegions[mh].alias;
 	  if (ui::begin_tree(meshLabel.c_str())) {
 	    ui::text(("Instance " + std::to_string(mh)).c_str());
 	    ui::end_tree();
