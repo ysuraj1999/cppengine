@@ -32,7 +32,7 @@ int main(int argc, char *argv[]) {
 
     renderer.rebuild();
     renderer.config.keyboardSensitivity = 20.0;
-    renderer.config.mouseSensitivity = 10.0;
+    renderer.config.mouseSensitivity = 5.0;
 
     bool running = true;
     renderer.input.set_cursor_captured(true);
@@ -65,8 +65,8 @@ int main(int argc, char *argv[]) {
 			     (space_down ? move_speed : 0.0f) + (ctrl_down ? -move_speed : 0.0f)
 			     );
 
-        renderer.begin();
-        renderer.prepare(); // copy pass
+        renderer.frame.begin();
+        renderer.frame.prepare(); // copy passw
 
         FPUEnvironment::save();
         ui::begin_frame();
@@ -85,11 +85,11 @@ int main(int argc, char *argv[]) {
 
         ui::prepare(draw_data, renderer.command_buffer()); // copy pass
 
-        renderer.render(); // render start
+        renderer.frame.render_scene(); // render start
 
         ui::render(draw_data, renderer.command_buffer(), renderer.render_pass());
         FPUEnvironment::restore();
-        renderer.end();
+        renderer.frame.end();
     }
 
     renderer.quit();

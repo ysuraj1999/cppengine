@@ -257,7 +257,7 @@ struct Camera {
   void rotate(f32 dYaw, f32 dPitch) {
     yaw = glm::mod(yaw + dYaw, 360.0f);
     pitch = glm::clamp(pitch + dPitch, -89.99f, 89.99f);
-    update();
+    _update();
   }
 
   void look_at(glm::vec3 target) {
@@ -268,14 +268,13 @@ struct Camera {
 
     yaw = glm::mod(glm::degrees(glm::atan(dir.z, dir.x)), 360.0f);
     pitch = glm::clamp(glm::degrees(glm::asin(glm::clamp(dir.y, -1.0f, 1.0f))), -89.99f, 89.99f);
-    update();
+    _update();
   }
 
   glm::mat4 viewMatrix() const {
     return glm::lookAtLH(position, position + forward, WORLD_UP);
   }
-private:
-  void update() {
+  void _update() {
     forward = glm::normalize(
 			     glm::vec3{
 			       cos(glm::radians(pitch)) * cos(glm::radians(yaw)),
@@ -927,7 +926,7 @@ struct Input {
     bool previous[KEY_COUNT] = {};
 
     void begin() {
-      copy_current_state_into_previous_state();
+      _copy_current_state_into_previous_state();
     }
     void end() {
       const bool *sdl_state = SDL_GetKeyboardState(nullptr);
@@ -959,8 +958,7 @@ struct Input {
       memset(current, 0, sizeof(current));
     }
 
-  private:
-    void copy_current_state_into_previous_state() {
+    void _copy_current_state_into_previous_state() {
       memcpy(previous, current, sizeof(current));
     }
   };
@@ -1005,7 +1003,7 @@ struct Input {
       wheel_y = 0;
     }
     void begin() {
-      copy_current_state_into_previous_state();
+      _copy_current_state_into_previous_state();
       clear();
     }
     void end() {
@@ -1034,8 +1032,7 @@ struct Input {
       wheel_y += wy;
     }
 
-  private:
-    void copy_current_state_into_previous_state() {
+    void _copy_current_state_into_previous_state() {
       memcpy(down_previous, down_current, sizeof(down_current));
     }
   };
@@ -1473,7 +1470,7 @@ struct RendererFrame {
       auto start = drawBatch.firstInstance;
       auto count = drawBatch.instanceCount;
       auto region = geometry.meshRegions[meshHandle];
-      draw_batch(region, scene.instances, start, count);
+      _draw_batch(region, scene.instances, start, count);
     }
   }
   void end() {
@@ -1481,8 +1478,7 @@ struct RendererFrame {
     SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
 
-private:
-  void draw_batch(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
+  void _draw_batch(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
     SDL_DrawGPUIndexedPrimitives(
 				 renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
 				 );
@@ -1549,19 +1545,6 @@ struct Renderer {
   }
   u64 load_obj(const char *path) {
     return ::load_obj(path, geometry, materialStorage);
-  }
-
-  void begin() {
-    frame.begin();
-  }
-  void prepare() {
-    frame.prepare();
-  }
-  void render() {
-    frame.render_scene();
-  }
-  void end() {
-    frame.end();
   }
 
   SDL_GPUCommandBuffer *command_buffer() {
