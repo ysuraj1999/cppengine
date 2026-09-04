@@ -91,6 +91,9 @@ struct HandleCounter {
   }
 };
 
+typedef struct Transform Transform;
+glm::mat4 transformToMat4(const Transform &t);
+
 typedef struct Transform {
   f32 px;
   f32 py;
@@ -101,6 +104,10 @@ typedef struct Transform {
   f32 rx;
   f32 ry;
   f32 rz;
+
+  const glm::mat4 matrix() const {
+    return transformToMat4(*this);
+  }
 } Transform;
 
 typedef enum Key {
@@ -429,6 +436,16 @@ struct GeometryStorage {
 struct Instance {
   MeshHandle meshHandle;
   Transform transform;
+  mutable glm::mat4 cached{};
+  mutable bool computed = false;
+
+  const glm::mat4 &matrix() const {
+    if (!computed) {
+      cached = transform.matrix();
+      computed = true;
+    }
+    return cached;
+  }
 };
 
 typedef std::vector<Instance> Instances;
@@ -446,7 +463,7 @@ struct Scene {
     return instances.size();
   }
   Instance& add(MeshHandle mesh, Transform transform) {
-    instances.push_back({mesh, transform});
+    instances.push_back(Instance{mesh, transform, {}, false});
     return instances.back();
   }
   void remove(u64 i) {
@@ -1429,7 +1446,7 @@ struct RendererFrame {
 
     glm::mat4 *dst = (glm::mat4 *)((u8 *)mappedToInstanceInTransfer);
     for (u64 i = 0; i < count; i++)
-      *dst++ = transformToMat4(scene.instances[i].transform);
+      *dst++ = scene.instances[i].matrix();
 
     SDL_GPUTransferBufferLocation transferToInstanceBufferLocation = {
       .transfer_buffer = gpu.transferToInstanceBuffer,
@@ -1624,13 +1641,26 @@ std::ostream &operator<<(std::ostream &os, const MeshRegion &r) {
 	    << ", indexCount=" << r.indexCount << ")";
 }
 
-glm::mat4 transformToMat4(const Transform &t) {
-  glm::mat4 translation = glm::translate(glm::mat4(1.0f), glm::vec3(t.px, t.py, t.pz));
-  glm::mat4 rotationX = glm::rotate(glm::mat4(1.0f), glm::radians(t.rx), glm::vec3(1.0f, 0.0f, 0.0f));
-  glm::mat4 rotationY = glm::rotate(glm::mat4(1.0f), glm::radians(t.ry), glm::vec3(0.0f, 1.0f, 0.0f));
-  glm::mat4 rotationZ = glm::rotate(glm::mat4(1.0f), glm::radians(t.rz), glm::vec3(0.0f, 0.0f, 1.0f));
-  glm::mat4 scale = glm::scale(glm::mat4(1.0f), glm::vec3(t.sx, t.sy, t.sz));
-  return translation * rotationZ * rotationY * rotationX * scale;
+glm::mat4 transformToMat4(const Transform& t)
+{
+  float x = glm::radians(t.rx);
+  float y = glm::radians(t.ry);
+  float z = glm::radians(t.rz);
+
+  float cx = cos(x), sx = sin(x);
+  float cy = cos(y), sy = sin(y);
+  float cz = cos(z), sz = sin(z);
+
+  return glm::mat4{
+    cy * cz * t.sx,  cy * sz * t.sx, -sy * t.sx, 0.0f,
+    (sx * sy * cz - cx * sz) * t.sy,
+    (sx * sy * sz + cx * cz) * t.sy,
+    sx * cy * t.sy, 0.0f,
+    (cx * sy * cz + sx * sz) * t.sz,
+    (cx * sy * sz - sx * cz) * t.sz,
+    cx * cy * t.sz, 0.0f,
+    t.px, t.py, t.pz, 1.0f
+  };
 }
 
 //---- obj loading -------------------------------------------------------------
