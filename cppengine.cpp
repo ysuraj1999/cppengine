@@ -319,10 +319,17 @@ struct Mesh {
   std::string alias;
 };
 
+struct MaterialRegion {
+    u32 indexOffset;
+    u32 indexCount;
+    MaterialHandle materialHandle;
+};
+
 struct MeshRegion {
   u32 vertexOffset;
   u32 indexOffset;
   u32 indexCount;
+  std::vector<MaterialRegion> materialRegions;
   std::string alias;
 };
 
@@ -395,7 +402,6 @@ struct MaterialStorage {
 struct GeometryStorage {
   std::vector<Vertex> vertices;
   std::vector<u32> indices;
-  std::vector<MaterialHandle> materialHandles;
   std::vector<MeshHandle> meshOrder;
   std::unordered_map<MeshHandle, MeshRegion> meshRegions;
   HandleCounter meshCounter;
@@ -409,7 +415,18 @@ struct GeometryStorage {
     region.alias = mesh.alias;
     vertices.insert(vertices.end(), mesh.vertices.begin(), mesh.vertices.end());
     indices.insert(indices.end(), mesh.indices.begin(), mesh.indices.end());
-    materialHandles.insert(materialHandles.end(), mesh.materialHandles.begin(), mesh.materialHandles.end());
+
+    u32 i = 0;
+    while (i < mesh.materialHandles.size()) {
+      u32 j = i;
+      while (j < mesh.materialHandles.size() && mesh.materialHandles[i] == mesh.materialHandles[j]) {
+	j++;
+      }
+      region.materialRegions.push_back(
+          MaterialRegion{.indexOffset = i * 3, .indexCount = (j - i) * 3, .materialHandle = mesh.materialHandles[i]}
+      );
+      i = j;
+    }
     meshRegions[handle] = region;
     meshOrder.push_back(handle);
     return handle;
@@ -426,7 +443,6 @@ struct GeometryStorage {
   void clear() {
     vertices.clear();
     indices.clear();
-    materialHandles.clear();
     meshOrder.clear();
     meshRegions.clear();
     meshCounter.reset();
@@ -1359,6 +1375,7 @@ namespace ui {
 
 struct DrawBatch {
   MeshHandle meshHandle;
+  MaterialHandle materialHandle;
   u32 firstInstance;
   u32 instanceCount;
 };
@@ -1758,8 +1775,8 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m) {
 	}
 
 	mesh.indices.push_back(it->second);
-	mesh.materialHandles.push_back(faceMaterialHandle);
       }
+      mesh.materialHandles.push_back(faceMaterialHandle);
 
       indexOffset += 3;
     }
