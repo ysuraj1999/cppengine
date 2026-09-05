@@ -383,6 +383,10 @@ struct MaterialStorage {
     return handle;
   }
 
+  Material& get(MaterialHandle handle) {
+    return materials.at(materialIndices.at(handle));
+  }
+  
   u64 size() const {
     return materialOrder.size();
   }
@@ -1374,7 +1378,9 @@ namespace ui {
 //-----------------------------------------------------------------------------
 
 struct DrawBatch {
-  MeshHandle meshHandle;
+  u32 vertexOffset;
+  u32 indexOffset;
+  u32 indexCount;
   MaterialHandle materialHandle;
   u32 firstInstance;
   u32 instanceCount;
@@ -1392,12 +1398,13 @@ struct RendererFrame {
 
   GPUResources &gpu;
   GeometryStorage &geometry;
+  MaterialStorage &materials;
   Scene &scene;
   Camera &camera;
   RendererConfig &config;
 
-  RendererFrame(GPUResources &g, GeometryStorage &geo, Scene &s, Camera &cam, RendererConfig &c)
-    : gpu(g), geometry(geo), scene(s), camera(cam), config(c) {
+  RendererFrame(GPUResources &g, GeometryStorage &geo, MaterialStorage &mat, Scene &s, Camera &cam, RendererConfig &c)
+    : gpu(g), geometry(geo), materials(mat), scene(s), camera(cam), config(c) {
   }
 
   void init() {
@@ -1435,18 +1442,23 @@ struct RendererFrame {
 	j++;
       auto regionIt = geometry.meshRegions.find(meshHandle);
       ASSERT(regionIt != geometry.meshRegions.end(), "mesh never synced - call rebuild first");
-      drawBatches.push_back(
-			    DrawBatch{
-			      .meshHandle = meshHandle,
-			      .firstInstance = i,
-			      .instanceCount = j - i
-			    });
-      // draw_mesh(regionIt->second, scene.instances, i, j - i);
+      auto& meshRegion = regionIt->second;
+      for (auto &materialRegion : meshRegion.materialRegions) {
+          drawBatches.push_back(
+              DrawBatch{
+		.vertexOffset = meshRegion.vertexOffset,
+		.indexOffset = meshRegion.indexOffset + materialRegion.indexOffset,
+		.indexCount = materialRegion.indexCount,
+		.materialHandle = materialRegion.materialHandle,
+		.firstInstance = i,
+		.instanceCount = j - i
+	  });
+      }
       i = j;
     }
 
     // Upload
-    u32 count = scene.instances.size();
+    u32 count = scene.size();
     
     SDL_GPUCopyPass *frameCopyPass = SDL_BeginGPUCopyPass(commandBuffer);
     SDL_ASSERT(frameCopyPass != nullptr);
@@ -1488,7 +1500,7 @@ struct RendererFrame {
       glm::perspectiveLH_ZO(glm::radians(60.0f), config.resolution.x / config.resolution.y, 0.1f, 10000.0f);
     glm::mat4 viewProjection = projection * view;
 
-    if (scene.size() > 0) {
+    if (!drawBatches.empty()) {
       SDL_BindGPUGraphicsPipeline(renderPass, gpu.pipeline);
       SDL_PushGPUVertexUniformData(commandBuffer, 0, &viewProjection, (u32)sizeof(viewProjection));
       SDL_PushGPUFragmentUniformData(commandBuffer, 0, &config.resolution, (u32)sizeof(config.resolution));
@@ -1500,11 +1512,13 @@ struct RendererFrame {
 
     // Draw
     for (auto &drawBatch : drawBatches) {
-      auto meshHandle = drawBatch.meshHandle;
-      auto start = drawBatch.firstInstance;
-      auto count = drawBatch.instanceCount;
-      auto region = geometry.meshRegions[meshHandle];
-      _draw_batch(region, scene.instances, start, count);
+      auto vertexOffset = drawBatch.vertexOffset;
+      auto indexOffset = drawBatch.indexOffset;
+      auto indexCount = drawBatch.indexCount;
+      auto materialHandle = drawBatch.materialHandle;
+      auto instanceStart = drawBatch.firstInstance;
+      auto instanceCount = drawBatch.instanceCount;
+      _draw_batch(vertexOffset, indexOffset, indexCount, instanceStart, instanceCount);
     }
   }
   void end() {
@@ -1512,9 +1526,14 @@ struct RendererFrame {
     SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
   }
 
-  void _draw_batch(MeshRegion &meshRegion, const Instances &instances, u64 start, u64 count) {
+  void _draw_batch(u32 vertexOffset, u32 indexOffset, u32 indexCount, u32 instanceStart, u32 instanceCount){
     SDL_DrawGPUIndexedPrimitives(
-				 renderPass, meshRegion.indexCount, count, meshRegion.indexOffset, meshRegion.vertexOffset, 0
+				 renderPass,
+				 indexCount,
+				 instanceCount,
+				 indexOffset,
+				 vertexOffset,
+				 0
 				 );
   }
 };
@@ -1535,7 +1554,7 @@ struct Renderer {
   Input input;
   RendererFrame frame;
 
-  Renderer() : input(gpu), frame(gpu, geometry, scene, camera, config) {
+  Renderer() : input(gpu), frame(gpu, geometry, materialStorage, scene, camera, config) {
   }
 
   bool init() {
