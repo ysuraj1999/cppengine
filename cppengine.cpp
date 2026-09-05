@@ -1,3 +1,4 @@
+#include "glm/ext/vector_float4.hpp"
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_gpu.h>
 #include <algorithm>
@@ -566,7 +567,7 @@ struct GPUResources {
 #error "Unsupported platform: only macOS and Linux are supported"
 #endif
 
-    gpuDevice = SDL_CreateGPUDevice(shaderFormat, false, GPUDriver);
+    gpuDevice = SDL_CreateGPUDevice(shaderFormat, true, GPUDriver);
     SDL_ASSERT(gpuDevice != nullptr);
 
     SDL_ASSERT(SDL_ClaimWindowForGPUDevice(gpuDevice, window));
@@ -1518,9 +1519,12 @@ struct RendererFrame {
       auto materialHandle = drawBatch.materialHandle;
       auto instanceStart = drawBatch.firstInstance;
       auto instanceCount = drawBatch.instanceCount;
+      auto material = materials.get(materialHandle);
+      SDL_PushGPUFragmentUniformData(commandBuffer, 1, &material.baseColor, (u32)sizeof(glm::vec4));
       _draw_batch(vertexOffset, indexOffset, indexCount, instanceStart, instanceCount);
     }
   }
+
   void end() {
     SDL_EndGPURenderPass(renderPass);
     SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
