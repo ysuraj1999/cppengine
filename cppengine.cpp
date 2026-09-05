@@ -376,6 +376,12 @@ struct MaterialStorage {
   HandleCounter materialCounter;
 
   MaterialHandle add(Material &&mat) {
+    mat.baseColor = glm::vec4(
+			      rand() / (float)RAND_MAX,
+			      rand() / (float)RAND_MAX,
+			      rand() / (float)RAND_MAX,
+			      1.0f
+			      );
     MaterialHandle handle = materialCounter();
     u32 index = (u32)materials.size();
     materials.push_back(std::move(mat));
@@ -605,7 +611,7 @@ struct GPUResources {
       .num_samplers = 1,
       .num_storage_textures = 0,
       .num_storage_buffers = 0,
-      .num_uniform_buffers = 1,
+      .num_uniform_buffers = 2,
     };
     fragmentShader = SDL_CreateGPUShader(gpuDevice, &fragmentShaderInfo);
     SDL_ASSERT(fragmentShader != nullptr);

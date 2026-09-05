@@ -18,9 +18,9 @@ layout(std140, set = 3, binding = 1) uniform ColorUniforms
 // Normal shading
 void main()
 {
-  vec3 N = normalize(v_normal);
-  FragColor = vec4(-N * 0.5 + 0.5, 1.0);
-  // FragColor = uColor;
+  // vec3 N = normalize(v_normal);
+  // FragColor = vec4(-N * 0.5 + 0.5, 1.0);
+  FragColor = uColor;
 }
 
 // Lambert shading
