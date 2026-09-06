@@ -1507,12 +1507,8 @@ struct RendererFrame {
       auto materialHandle = drawBatch.materialHandle;
       auto instanceStart = drawBatch.firstInstance;
       auto instanceCount = drawBatch.instanceCount;
-      auto &material = materials.get(
-	materialHandle == INVALID_MATERIAL_HANDLE ? 0 : materialHandle
-	);
-      auto &texture = textures.get(
-	material.baseTextureHandle == INVALID_TEXTURE_HANDLE ? 0 : material.baseTextureHandle
-	);
+      auto &material = materials.get(materialHandle);
+      auto &texture = textures.get(material.baseTextureHandle);
       gpu.textureSamplerBindings[0].texture = texture.gpuTexture;
       SDL_BindGPUFragmentSamplers(renderPass, 0, gpu.textureSamplerBindings, 1);
       SDL_PushGPUFragmentUniformData(commandBuffer, 1, &material.baseColor, (u32)sizeof(glm::vec4));
