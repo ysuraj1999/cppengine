@@ -367,7 +367,7 @@ std::vector<u8> readFile(const char *path);
 glm::mat4 transformToMat4(const Transform &t);
 
 typedef u64 TextureHandle;
-constexpr TextureHandle INVALID_TEXTURE_HANDLE = static_cast<TextureHandle>(-1);
+constexpr TextureHandle INVALID_TEXTURE_HANDLE = UINT64_MAX;
 
 struct Texture {
   SDL_GPUTexture* texture = nullptr;
@@ -411,7 +411,7 @@ struct TextureStorage {
 
 struct Material {
   glm::vec4 baseColor;
-  TextureHandle baseTexture = INVALID_TEXTURE_HANDLE;
+  TextureHandle baseTextureHandle = INVALID_TEXTURE_HANDLE;
 };
 
 struct MaterialStorage {
@@ -1652,7 +1652,7 @@ struct Renderer {
     textureStorage.clear();
     return true;
   }
-  void rebuild() {
+  void rebuild_geometry() {
     gpu.rebuild(geometry);
   }
   SDL_GPUTexture *load_texture_gpu(const std::filesystem::path &path) {
@@ -1719,7 +1719,7 @@ struct Renderer {
 
     return texture;
   }
-  void populate_textures() {
+  void upload_textures() {
     for (u64 i = 0; i < textureStorage.size(); ++i) {
       TextureHandle handle = textureStorage[i];
       Texture &texture = textureStorage.get(handle);
@@ -1878,7 +1878,7 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m, TextureSt
     if (!mat.diffuse_texname.empty()) {
       std::filesystem::path texturePath =
           std::filesystem::weakly_canonical(modelDirectory / mat.diffuse_texname);
-      engineMaterial.baseTexture = t.add(Texture{
+      engineMaterial.baseTextureHandle = t.add(Texture{
         .texture = nullptr,
         .path = texturePath,
       });
