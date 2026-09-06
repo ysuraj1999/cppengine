@@ -10,29 +10,30 @@ int main(int argc, char *argv[]) {
     Renderer renderer;
     renderer.init();
 
-    u64 meshCount = renderer.load_obj("models/cube.obj");
+    u64 meshCount = renderer.load_obj("models/sponza.obj");
     std::cout << "Length " << meshCount << '\n';
 
-    f32 spacing = 2.0f;
-    u64 GRID = 10;
-    for (u64 x = 0; x < GRID; x++) {
-      for (u64 y = 0; y < GRID; y++) {
-	for (u64 z = 0; z < GRID; z++){
-	  for (u64 i = 0; i < meshCount; i++) {
-	    Transform t {
-	      /*position*/ spacing *x, spacing *y, spacing *z,
-	      /*scale*/ 1.0f, 1.0f, 1.0f,
-	      /*rotation*/ 0.0f, 0.0f, 0.0f
-	    };
-	    renderer.scene.add(renderer.geometry[i], t);
-	  }
-	}
-      }
+    // f32 spacing = 2.0f;
+    // u64 GRID = 10;
+    // for (u64 x = 0; x < GRID; x++) {
+    // for (u64 y = 0; y < GRID; y++) {
+    // for (u64 z = 0; z < GRID; z++) {
+    for (u64 i = 0; i < meshCount; i++) {
+      Transform t {
+	/*position*/ 0.0f, 0.0f, 0.0f,
+	/*scale*/ 1.0f, 1.0f, 1.0f,
+	/*rotation*/ 0.0f, 0.0f, 0.0f
+      };
+      renderer.scene.add(renderer.geometry[i], t);
     }
+    // }
+    // }
+    // }
 
-    renderer.rebuild();
-    renderer.config.keyboardSensitivity = 20.0;
-    renderer.config.mouseSensitivity = 5.0;
+    renderer.upload_textures();
+    renderer.rebuild_geometry();
+    renderer.config.keyboardSensitivity = 200.0;
+    renderer.config.mouseSensitivity = 6.0;
 
     bool running = true;
     renderer.input.set_cursor_captured(true);
@@ -68,27 +69,27 @@ int main(int argc, char *argv[]) {
         renderer.frame.begin();
         renderer.frame.prepare(); // copy passw
 
-        FPUEnvironment::save();
-        ui::begin_frame();
-        ui::begin_window("Inspector");
-        u64 mCount = renderer.geometry.size();
-        for (u64 m = 0; m < mCount; m++) {
-	  MeshHandle mh = renderer.geometry[m];
-	  std::string meshLabel = renderer.geometry.meshRegions[mh].alias;
-	  if (ui::begin_tree(meshLabel.c_str())) {
-	    ui::text(("Instance " + std::to_string(mh)).c_str());
-	    ui::end_tree();
-	  }
-        }
-        ui::end_window();
-        ImDrawData *draw_data = ui::end_frame();
+        // FPUEnvironment::save();
+        // ui::begin_frame();
+        // ui::begin_window("Inspector");
+        // u64 mCount = renderer.geometry.size();
+        // for (u64 m = 0; m < mCount; m++) {
+	//   MeshHandle mh = renderer.geometry[m];
+	//   std::string meshLabel = renderer.geometry.meshRegions[mh].alias;
+	//   if (ui::begin_tree(meshLabel.c_str())) {
+	//     ui::text(("Instance " + std::to_string(mh)).c_str());
+	//     ui::end_tree();
+	//   }
+        // }
+        // ui::end_window();
+        // ImDrawData *draw_data = ui::end_frame();
 
-        ui::prepare(draw_data, renderer.command_buffer()); // copy pass
+        // ui::prepare(draw_data, renderer.command_buffer()); // copy pass
 
         renderer.frame.render_scene(); // render start
 
-        ui::render(draw_data, renderer.command_buffer(), renderer.render_pass());
-        FPUEnvironment::restore();
+        // ui::render(draw_data, renderer.command_buffer(), renderer.render_pass());
+        // FPUEnvironment::restore();
         renderer.frame.end();
     }
 
