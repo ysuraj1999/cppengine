@@ -75,6 +75,7 @@ typedef std::size_t usize;
 typedef u64 MeshHandle;
 typedef u64 InstanceHandle;
 typedef u64 MaterialHandle;
+constexpr MaterialHandle INVALID_MATERIAL_HANDLE = UINT64_MAX;
 
 #define static_global   static
 #define static_local    static
@@ -380,69 +381,6 @@ struct TextureStorage {
   std::unordered_map<TextureHandle, u32> textureIndices;
   HandleCounter textureCounter;
 
-  TextureHandle defaultHandle = INVALID_TEXTURE_HANDLE;
-
-  void init(SDL_GPUDevice *device) {
-    u8 whitePixel[4] = {255, 255, 255, 255};
-
-    SDL_GPUTextureCreateInfo textureInfo = {};
-    textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
-    textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
-    textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
-    textureInfo.width = 1;
-    textureInfo.height = 1;
-    textureInfo.num_levels = 1;
-    textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
-    textureInfo.layer_count_or_depth = 1;
-
-    SDL_GPUTexture *texture = SDL_CreateGPUTexture(device, &textureInfo);
-    SDL_ASSERT(texture != nullptr);
-
-    SDL_GPUTransferBufferCreateInfo transferInfo = {
-      .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
-      .size = 4,
-    };
-    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(device, &transferInfo);
-    SDL_ASSERT(transfer != nullptr);
-
-    u8 *mapped = reinterpret_cast<u8 *>(SDL_MapGPUTransferBuffer(device, transfer, false));
-    SDL_ASSERT(mapped != nullptr);
-    std::memcpy(mapped, whitePixel, 4);
-
-    SDL_GPUTextureTransferInfo textureTransferInfo = {
-      .transfer_buffer = transfer,
-      .offset = 0,
-      .pixels_per_row = 1,
-      .rows_per_layer = 1,
-    };
-    SDL_GPUTextureRegion textureRegion = {
-      .texture = texture,
-      .mip_level = 0,
-      .layer = 0,
-      .x = 0,
-      .y = 0,
-      .z = 0,
-      .w = 1,
-      .h = 1,
-      .d = 1,
-    };
-    SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(device);
-    SDL_ASSERT(commandBuffer != nullptr);
-    SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(commandBuffer);
-    SDL_ASSERT(copyPass != nullptr);
-    SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
-    SDL_EndGPUCopyPass(copyPass);
-    SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
-
-    SDL_UnmapGPUTransferBuffer(device, transfer);
-    SDL_ReleaseGPUTransferBuffer(device, transfer);
-
-    defaultHandle = add(Texture{
-      .gpuTexture = texture,
-      .path = "",
-    });
-  }
-
   TextureHandle add(Texture &&tex) {
     TextureHandle handle = textureCounter();
     u32 index = (u32)textures.size();
@@ -482,15 +420,6 @@ struct MaterialStorage {
   std::vector<MaterialHandle> materialOrder;
   std::unordered_map<MaterialHandle, u32> materialIndices;
   HandleCounter materialCounter;
-
-  MaterialHandle defaultHandle = INVALID_TEXTURE_HANDLE;
-
-  void init(TextureHandle defaultTextureHandle) {
-    Material defaultMaterial{};
-    defaultMaterial.baseColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f);
-    defaultMaterial.baseTextureHandle = defaultTextureHandle;
-    defaultHandle = add(std::move(defaultMaterial));
-  }
 
   MaterialHandle add(Material &&mat) {
     // TODO - remove this
@@ -1578,8 +1507,12 @@ struct RendererFrame {
       auto materialHandle = drawBatch.materialHandle;
       auto instanceStart = drawBatch.firstInstance;
       auto instanceCount = drawBatch.instanceCount;
-      auto material = materials.get(materialHandle);
-      auto texture = textures.get(material.baseTextureHandle);
+      auto &material = materials.get(
+	materialHandle == INVALID_MATERIAL_HANDLE ? 0 : materialHandle
+	);
+      auto &texture = textures.get(
+	material.baseTextureHandle == INVALID_TEXTURE_HANDLE ? 0 : material.baseTextureHandle
+	);
       gpu.textureSamplerBindings[0].texture = texture.gpuTexture;
       SDL_BindGPUFragmentSamplers(renderPass, 0, gpu.textureSamplerBindings, 1);
       SDL_PushGPUFragmentUniformData(commandBuffer, 1, &material.baseColor, (u32)sizeof(glm::vec4));
@@ -1642,8 +1575,14 @@ struct Renderer {
 
     FPUEnvironment::save();
     gpu.init(config);
-    textureStorage.init(gpu.gpuDevice);
-    materialStorage.init(textureStorage.defaultHandle);
+    textureStorage.add(Texture{
+      .gpuTexture = create_texture({}),
+      .path = {},
+    });
+    materialStorage.add(Material{
+      .baseColor = glm::vec4(0.5f, 0.5f, 0.5f, 1.0f),
+      .baseTextureHandle = 0,
+    });
     if (!ui::init(gpu)) {
       FPUEnvironment::restore();
       gpu.destroy();
@@ -1667,14 +1606,21 @@ struct Renderer {
   void rebuild_geometry() {
     gpu.rebuild(geometry);
   }
-  SDL_GPUTexture *load_texture_gpu(const std::filesystem::path &path) {
-    int w, h, channels;
-    u8 *pixels = stbi_load(path.string().c_str(), &w, &h, &channels, 4);
-    ASSERT(pixels != nullptr, path.string().c_str());
-    defer(stbi_image_free(pixels));
+  SDL_GPUTexture *create_texture(const std::filesystem::path &path) {
+    int w = 1, h = 1;
+    u8 *pixels = nullptr;
+    if (path.empty()) {
+      static const u8 whitePixel[4] = {255, 255, 255, 255};
+      pixels = (u8*)(whitePixel);
+    } else {
+      int channels;
+      pixels = stbi_load(path.string().c_str(), &w, &h, &channels, 4);
+      ASSERT(pixels != nullptr, path.string().c_str());
+    }
+    defer(if (!path.empty()) stbi_image_free(pixels));
 
-    u32 tWidth = static_cast<u32>(w);
-    u32 tHeight = static_cast<u32>(h);
+    u32 tWidth = (u32)(w);
+    u32 tHeight = (u32)(h);
     const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
 
     SDL_GPUTextureCreateInfo textureInfo = {};
@@ -1697,7 +1643,7 @@ struct Renderer {
     SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(gpu.gpuDevice, &transferInfo);
     SDL_ASSERT(transfer != nullptr);
 
-    u8 *mapped = reinterpret_cast<u8 *>(SDL_MapGPUTransferBuffer(gpu.gpuDevice, transfer, false));
+    u8 *mapped = (u8*)(SDL_MapGPUTransferBuffer(gpu.gpuDevice, transfer, false));
     SDL_ASSERT(mapped != nullptr);
     std::memcpy(mapped, pixels, TEXTURE_SIZE);
 
@@ -1735,9 +1681,9 @@ struct Renderer {
     for (u64 i = 0; i < textureStorage.size(); ++i) {
       TextureHandle handle = textureStorage[i];
       Texture &texture = textureStorage.get(handle);
-      if (texture.path.empty())
+      if (texture.gpuTexture != nullptr)
         continue;
-      texture.gpuTexture = load_texture_gpu(texture.path);
+      texture.gpuTexture = create_texture(texture.path);
     }
   }
   void destroy_textures() {
@@ -1888,7 +1834,7 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m, TextureSt
     engineMaterial.baseColor = {
       mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.0f,
     };
-    engineMaterial.baseTextureHandle = t.defaultHandle;
+    engineMaterial.baseTextureHandle = 0;
 
     if (!mat.diffuse_texname.empty()) {
       std::filesystem::path texturePath =
@@ -1902,7 +1848,7 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m, TextureSt
     materialIdToMaterialHandle.push_back(m.add(std::move(engineMaterial)));
   }
 
-  MaterialHandle defaultMaterialHandle = m.defaultHandle;
+  MaterialHandle defaultMaterialHandle = 0;
 
   for (u32 shapeIndex = 0; shapeIndex < shapes.size(); shapeIndex++) {
     auto &shape = shapes[shapeIndex];
