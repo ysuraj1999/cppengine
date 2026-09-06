@@ -11,6 +11,7 @@
 #include <glm/geometric.hpp>
 #include <glm/glm.hpp>
 #include <glm/trigonometric.hpp>
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -365,8 +366,52 @@ ImGuiMouseButton MouseButton_to_imgui_button(MouseButton button);
 std::vector<u8> readFile(const char *path);
 glm::mat4 transformToMat4(const Transform &t);
 
+typedef u64 TextureHandle;
+constexpr TextureHandle INVALID_TEXTURE_HANDLE = static_cast<TextureHandle>(-1);
+
+struct Texture {
+  SDL_GPUTexture* texture = nullptr;
+  std::filesystem::path path;
+};
+
+struct TextureStorage {
+  std::vector<Texture> textures;
+  std::vector<TextureHandle> textureOrders;
+  std::unordered_map<TextureHandle, u32> textureIndices;
+  HandleCounter textureCounter;
+
+  TextureHandle add(Texture &&tex) {
+    TextureHandle handle = textureCounter();
+    u32 index = (u32)textures.size();
+    textures.push_back(std::move(tex));
+    textureOrders.push_back(handle);
+    textureIndices[handle] = index;
+    return handle;
+  }
+
+  Texture& get(TextureHandle handle) {
+    return textures.at(textureIndices.at(handle));
+  }
+
+  u64 size() const {
+    return textureOrders.size();
+  }
+
+  TextureHandle operator[](u64 i) const {
+    return textureOrders.at(i);
+  }
+
+  void clear() {
+    textures.clear();
+    textureOrders.clear();
+    textureIndices.clear();
+    textureCounter.reset();
+  }
+};
+
 struct Material {
   glm::vec4 baseColor;
+  TextureHandle baseTexture = INVALID_TEXTURE_HANDLE;
 };
 
 struct MaterialStorage {
@@ -376,6 +421,7 @@ struct MaterialStorage {
   HandleCounter materialCounter;
 
   MaterialHandle add(Material &&mat) {
+    // TODO - remove this
     mat.baseColor = glm::vec4(
 			      rand() / (float)RAND_MAX,
 			      rand() / (float)RAND_MAX,
@@ -393,7 +439,7 @@ struct MaterialStorage {
   Material& get(MaterialHandle handle) {
     return materials.at(materialIndices.at(handle));
   }
-  
+
   u64 size() const {
     return materialOrder.size();
   }
@@ -557,7 +603,7 @@ struct GPUResources {
     window = SDL_CreateWindow("Lens", (u32)config.resolution.x, (u32)config.resolution.y, 0);
     SDL_ASSERT(window != nullptr);
 
-    #if defined(__APPLE__)
+#if defined(__APPLE__)
     constexpr SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_MSL;
     constexpr const char *GPUDriver = "metal";
     constexpr const char *shaderEntryPoint = "main0";
@@ -1552,11 +1598,12 @@ struct RendererFrame {
 // Renderer: sole owner of GPUResources, geometry storage, scene, input, and
 // the per-frame draw state. The app drives it through renderer.<member>.*.
 //-----------------------------------------------------------------------------
-u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m);
+u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m, TextureStorage &t);
 struct Renderer {
   GPUResources gpu;
   GeometryStorage geometry;
   MaterialStorage materialStorage;
+  TextureStorage textureStorage;
   Scene scene;
   Camera camera;
   RendererConfig config;
@@ -1595,19 +1642,103 @@ struct Renderer {
     return true;
   }
   void quit() {
+    destroy_textures();
     ui::shutdown();
     gpu.destroy();
   }
   bool clear() {
     geometry.clear();
     materialStorage.clear();
+    textureStorage.clear();
     return true;
   }
   void rebuild() {
     gpu.rebuild(geometry);
   }
+  SDL_GPUTexture *load_texture_gpu(const std::filesystem::path &path) {
+    int w, h, channels;
+    u8 *pixels = stbi_load(path.string().c_str(), &w, &h, &channels, 4);
+    ASSERT(pixels != nullptr, path.string().c_str());
+    defer(stbi_image_free(pixels));
+
+    u32 tWidth = static_cast<u32>(w);
+    u32 tHeight = static_cast<u32>(h);
+    const u32 TEXTURE_SIZE = tWidth * tHeight * 4;
+
+    SDL_GPUTextureCreateInfo textureInfo = {};
+    textureInfo.type = SDL_GPU_TEXTURETYPE_2D;
+    textureInfo.format = SDL_GPU_TEXTUREFORMAT_R8G8B8A8_UNORM;
+    textureInfo.usage = SDL_GPU_TEXTUREUSAGE_SAMPLER;
+    textureInfo.width = tWidth;
+    textureInfo.height = tHeight;
+    textureInfo.num_levels = 1;
+    textureInfo.sample_count = SDL_GPU_SAMPLECOUNT_1;
+    textureInfo.layer_count_or_depth = 1;
+
+    SDL_GPUTexture *texture = SDL_CreateGPUTexture(gpu.gpuDevice, &textureInfo);
+    SDL_ASSERT(texture != nullptr);
+
+    SDL_GPUTransferBufferCreateInfo transferInfo = {
+      .usage = SDL_GPU_TRANSFERBUFFERUSAGE_UPLOAD,
+      .size = TEXTURE_SIZE,
+    };
+    SDL_GPUTransferBuffer *transfer = SDL_CreateGPUTransferBuffer(gpu.gpuDevice, &transferInfo);
+    SDL_ASSERT(transfer != nullptr);
+
+    u8 *mapped = reinterpret_cast<u8 *>(SDL_MapGPUTransferBuffer(gpu.gpuDevice, transfer, false));
+    SDL_ASSERT(mapped != nullptr);
+    std::memcpy(mapped, pixels, TEXTURE_SIZE);
+
+    SDL_GPUTextureTransferInfo textureTransferInfo = {
+      .transfer_buffer = transfer,
+      .offset = 0,
+      .pixels_per_row = tWidth,
+      .rows_per_layer = tHeight,
+    };
+    SDL_GPUTextureRegion textureRegion = {
+      .texture = texture,
+      .mip_level = 0,
+      .layer = 0,
+      .x = 0,
+      .y = 0,
+      .z = 0,
+      .w = tWidth,
+      .h = tHeight,
+      .d = 1,
+    };
+    SDL_GPUCommandBuffer *commandBuffer = SDL_AcquireGPUCommandBuffer(gpu.gpuDevice);
+    SDL_ASSERT(commandBuffer != nullptr);
+    SDL_GPUCopyPass *copyPass = SDL_BeginGPUCopyPass(commandBuffer);
+    SDL_ASSERT(copyPass != nullptr);
+    SDL_UploadToGPUTexture(copyPass, &textureTransferInfo, &textureRegion, false);
+    SDL_EndGPUCopyPass(copyPass);
+    SDL_ASSERT(SDL_SubmitGPUCommandBuffer(commandBuffer));
+
+    SDL_UnmapGPUTransferBuffer(gpu.gpuDevice, transfer);
+    SDL_ReleaseGPUTransferBuffer(gpu.gpuDevice, transfer);
+
+    return texture;
+  }
+  void populate_textures() {
+    for (u64 i = 0; i < textureStorage.size(); ++i) {
+      TextureHandle handle = textureStorage[i];
+      Texture &texture = textureStorage.get(handle);
+      texture.texture = load_texture_gpu(texture.path);
+    }
+  }
+  void destroy_textures() {
+    for (u64 i = 0; i < textureStorage.size(); ++i) {
+      TextureHandle handle = textureStorage[i];
+      Texture &texture = textureStorage.get(handle);
+      if (texture.texture != nullptr) {
+        SDL_ReleaseGPUTexture(gpu.gpuDevice, texture.texture);
+        texture.texture = nullptr;
+      }
+    }
+    textureStorage.clear();
+  }
   u64 load_obj(const char *path) {
-    return ::load_obj(path, geometry, materialStorage);
+    return ::load_obj(path, geometry, materialStorage, textureStorage);
   }
 
   SDL_GPUCommandBuffer *command_buffer() {
@@ -1710,7 +1841,7 @@ glm::mat4 transformToMat4(const Transform& t)
 }
 
 //---- obj loading -------------------------------------------------------------
-u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m) {
+u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m, TextureStorage &t) {
   std::string warn, err;
 
   tinyobj::ObjReaderConfig readerConfig;
@@ -1734,6 +1865,8 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m) {
   auto &shapes = reader.GetShapes();
   auto &objMaterials = reader.GetMaterials();
 
+  std::filesystem::path modelDirectory = std::filesystem::path(path).parent_path();
+
   std::vector<MaterialHandle> materialIdToMaterialHandle;
   materialIdToMaterialHandle.reserve(objMaterials.size());
   for (auto &mat : objMaterials) {
@@ -1741,6 +1874,16 @@ u64 load_obj(const char *path, GeometryStorage &g, MaterialStorage &m) {
     engineMaterial.baseColor = {
       mat.diffuse[0], mat.diffuse[1], mat.diffuse[2], 1.0f,
     };
+
+    if (!mat.diffuse_texname.empty()) {
+      std::filesystem::path texturePath =
+          std::filesystem::weakly_canonical(modelDirectory / mat.diffuse_texname);
+      engineMaterial.baseTexture = t.add(Texture{
+        .texture = nullptr,
+        .path = texturePath,
+      });
+    }
+
     materialIdToMaterialHandle.push_back(m.add(std::move(engineMaterial)));
   }
 
