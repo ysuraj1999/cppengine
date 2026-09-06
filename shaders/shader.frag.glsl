@@ -20,7 +20,8 @@ void main()
 {
   // vec3 N = normalize(v_normal);
   // FragColor = vec4(-N * 0.5 + 0.5, 1.0);
-  FragColor = texture(baseTexture, v_uv);
+  vec2 uv = vec2(v_uv.x, 1.0 - v_uv.y);
+  FragColor = texture(baseTexture, uv);
 }
 
 // Lambert shading
