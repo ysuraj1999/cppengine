@@ -554,6 +554,7 @@ struct RendererConfig {
   glm::vec4 backgroundColor;
   f32 keyboardSensitivity;
   f32 mouseSensitivity;
+  f32 speedMultiplier;
 };
 
 struct GPUResources {
@@ -1564,6 +1565,7 @@ struct Renderer {
       .backgroundColor = {47.0f / 255.0f, 149.0f / 255.0f, 78.0f / 255.0f, 1.0f},
       .keyboardSensitivity = 200.0f,
       .mouseSensitivity = 0.1f,
+      .speedMultiplier = 1.0f,
     };
     camera = Camera{.position = {-5.0f, 0.0f, 0.0f}, .yaw = 0.0f, .pitch = 0.0f};
 

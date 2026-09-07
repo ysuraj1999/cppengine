@@ -55,9 +55,18 @@ int main(int argc, char *argv[]) {
         const bool d_down = renderer.input.keyboard.down(KEY_D);
 	const bool ctrl_down = renderer.input.keyboard.down(KEY_CTRL);
         const bool space_down = renderer.input.keyboard.down(KEY_SPACE);
+        const bool shift_down = renderer.input.keyboard.down(KEY_SHIFT);
 
-        const f32 move_speed = renderer.config.keyboardSensitivity * dt;
+        const f32 multiplier = renderer.config.speedMultiplier * (shift_down ? 2.0f : 1.0f);
+        const f32 move_speed = renderer.config.keyboardSensitivity * multiplier * dt;
         const f32 look_speed = renderer.config.mouseSensitivity * dt;
+
+        if (renderer.input.keyboard.pressed(KEY_EQUALS)) {
+            renderer.config.keyboardSensitivity *= 1.25f;
+        }
+        if (renderer.input.keyboard.pressed(KEY_MINUS)) {
+            renderer.config.keyboardSensitivity /= 1.25f;
+        }
 
         renderer.camera.rotate(delta.x * look_speed, delta.y * look_speed);
         renderer.camera.move(
